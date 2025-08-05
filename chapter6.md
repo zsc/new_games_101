@@ -16,12 +16,16 @@
 - 自然支持实体建模
 - 光线求交简化为求解方程 $f(\mathbf{o} + t\mathbf{d}) = 0$
 - 易于实现形变和扰动
+- 无需存储连接信息，内存占用可预测
+- 支持无限精度的表面细节
 
 缺点：
 - 难以参数化采样
 - 不易控制局部形状
 - 需要特殊技术（如Marching Cubes）进行可视化
 - 难以获得表面的参数化坐标
+- 纹理映射需要额外计算
+- 直接编辑困难
 
 **显式表示（Explicit Representation）**：直接给出几何对象上点的坐标，如参数化表示 $\mathbf{x} = \mathbf{g}(u, v)$。
 
@@ -31,18 +35,43 @@
 - 直观的形状控制
 - 天然提供UV坐标
 - 适合GPU硬件加速
+- 支持分层细节（LOD）
+- 艺术家友好的编辑工具
 
 缺点：
 - 难以判断点的内外关系
 - 拓扑变化处理复杂
 - 自相交检测困难
 - 难以表示体积信息
+- 需要额外的数据结构维护连接关系
+- 采样密度影响表示精度
+
+**数学转换关系**：
+
+从隐式到显式的转换通常涉及：
+- **等值面提取**：Marching Cubes、Dual Contouring
+- **光线投射**：沿视线方向求解 $f(\mathbf{r}(t)) = 0$
+- **粒子采样**：在表面上分布粒子并松弛
+
+从显式到隐式的转换方法：
+- **距离场计算**：计算到最近表面点的距离
+- **体素化**：在规则网格上采样内外信息
+- **径向基函数插值**：$f(\mathbf{x}) = \sum_i w_i \phi(\|\mathbf{x} - \mathbf{c}_i\|)$
 
 **混合表示的应用场景**：
 - 建模阶段：使用显式表示便于艺术家控制
 - 物理仿真：隐式表示便于碰撞检测
 - 渲染阶段：转换为三角网格利用GPU
 - 机器学习：神经隐式表示（如NeRF、DeepSDF）结合两者优势
+- 医学成像：体数据的隐式表示，表面提取用于可视化
+- CAD/CAM：精确的隐式表示，网格化用于加工
+
+**表示选择的决策因素**：
+1. **查询类型**：点测试频繁→隐式；遍历频繁→显式
+2. **修改需求**：拓扑变化→隐式；局部编辑→显式
+3. **精度要求**：解析表示→隐式；固定精度→显式
+4. **硬件限制**：GPU友好→显式；CPU计算→隐式皆可
+5. **数据来源**：扫描数据→显式；数学定义→隐式
 
 ### 6.1.2 代数表面
 
@@ -50,83 +79,286 @@
 
 $$f(\mathbf{x}) = \sum_{i+j+k \leq d} a_{ijk} x^i y^j z^k = 0$$
 
+代数表面的系数数量为 $\binom{d+3}{3}$，因此二次曲面有10个系数，三次曲面有20个系数。
+
 **二次曲面（Quadrics）** 是最常用的代数表面（$d=2$）：
 
 $$\mathbf{x}^T \mathbf{Q} \mathbf{x} + 2\mathbf{b}^T \mathbf{x} + c = 0$$
 
-其中 $\mathbf{Q}$ 是 $3 \times 3$ 对称矩阵。通过特征值分解 $\mathbf{Q} = \mathbf{V}\mathbf{\Lambda}\mathbf{V}^T$，可以分类二次曲面：
-- 椭球体：三个正特征值
-- 单叶双曲面：两正一负
-- 双叶双曲面：一正两负
-- 椭圆抛物面：两个非零特征值
-- 圆柱面/圆锥面：一个零特征值
-- 平面对：两个零特征值
-- 退化情况：行列式为零
+其中 $\mathbf{Q}$ 是 $3 \times 3$ 对称矩阵，可以写成展开形式：
+$$Q_{11}x^2 + Q_{22}y^2 + Q_{33}z^2 + 2Q_{12}xy + 2Q_{13}xz + 2Q_{23}yz + 2b_1x + 2b_2y + 2b_3z + c = 0$$
+
+**二次曲面的分类**：
+
+通过特征值分解 $\mathbf{Q} = \mathbf{V}\mathbf{\Lambda}\mathbf{V}^T$，根据特征值 $\lambda_1, \lambda_2, \lambda_3$ 的符号可以分类：
+
+1. **椭球体**：三个正特征值 $(+,+,+)$
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} + \frac{z^2}{c^2} = 1$
+   - 有界、凸、封闭曲面
+
+2. **单叶双曲面**：两正一负 $(+,+,-)$
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} - \frac{z^2}{c^2} = 1$
+   - 无界、鞍形曲面
+
+3. **双叶双曲面**：一正两负 $(+,-,-)$
+   - 标准形式：$\frac{x^2}{a^2} - \frac{y^2}{b^2} - \frac{z^2}{c^2} = 1$
+   - 两个分离的无界部分
+
+4. **椭圆抛物面**：两个非零特征值 $(+,+,0)$
+   - 标准形式：$z = \frac{x^2}{a^2} + \frac{y^2}{b^2}$
+   - 开放的碗状曲面
+
+5. **双曲抛物面**：两个相反符号的非零特征值 $(+,-,0)$
+   - 标准形式：$z = \frac{x^2}{a^2} - \frac{y^2}{b^2}$
+   - 马鞍形曲面
+
+6. **圆柱面**：一个零特征值 $(+,+,0)$，$\mathbf{b}$ 在零空间内
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} = 1$
+
+7. **圆锥面**：一个零特征值 $(+,+,0)$，顶点在原点
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} - z^2 = 0$
+
+8. **退化情况**：
+   - 平面对：两个零特征值
+   - 直线：秩为1
+   - 点：秩为0（仅当 $c > 0$）
 
 **标准形式转换**：
-通过坐标变换 $\mathbf{y} = \mathbf{V}^T(\mathbf{x} - \mathbf{x}_0)$，可得标准形式：
-$$\lambda_1 y_1^2 + \lambda_2 y_2^2 + \lambda_3 y_3^2 + d = 0$$
+
+1. 找到二次型的中心（如果存在）：$\mathbf{x}_0 = -\mathbf{Q}^{-1}\mathbf{b}$
+2. 平移：$\mathbf{x}' = \mathbf{x} - \mathbf{x}_0$
+3. 旋转：$\mathbf{y} = \mathbf{V}^T\mathbf{x}'$
+4. 得到标准形式：$\sum_{i=1}^3 \lambda_i y_i^2 + d = 0$
+
+其中 $d = c - \mathbf{b}^T\mathbf{Q}^{-1}\mathbf{b}$（对于非退化情况）
 
 **光线-二次曲面求交**：
+
 将光线 $\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$ 代入二次曲面方程：
 $$at^2 + bt + c = 0$$
+
 其中：
 - $a = \mathbf{d}^T\mathbf{Q}\mathbf{d}$
 - $b = 2(\mathbf{d}^T\mathbf{Q}\mathbf{o} + \mathbf{b}^T\mathbf{d})$
 - $c = \mathbf{o}^T\mathbf{Q}\mathbf{o} + 2\mathbf{b}^T\mathbf{o} + c$
 
+交点数量分析：
+- $a = 0$：光线平行于二次曲面的渐近方向
+- $\Delta = b^2 - 4ac < 0$：无交点
+- $\Delta = 0$：相切（一个交点）
+- $\Delta > 0$：两个交点
+
+法向量计算：在交点 $\mathbf{p}$ 处，法向量为：
+$$\mathbf{n} = \nabla f(\mathbf{p}) = 2\mathbf{Q}\mathbf{p} + 2\mathbf{b}$$
+
 **高次代数表面**：
-- 三次曲面（$d=3$）：可表示torus的部分情况
-- 四次曲面（$d=4$）：包含完整的torus和更复杂形状
-- Steiner曲面、Roman曲面等特殊代数曲面
+
+1. **三次曲面（$d=3$）**：
+   - 最多27条直线（Cayley-Salmon定理）
+   - 包含Clebsch对角三次曲面、Fermat三次曲面
+   - 可表示部分torus形状
+
+2. **四次曲面（$d=4$）**：
+   - **Torus（环面）**：$(x^2 + y^2 + z^2 + R^2 - r^2)^2 - 4R^2(x^2 + y^2) = 0$
+   - **Kummer曲面**：具有16个奇点的特殊四次曲面
+   - **Steiner的Roman曲面**：$x^2y^2 + y^2z^2 + z^2x^2 = r^2xyz$
+
+3. **特殊代数曲面**：
+   - **Cayley曲面**：三次确定性曲面，有4个锥形奇点
+   - **Enneper曲面**：八次极小曲面
+   - **Boy曲面**：实投影平面的浸入
 
 **代数几何中的重要定理**：
-- Bézout定理：度数为$m$和$n$的代数曲线最多有$mn$个交点
-- 实代数几何的Harnack定理：限制了连通分支的数量
+
+1. **Bézout定理**：
+   - 平面情况：度数为 $m$ 和 $n$ 的代数曲线最多有 $mn$ 个交点（计重数）
+   - 空间推广：代数簇的交集维数和度数关系
+
+2. **Harnack定理**：
+   - 度数为 $d$ 的非奇异实代数曲线的连通分支数最多为 $\frac{(d-1)(d-2)}{2} + 1$
+   - 对于曲面：限制了实部分的拓扑复杂度
+
+3. **代数曲面的拓扑不变量**：
+   - 欧拉特征数：$\chi = 2 - 2g + s$（$g$ 是亏格，$s$ 是奇点数）
+   - Hodge数：描述曲面的复杂几何结构
+
+**计算技巧与优化**：
+
+1. **隐式化**：从参数表示转换为隐式表示
+   - 使用结式（resultant）消去参数
+   - Gröbner基方法
+
+2. **多项式求值优化**：
+   - Horner法则：减少乘法次数
+   - 利用对称性减少计算
+
+3. **数值稳定性**：
+   - 条件数分析：病态二次型的处理
+   - 使用齐次坐标避免无穷远点问题
 
 ### 6.1.3 构造实体几何（CSG）
 
-CSG通过布尔运算组合简单几何体构建复杂形状。对于两个隐式表示的对象 $A: f_A(\mathbf{x}) \leq 0$ 和 $B: f_B(\mathbf{x}) \leq 0$：
+CSG通过布尔运算组合简单几何体构建复杂形状。这是CAD系统中的核心技术，特别适合工程设计和精确建模。
 
-- 并集：$A \cup B: \min(f_A(\mathbf{x}), f_B(\mathbf{x})) \leq 0$
-- 交集：$A \cap B: \max(f_A(\mathbf{x}), f_B(\mathbf{x})) \leq 0$
-- 差集：$A - B: \max(f_A(\mathbf{x}), -f_B(\mathbf{x})) \leq 0$
-- 对称差：$(A - B) \cup (B - A)$
+**基本布尔运算**：
 
-**平滑布尔运算**：为避免尖锐边缘，可使用平滑最小/最大函数：
+对于两个隐式表示的对象 $A: f_A(\mathbf{x}) \leq 0$ 和 $B: f_B(\mathbf{x}) \leq 0$：
 
-$$\text{smin}(a, b, k) = -\frac{1}{k}\log(e^{-ka} + e^{-kb})$$
+- **并集（Union）**：$A \cup B: \min(f_A(\mathbf{x}), f_B(\mathbf{x})) \leq 0$
+- **交集（Intersection）**：$A \cap B: \max(f_A(\mathbf{x}), f_B(\mathbf{x})) \leq 0$
+- **差集（Difference）**：$A - B: \max(f_A(\mathbf{x}), -f_B(\mathbf{x})) \leq 0$
+- **对称差（Symmetric Difference）**：$(A - B) \cup (B - A)$
 
-其他平滑函数：
-- 多项式平滑：$\text{smin}(a, b, k) = \frac{a + b - \sqrt{(a-b)^2 + k^2}}{2}$
-- 幂平滑：$\text{smin}(a, b, k) = (a^{-k} + b^{-k})^{-1/k}$
-- 三次平滑：在过渡区域使用三次多项式插值
+**R-函数理论**：
+
+Rvachev函数提供了保持可微性的布尔运算：
+- R-并集：$f_{A \cup B} = f_A + f_B + \sqrt{f_A^2 + f_B^2}$
+- R-交集：$f_{A \cap B} = f_A + f_B - \sqrt{f_A^2 + f_B^2}$
+
+这些函数保证了 $C^1$ 连续性，梯度为：
+$$\nabla f_{A \cup B} = \nabla f_A \left(1 + \frac{f_A}{\sqrt{f_A^2 + f_B^2}}\right) + \nabla f_B \left(1 + \frac{f_B}{\sqrt{f_A^2 + f_B^2}}\right)$$
+
+**平滑布尔运算**：
+
+为避免尖锐边缘并改善数值性质，可使用各种平滑函数：
+
+1. **指数平滑（LogSumExp）**：
+   $$\text{smin}(a, b, k) = -\frac{1}{k}\log(e^{-ka} + e^{-kb})$$
+   - 当 $k \to \infty$ 时趋向于标准 $\min$
+   - 保持 $C^\infty$ 连续性
+
+2. **多项式平滑**：
+   $$\text{smin}(a, b, k) = \frac{a + b - \sqrt{(a-b)^2 + k^2}}{2}$$
+   - 计算效率高
+   - 过渡区域宽度为 $O(k)$
+
+3. **幂平滑**：
+   $$\text{smin}(a, b, k) = (a^{-k} + b^{-k})^{-1/k}$$
+   - 要求 $a, b > 0$
+   - 适合正定距离场
+
+4. **三次平滑**：
+   在过渡区域 $|a - b| < k$ 内使用Hermite插值：
+   $$h(t) = 3t^2 - 2t^3, \quad t = \frac{a - b + k}{2k}$$
 
 **CSG树结构**：
-- 叶节点：基本几何体（球、立方体、圆柱等）
-- 内部节点：布尔运算符
-- 支持仿射变换节点
-- 深度优先遍历求值
+
+```
+CSGNode = Leaf(Primitive, Transform)
+        | Internal(Operation, CSGNode, CSGNode)
+        | Transform(Matrix, CSGNode)
+```
+
+树的属性：
+- **叶节点**：基本几何体（球、立方体、圆柱、圆锥、环面等）
+- **内部节点**：布尔运算符（∪、∩、-）
+- **变换节点**：仿射变换（平移、旋转、缩放、错切）
+- **正规形式**：可通过德摩根定律和分配律简化
+
+**CSG树的优化**：
+
+1. **空间包围盒剪枝**：
+   - 并集：$\text{BBox}(A \cup B) = \text{BBox}(A) \cup \text{BBox}(B)$
+   - 交集：$\text{BBox}(A \cap B) = \text{BBox}(A) \cap \text{BBox}(B)$
+
+2. **树平衡**：
+   - 使用启发式方法重组树以最小化深度
+   - 相似大小的对象优先组合
+
+3. **公共子表达式消除**：
+   - 识别重复的子树
+   - 使用DAG（有向无环图）代替树
 
 **光线追踪CSG**：
-使用区间算术跟踪光线段的内外状态：
-1. 计算光线与所有叶节点的交点
-2. 按 $t$ 值排序交点
-3. 使用布尔运算更新区间状态
-4. 返回第一个有效进入点
+
+经典的区间分类算法：
+
+1. **交点计算**：
+   - 对每个叶节点计算光线交点 $\{t_i^{\text{in}}, t_i^{\text{out}}\}$
+   - 考虑数值容差处理相切情况
+
+2. **区间合并**：
+   ```
+   Union: 合并重叠区间
+   Intersection: 取区间交集
+   Difference: 从第一个区间中减去第二个
+   ```
+
+3. **法向量计算**：
+   - 叶节点：直接计算几何体法向
+   - 并集：选择较小 SDF 值的法向
+   - 交集：选择较大 SDF 值的法向
+   - 差集：可能需要翻转法向
+
+**改进的算法**：
+
+1. **Goldfeather算法**：
+   - 使用深度缓冲和模板缓冲
+   - 适合GPU实现
+
+2. **SCS（Sequenced Convex Subtraction）**：
+   - 将CSG转换为凸集的差集序列
+   - 减少渲染遍数
+
+**CSG到边界表示的转换**：
+
+1. **边界求值算法**：
+   - 计算所有基本体的交线
+   - 根据布尔运算选择保留的边界片段
+   - 拼接成完整的边界表示
+
+2. **Marching Cubes扩展**：
+   - 在体素网格上评估CSG函数
+   - 使用双线性插值提高精度
+
+**CSG的数学性质**：
+
+1. **正则化布尔运算**：
+   $$A \cup^* B = \text{closure}(\text{interior}(A \cup B))$$
+   - 消除悬挂边和孤立点
+   - 保证结果是有效的实体
+
+2. **CSG的完备性**：
+   - 任何正则集可以表示为有限个半空间的正则布尔组合
+   - 实践中受基本体集合的限制
+
+**应用领域**：
+
+1. **CAD/CAM**：
+   - 机械零件设计
+   - 建筑建模
+   - 3D打印路径规划
+
+2. **游戏引擎**：
+   - 破坏系统（实时布尔运算）
+   - 程序化内容生成
+
+3. **科学可视化**：
+   - 分子建模（范德华表面）
+   - 地质建模（地层结构）
+
+**性能优化技巧**：
+
+1. **空间哈希**：加速邻近查询
+2. **层次化采样**：自适应细化
+3. **GPU并行化**：利用片元着色器
+4. **增量更新**：局部重计算
 
 **CSG的优缺点**：
+
 优点：
-- 精确的实体表示
+- 精确的实体表示，无近似误差
 - 紧凑的存储（树结构）
-- 支持精确的布尔运算
-- 易于参数化建模
+- 历史可追溯（保留建模步骤）
+- 易于参数化和约束求解
+- 支持精确的质量属性计算（体积、质心等）
 
 缺点：
 - 渲染较慢（需要遍历树）
-- 难以转换为多边形网格
-- 局部修改可能影响全局
-- 不适合自由形状建模
+- 难以高效转换为多边形网格
+- 局部修改可能需要全局重计算
+- 不适合自由形状和有机建模
+- 数值鲁棒性问题（布尔运算的退化情况）
 
 ### 6.1.4 符号距离场（SDF）
 
@@ -134,51 +366,196 @@ SDF是一种特殊的隐式表示，其中 $f(\mathbf{x})$ 表示点 $\mathbf{x}
 
 $$f(\mathbf{x}) = \text{sign}(\mathbf{x}) \cdot \min_{\mathbf{y} \in \partial S} \|\mathbf{x} - \mathbf{y}\|$$
 
-SDF的关键性质：
-- 梯度为单位向量：$\|\nabla f\| = 1$（几乎处处成立）
-- 法向量：$\mathbf{n} = \nabla f$
-- 最近点投影：$\mathbf{p}_{\text{closest}} = \mathbf{x} - f(\mathbf{x})\nabla f(\mathbf{x})$
-- 主曲率与Hessian矩阵的关系
+其中符号函数定义为：
+$$\text{sign}(\mathbf{x}) = \begin{cases}
+-1 & \text{如果 } \mathbf{x} \text{ 在物体内部} \\
+0 & \text{如果 } \mathbf{x} \text{ 在表面上} \\
++1 & \text{如果 } \mathbf{x} \text{ 在物体外部}
+\end{cases}$$
 
-**Eikonal方程**：SDF满足偏微分方程 $\|\nabla f\| = 1$，可通过快速行进法（Fast Marching Method）或快速扫描法（Fast Sweeping Method）求解。
+**SDF的数学性质**：
 
-**基本几何体的SDF**：
-- 球体（半径$r$，中心$\mathbf{c}$）：$f(\mathbf{x}) = \|\mathbf{x} - \mathbf{c}\| - r$
-- 立方体（半边长$\mathbf{b}$）：$f(\mathbf{x}) = \|\max(\mathbf{0}, |\mathbf{x}| - \mathbf{b})\|$
-- 圆环体（大半径$R$，小半径$r$）：$f(\mathbf{x}) = \|\mathbf{p}_{xy}\| - R$ 其中 $\mathbf{p}_{xy} = (|\mathbf{x}_{xy}| - R, x_z)$
-- 无限平面：$f(\mathbf{x}) = \mathbf{n} \cdot (\mathbf{x} - \mathbf{p})$
+1. **梯度性质**：
+   - $\|\nabla f\| = 1$ 几乎处处成立（除了中轴上）
+   - 法向量：$\mathbf{n} = \nabla f$
+   - 梯度指向远离表面的方向
 
-**SDF的运算**：
-- 平移：$f_{\text{translated}}(\mathbf{x}) = f(\mathbf{x} - \mathbf{t})$
-- 旋转：$f_{\text{rotated}}(\mathbf{x}) = f(\mathbf{R}^T\mathbf{x})$
-- 缩放：$f_{\text{scaled}}(\mathbf{x}) = s \cdot f(\mathbf{x}/s)$（注意保持距离场性质）
-- 对称：$f_{\text{symmetric}}(\mathbf{x}) = f(|\mathbf{x}|)$
+2. **最近点映射**：
+   $$\mathbf{p}_{\text{closest}}(\mathbf{x}) = \mathbf{x} - f(\mathbf{x})\nabla f(\mathbf{x})$$
+   这个映射在中轴（medial axis）上不连续
+
+3. **曲率与Hessian的关系**：
+   在表面上，主曲率 $\kappa_1, \kappa_2$ 是Hessian矩阵 $\mathbf{H}_f$ 的特征值
+
+4. **水平集性质**：
+   - 表面：$\{\mathbf{x} : f(\mathbf{x}) = 0\}$
+   - 偏移表面：$\{\mathbf{x} : f(\mathbf{x}) = d\}$
+
+**Eikonal方程**：
+
+SDF满足偏微分方程：
+$$\|\nabla f\| = 1$$
+
+这是一个Hamilton-Jacobi方程，可通过以下方法求解：
+
+1. **快速行进法（FMM）**：
+   - 基于Dijkstra算法的思想
+   - 时间复杂度：$O(N \log N)$
+   - 单向传播，适合单源问题
+
+2. **快速扫描法（FSM）**：
+   - 使用Gauss-Seidel迭代
+   - 多次扫描直到收敛
+   - 简单实现，易于并行化
+
+3. **并行算法**：
+   - GPU上的并行扫描
+   - 分块并行FMM
+
+**基本几何体的解析SDF**：
+
+1. **球体**（半径$r$，中心$\mathbf{c}$）：
+   $$f(\mathbf{x}) = \|\mathbf{x} - \mathbf{c}\| - r$$
+
+2. **立方体**（半边长$\mathbf{b}$）：
+   $$f(\mathbf{x}) = \|\max(\mathbf{0}, |\mathbf{x}| - \mathbf{b})\|_\infty + \min(\max(|x|-b_x, |y|-b_y, |z|-b_z), 0)$$
+
+3. **圆环体**（大半径$R$，小半径$r$）：
+   $$f(\mathbf{x}) = \sqrt{(R - \sqrt{x^2 + y^2})^2 + z^2} - r$$
+
+4. **圆柱体**（半径$r$，高度$h$）：
+   $$f(\mathbf{x}) = \max(\sqrt{x^2 + y^2} - r, |z| - h/2)$$
+
+5. **圆锥**（底半径$r$，高度$h$）：
+   $$f(\mathbf{x}) = \max(\sqrt{x^2 + y^2} - r(1 - z/h), z)$$
+
+6. **八面体**（半径$r$）：
+   $$f(\mathbf{x}) = (|x| + |y| + |z| - r) / \sqrt{3}$$
+
+**SDF的变换操作**：
+
+1. **刚体变换**：
+   - 平移：$f_T(\mathbf{x}) = f(\mathbf{x} - \mathbf{t})$
+   - 旋转：$f_R(\mathbf{x}) = f(\mathbf{R}^{-1}\mathbf{x})$
+   - 组合：$f_{TR}(\mathbf{x}) = f(\mathbf{R}^{-1}(\mathbf{x} - \mathbf{t}))$
+
+2. **非均匀缩放**（破坏距离场性质）：
+   $$f_S(\mathbf{x}) \approx \min(s_x, s_y, s_z) \cdot f(\mathbf{x}/\mathbf{s})$$
+
+3. **对称操作**：
+   - 镜像：$f_{\text{mirror}}(\mathbf{x}) = f(|x|, y, z)$
+   - 重复：$f_{\text{repeat}}(\mathbf{x}) = f(\text{mod}(\mathbf{x}, \mathbf{p}) - \mathbf{p}/2)$
+
+4. **扭曲变换**：
+   - 弯曲：应用非线性空间变换
+   - 扭转：$\mathbf{x}' = (x\cos(\theta z) - y\sin(\theta z), x\sin(\theta z) + y\cos(\theta z), z)$
 
 **SDF的组合运算**：
-标准布尔运算会破坏距离场性质，需要近似：
-- 并集近似：$d_{\cup} \approx \min(d_1, d_2)$（内部准确，外部过估计）
-- 交集近似：$d_{\cap} \approx \max(d_1, d_2)$（外部准确，内部欠估计）
-- 平滑并集：保持 $C^1$ 连续性
 
-**光线行进（Ray Marching）**：
-利用SDF加速光线追踪：
-```
-t = 0
-while t < t_max:
-    p = ray_origin + t * ray_direction
-    d = SDF(p)
-    if d < epsilon:
-        return HIT at t
-    t += d  // 安全步进距离
-return MISS
+1. **标准布尔运算**（破坏距离场性质）：
+   - 并集：$f_{A \cup B} = \min(f_A, f_B)$
+   - 交集：$f_{A \cap B} = \max(f_A, f_B)$
+   - 差集：$f_{A - B} = \max(f_A, -f_B)$
+
+2. **改进的运算**（部分保持距离场性质）：
+   - Quilez的平滑最小：
+     $$\text{smin}(a, b, k) = \min(a, b) - h(k)$$
+     其中 $h(k) = k^2 / 4$ 当 $|a - b| < k$
+
+3. **精确距离场运算**：
+   - 需要考虑中轴变化
+   - 计算复杂度高
+   - 通常使用近似方法
+
+**光线行进（Ray Marching）算法**：
+
+```glsl
+float rayMarch(vec3 ro, vec3 rd, float tMin, float tMax) {
+    float t = tMin;
+    for (int i = 0; i < MAX_STEPS; i++) {
+        vec3 p = ro + t * rd;
+        float d = SDF(p);
+        
+        if (d < EPSILON) return t;  // 命中
+        if (t > tMax) break;        // 超出范围
+        
+        t += d * STEP_SCALE;        // 保守步进
+    }
+    return -1.0;  // 未命中
+}
 ```
 
-**SDF的应用**：
-- 实时渲染：屏幕空间光线行进
-- 碰撞检测：直接查询距离
-- 物理仿真：隐式边界条件
-- 形状插值：线性插值SDF值
-- 机器学习：DeepSDF等神经网络表示
+**优化技术**：
+
+1. **自适应步长**：
+   - 近表面时减小步长
+   - 使用梯度信息调整
+
+2. **空间划分**：
+   - 包围盒层次结构
+   - 八叉树加速
+
+3. **屏幕空间优化**：
+   - 时间相干性利用
+   - 分层光线行进
+
+**SDF的高级应用**：
+
+1. **实时渲染**：
+   - 体积渲染效果
+   - 软阴影和环境光遮蔽
+   - 次表面散射近似
+
+2. **物理仿真**：
+   - 碰撞检测：$d = \text{SDF}(\mathbf{p})$
+   - 接触力计算：$\mathbf{f} = -k \cdot d \cdot \nabla\text{SDF}$
+   - 流体边界条件
+
+3. **形状分析**：
+   - 中轴提取
+   - 形状描述子
+   - 对称性检测
+
+4. **机器学习应用**：
+   - **DeepSDF**：神经网络隐式表示
+   - **Neural Implicit Surfaces**：连续形状表示
+   - **Occupancy Networks**：占用概率场
+
+5. **形状操作**：
+   - 形态学操作（腐蚀、膨胀）
+   - 形状插值：$f_t = (1-t)f_0 + tf_1$
+   - 形状优化
+
+**数值方法与实现**：
+
+1. **离散化存储**：
+   - 规则网格：简单但内存密集
+   - 自适应网格：八叉树、KD树
+   - 稀疏表示：仅存储窄带
+
+2. **插值方法**：
+   - 三线性插值：$C^0$ 连续
+   - 三次插值：$C^1$ 连续
+   - WENO方案：高阶精度
+
+3. **梯度计算**：
+   - 有限差分：$(f(x+h) - f(x-h))/(2h)$
+   - 解析梯度：对于已知函数
+   - 自动微分：对于复杂组合
+
+**常见问题与解决方案**：
+
+1. **C¹不连续性**：
+   - 在布尔运算边界
+   - 使用平滑运算缓解
+
+2. **数值误差累积**：
+   - 多次变换后的误差
+   - 定期重新初始化
+
+3. **中轴奇异性**：
+   - 梯度不存在
+   - 使用正则化方法
 
 ### 6.1.5 点云与体素表示
 
