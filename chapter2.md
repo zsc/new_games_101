@@ -6,32 +6,109 @@
 
 ### 2.1.1 齐次坐标系
 
-在计算机图形学中，我们使用齐次坐标（Homogeneous Coordinates）来统一表示点和向量，并使得仿射变换可以用矩阵乘法来表示。
+在计算机图形学中，我们使用齐次坐标（Homogeneous Coordinates）来统一表示点和向量，并使得仿射变换可以用矩阵乘法来表示。齐次坐标是投影几何的核心概念，它优雅地解决了平移变换无法用矩阵乘法表示的问题。
+
+#### 从欧几里得坐标到齐次坐标
 
 对于二维空间：
-- 点：$(x, y) \rightarrow (x, y, 1)$
+- 点：$(x, y) \rightarrow (x, y, 1)$ 或更一般地 $(wx, wy, w)$，其中 $w \neq 0$
 - 向量：$(x, y) \rightarrow (x, y, 0)$
 
 对于三维空间：
-- 点：$(x, y, z) \rightarrow (x, y, z, 1)$
+- 点：$(x, y, z) \rightarrow (x, y, z, 1)$ 或更一般地 $(wx, wy, wz, w)$，其中 $w \neq 0$
 - 向量：$(x, y, z) \rightarrow (x, y, z, 0)$
 
-齐次坐标的关键性质：
-- $(x, y, z, w)$ 和 $(kx, ky, kz, kw)$ 表示同一个点（$k \neq 0$）
-- 当 $w \neq 0$ 时，齐次坐标 $(x, y, z, w)$ 对应的笛卡尔坐标为 $(x/w, y/w, z/w)$
-- 当 $w = 0$ 时，表示无穷远处的方向（向量）
+#### 齐次坐标的关键性质
 
-**齐次坐标的几何意义**：
-齐次坐标本质上是将 $n$ 维空间嵌入到 $n+1$ 维投影空间中。对于二维情况，可以想象所有点 $(x, y, 1)$ 位于 $w=1$ 的平面上，而通过原点的射线上的所有点表示同一个二维点。
+1. **等价性**：$(x, y, z, w)$ 和 $(kx, ky, kz, kw)$ 表示同一个点（$k \neq 0$）
+   - 这定义了一个等价类，所有满足比例关系的坐标表示同一点
+   - 规范化形式：当 $w \neq 0$ 时，可以规范化为 $(x/w, y/w, z/w, 1)$
 
-**为什么区分点和向量**：
-- 点的平移有意义：$(x, y, 1) + (t_x, t_y, 0) = (x+t_x, y+t_y, 1)$
-- 向量的平移无意义：$(x, y, 0) + (t_x, t_y, 0) = (x, y, 0)$（向量不受平移影响）
-- 两点之差是向量：$(x_1, y_1, 1) - (x_2, y_2, 1) = (x_1-x_2, y_1-y_2, 0)$
+2. **笛卡尔坐标恢复**：
+   - 当 $w \neq 0$ 时：$(x, y, z, w) \rightarrow (x/w, y/w, z/w)$
+   - 当 $w = 0$ 时：表示无穷远处的点或方向向量
+
+3. **代数封闭性**：
+   - 两条平行线在投影空间中相交于无穷远点
+   - 使得某些几何定理（如对偶原理）更加统一和优雅
+
+#### 齐次坐标的几何解释
+
+齐次坐标本质上是将 $n$ 维空间嵌入到 $n+1$ 维投影空间中：
+
+1. **投影模型**：
+   - 想象三维空间中通过原点的所有直线
+   - 每条直线（除原点外）代表二维平面上的一个点
+   - 直线与 $w=1$ 平面的交点就是对应的笛卡尔坐标
+
+2. **无穷远元素**：
+   - $w=0$ 的超平面包含所有无穷远点
+   - 平行线在此平面上相交，实现了投影几何的完备性
+   - 例如：$(1, 0, 0)$ 表示 $x$ 轴方向的无穷远点
+
+3. **对偶性**：
+   - 点和线在投影平面上具有对偶关系
+   - 线的方程 $ax + by + c = 0$ 可表示为 $[a, b, c]$
+   - 点 $(x, y, 1)$ 在线 $[a, b, c]$ 上当且仅当 $ax + by + c = 0$
+
+#### 为什么区分点和向量
+
+这种区分不仅是数学上的优雅，更具有深刻的几何意义：
+
+1. **仿射组合**：
+   - 点的仿射组合：$\sum_i \alpha_i \mathbf{p}_i$，当 $\sum_i \alpha_i = 1$ 时结果是点
+   - 向量的线性组合：$\sum_i \beta_i \mathbf{v}_i$ 总是向量
+   - 这保证了几何运算的类型安全性
+
+2. **变换行为**：
+   - 平移对点有效：$\mathbf{p}' = \mathbf{p} + \mathbf{t}$
+   - 平移对向量无效：$\mathbf{v}' = \mathbf{v}$（方向不因位置改变）
+   - 旋转和缩放对两者都有效
+
+3. **物理意义**：
+   - 点表示位置（position）
+   - 向量表示位移（displacement）或方向（direction）
+   - 两点之差自然产生向量：$\mathbf{v} = \mathbf{p}_2 - \mathbf{p}_1$
+
+#### 齐次坐标的运算规则
+
+1. **加法运算**：
+   - $(x_1, y_1, w_1) + (x_2, y_2, w_2) = (x_1 + x_2, y_1 + y_2, w_1 + w_2)$
+   - 注意：只有当 $w_1 + w_2 \neq 0$ 时结果才有意义
+
+2. **数乘运算**：
+   - $k(x, y, w) = (kx, ky, kw)$
+   - 保持点的位置不变（等价类相同）
+
+3. **点的重心坐标**：
+   - 三角形顶点 $\mathbf{p}_1, \mathbf{p}_2, \mathbf{p}_3$ 的重心坐标
+   - $\mathbf{p} = \alpha\mathbf{p}_1 + \beta\mathbf{p}_2 + \gamma\mathbf{p}_3$，其中 $\alpha + \beta + \gamma = 1$
+   - 齐次坐标自动保证了 $w$ 分量的正确性
+
+#### 实际应用中的考虑
+
+1. **数值精度**：
+   - 避免 $w$ 接近 0 的情况（除法不稳定）
+   - 定期规范化齐次坐标（将 $w$ 设为 1）
+   - 使用 `glm::perspective` 等库函数时注意精度设置
+
+2. **GPU实现**：
+   - 顶点着色器输出 `gl_Position` 是四维齐次坐标
+   - 硬件自动执行透视除法（perspective divide）
+   - 裁剪在齐次空间进行（效率更高）
+
+3. **调试技巧**：
+   - 检查 $w$ 分量是否符合预期（点为1，向量为0）
+   - 验证变换后的 $w$ 值（透视投影会改变 $w$）
+   - 使用可视化工具观察齐次空间的变换
 
 ### 2.1.2 基本二维变换
 
-**平移变换（Translation）**
+二维变换构成了计算机图形学的基础，它们可以组合产生复杂的效果。每种变换都有其独特的几何意义和代数性质。
+
+#### 平移变换（Translation）
+
+平移将所有点沿着指定方向移动相同的距离：
 
 $$\mathbf{T}(t_x, t_y) = \begin{bmatrix}
 1 & 0 & t_x \\
@@ -39,11 +116,26 @@ $$\mathbf{T}(t_x, t_y) = \begin{bmatrix}
 0 & 0 & 1
 \end{bmatrix}$$
 
-平移是唯一不能用 $2 \times 2$ 矩阵表示的仿射变换，这正是引入齐次坐标的主要动机。平移变换的逆变换是反向平移：$\mathbf{T}^{-1}(t_x, t_y) = \mathbf{T}(-t_x, -t_y)$。
+**数学性质**：
+- 平移群构成阿贝尔群（交换群）
+- 逆变换：$\mathbf{T}^{-1}(t_x, t_y) = \mathbf{T}(-t_x, -t_y)$
+- 复合：$\mathbf{T}(t_1)\mathbf{T}(t_2) = \mathbf{T}(t_1 + t_2)$
+- 与向量的关系：平移向量 $\mathbf{t} = (t_x, t_y, 0)$
 
-**旋转变换（Rotation）**
+**几何意义**：
+- 保持所有几何性质（距离、角度、面积）
+- 等距变换（isometry）的一种
+- 不改变图形的方向性（orientation）
 
-绕原点逆时针旋转 $\theta$ 角度：
+**实现细节**：
+```
+点的平移：[x', y', 1]^T = T(tx, ty) × [x, y, 1]^T = [x+tx, y+ty, 1]^T
+向量不变：[x', y', 0]^T = T(tx, ty) × [x, y, 0]^T = [x, y, 0]^T
+```
+
+#### 旋转变换（Rotation）
+
+绕原点逆时针旋转 $\theta$ 角度的变换矩阵：
 
 $$\mathbf{R}(\theta) = \begin{bmatrix}
 \cos\theta & -\sin\theta & 0 \\
@@ -51,16 +143,43 @@ $$\mathbf{R}(\theta) = \begin{bmatrix}
 0 & 0 & 1
 \end{bmatrix}$$
 
-旋转矩阵的推导：考虑基向量 $(1,0)$ 和 $(0,1)$ 的旋转结果：
-- $(1,0) \rightarrow (\cos\theta, \sin\theta)$
-- $(0,1) \rightarrow (-\sin\theta, \cos\theta)$
+**推导过程**：
+考虑单位圆上的点 $(r\cos\phi, r\sin\phi)$ 旋转 $\theta$ 后：
+$$\begin{align}
+x' &= r\cos(\phi + \theta) = r\cos\phi\cos\theta - r\sin\phi\sin\theta \\
+y' &= r\sin(\phi + \theta) = r\cos\phi\sin\theta + r\sin\phi\cos\theta
+\end{align}$$
 
-重要性质：
-- 行列式 $\det(\mathbf{R}) = 1$（保持面积）
-- 正交矩阵：$\mathbf{R}^T\mathbf{R} = \mathbf{I}$
-- 旋转的复合：$\mathbf{R}(\alpha)\mathbf{R}(\beta) = \mathbf{R}(\alpha + \beta)$
+这给出了旋转矩阵的形式。
 
-**缩放变换（Scaling）**
+**重要性质**：
+1. **正交性**：$\mathbf{R}^T\mathbf{R} = \mathbf{I}$，即 $\mathbf{R}^{-1} = \mathbf{R}^T$
+2. **行列式**：$\det(\mathbf{R}) = \cos^2\theta + \sin^2\theta = 1$（保持面积和方向）
+3. **特征值**：$\lambda = e^{i\theta}, e^{-i\theta}, 1$（复特征值体现旋转本质）
+4. **群性质**：
+   - $\mathbf{R}(\alpha)\mathbf{R}(\beta) = \mathbf{R}(\alpha + \beta)$
+   - $\mathbf{R}(\theta)^n = \mathbf{R}(n\theta)$
+   - $\mathbf{R}(0) = \mathbf{I}$（单位元）
+
+**与复数的联系**：
+二维旋转可用复数乘法表示：
+$$z' = e^{i\theta}z = (\cos\theta + i\sin\theta)(x + iy)$$
+
+这揭示了旋转的深层数学结构。
+
+**小角度近似**：
+当 $\theta$ 很小时：
+$$\mathbf{R}(\theta) \approx \begin{bmatrix}
+1 & -\theta & 0 \\
+\theta & 1 & 0 \\
+0 & 0 & 1
+\end{bmatrix}$$
+
+这在增量旋转计算中很有用。
+
+#### 缩放变换（Scaling）
+
+缩放变换改变物体的大小：
 
 $$\mathbf{S}(s_x, s_y) = \begin{bmatrix}
 s_x & 0 & 0 \\
@@ -68,51 +187,136 @@ s_x & 0 & 0 \\
 0 & 0 & 1
 \end{bmatrix}$$
 
-缩放类型：
-- 均匀缩放：$s_x = s_y$（保持形状）
-- 非均匀缩放：$s_x \neq s_y$（改变长宽比）
-- 反射：$s_x < 0$ 或 $s_y < 0$（镜像变换）
+**分类与性质**：
+1. **均匀缩放**（$s_x = s_y = s$）：
+   - 保持形状和角度
+   - 相似变换的一部分
+   - 面积变化：$s^2$ 倍
 
-面积变化：缩放后的面积是原面积的 $|s_x \cdot s_y|$ 倍。
+2. **非均匀缩放**（$s_x \neq s_y$）：
+   - 改变长宽比
+   - 不保持角度（除了与坐标轴平行的角）
+   - 椭圆变换的基础
 
-**错切变换（Shearing）**
+3. **反射缩放**（$s_x < 0$ 或 $s_y < 0$）：
+   - 改变方向性（orientation）
+   - $\det(\mathbf{S}) < 0$ 时发生镜像
+   - 组合使用可产生各种对称
 
+**特征分解**：
+缩放矩阵是对角矩阵，其特征向量是坐标轴方向：
+- 特征值：$\lambda_1 = s_x, \lambda_2 = s_y, \lambda_3 = 1$
+- 特征向量：$(1,0,0)^T, (0,1,0)^T, (0,0,1)^T$
+
+**缩放中心**：
+绕任意点 $(c_x, c_y)$ 缩放：
+$$\mathbf{S}_c = \mathbf{T}(c_x, c_y) \mathbf{S}(s_x, s_y) \mathbf{T}(-c_x, -c_y)$$
+
+展开后：
+$$\mathbf{S}_c = \begin{bmatrix}
+s_x & 0 & c_x(1-s_x) \\
+0 & s_y & c_y(1-s_y) \\
+0 & 0 & 1
+\end{bmatrix}$$
+
+#### 错切变换（Shearing）
+
+错切变换使物体发生倾斜：
+
+**水平错切**：
 $$\mathbf{H}_x(s) = \begin{bmatrix}
 1 & s & 0 \\
 0 & 1 & 0 \\
 0 & 0 & 1
-\end{bmatrix}, \quad
-\mathbf{H}_y(s) = \begin{bmatrix}
+\end{bmatrix}$$
+
+**垂直错切**：
+$$\mathbf{H}_y(s) = \begin{bmatrix}
 1 & 0 & 0 \\
 s & 1 & 0 \\
 0 & 0 & 1
 \end{bmatrix}$$
 
-错切变换的几何意义：
-- $\mathbf{H}_x(s)$：保持 $y$ 坐标不变，$x$ 坐标增加 $sy$
-- $\mathbf{H}_y(s)$：保持 $x$ 坐标不变，$y$ 坐标增加 $sx$
-- 保持面积不变：$\det(\mathbf{H}) = 1$
-- 平行线保持平行，但角度改变
+**几何解释**：
+- $\mathbf{H}_x(s)$：每个点的 $x$ 坐标增加 $sy$，$y$ 坐标不变
+- 垂直线保持垂直，水平线倾斜角度 $\arctan(s)$
+- 矩形变成平行四边形
 
-**反射变换（Reflection）**
+**重要性质**：
+1. **面积守恒**：$\det(\mathbf{H}) = 1$
+2. **可逆性**：$\mathbf{H}_x^{-1}(s) = \mathbf{H}_x(-s)$
+3. **复合错切**：
+   $$\mathbf{H}_x(s_1)\mathbf{H}_x(s_2) = \mathbf{H}_x(s_1 + s_2)$$
+4. **与旋转的关系**：
+   任意旋转可分解为三次错切：
+   $$\mathbf{R}(\theta) = \mathbf{H}_x(-\tan\frac{\theta}{2})\mathbf{H}_y(\sin\theta)\mathbf{H}_x(-\tan\frac{\theta}{2})$$
 
-关于 $x$ 轴反射：
-$$\mathbf{F}_x = \begin{bmatrix}
-1 & 0 & 0 \\
-0 & -1 & 0 \\
+**应用场景**：
+- 斜体文字渲染
+- 图像倾斜校正
+- 仿射纹理映射
+
+#### 反射变换（Reflection）
+
+反射产生镜像效果：
+
+**基本反射**：
+- 关于 $x$ 轴：$\mathbf{F}_x = \text{diag}(1, -1, 1)$
+- 关于 $y$ 轴：$\mathbf{F}_y = \text{diag}(-1, 1, 1)$
+- 关于原点：$\mathbf{F}_o = \text{diag}(-1, -1, 1)$
+
+**关于任意直线的反射**：
+对于直线 $\mathbf{n} \cdot \mathbf{p} = d$（$\mathbf{n}$ 是单位法向量）：
+
+$$\mathbf{F} = \mathbf{I} - 2\mathbf{n}\mathbf{n}^T$$
+
+对于直线 $ax + by + c = 0$：
+1. 归一化：$\mathbf{n} = \frac{1}{\sqrt{a^2 + b^2}}(a, b)$
+2. 构造反射矩阵：
+$$\mathbf{F} = \begin{bmatrix}
+1-2n_x^2 & -2n_xn_y & -2cn_x/\sqrt{a^2+b^2} \\
+-2n_xn_y & 1-2n_y^2 & -2cn_y/\sqrt{a^2+b^2} \\
 0 & 0 & 1
 \end{bmatrix}$$
 
-关于任意直线 $ax + by + c = 0$ 的反射：
-$$\mathbf{F} = \mathbf{I} - \frac{2}{a^2 + b^2}\begin{bmatrix}
-a^2 & ab & ac \\
-ab & b^2 & bc \\
-0 & 0 & 0
-\end{bmatrix}$$
+**性质**：
+1. **对合性**：$\mathbf{F}^2 = \mathbf{I}$（反射两次回到原位）
+2. **行列式**：$\det(\mathbf{F}) = -1$（改变方向性）
+3. **特征值**：$\lambda = 1, -1, 1$
+   - 特征值1对应反射轴上的不动点
+   - 特征值-1对应垂直于反射轴的方向
+
+**组合反射**：
+- 两个反射的复合是旋转
+- 三个反射的复合可能是反射或滑移反射
+- 这构成了二维等距变换群的生成元
+
+#### 变换的分类与层次
+
+**保持性质的层次结构**：
+1. **欧几里得变换**（刚体变换）：
+   - 保持：距离、角度、面积、方向性
+   - 包含：平移、旋转
+   
+2. **相似变换**：
+   - 保持：角度、形状比例
+   - 包含：欧几里得变换 + 均匀缩放
+   
+3. **仿射变换**：
+   - 保持：平行性、面积比
+   - 包含：相似变换 + 错切 + 非均匀缩放
+   
+4. **投影变换**：
+   - 保持：直线性、交比
+   - 最一般的线性变换
 
 ### 2.1.3 基本三维变换
 
-**三维平移**
+三维变换将二维概念扩展到三维空间，但引入了更多的复杂性，特别是在旋转表示和组合方面。
+
+#### 三维平移
+
+三维平移扩展了二维情况：
 
 $$\mathbf{T}(t_x, t_y, t_z) = \begin{bmatrix}
 1 & 0 & 0 & t_x \\
@@ -121,9 +325,20 @@ $$\mathbf{T}(t_x, t_y, t_z) = \begin{bmatrix}
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
-三维平移的特性与二维类似，只影响点而不影响向量。常用于物体定位和相机移动。
+**数学性质**：
+- 构成三维阿贝尔群：$\mathbf{T}(\mathbf{a})\mathbf{T}(\mathbf{b}) = \mathbf{T}(\mathbf{a}+\mathbf{b})$
+- 逆变换：$\mathbf{T}^{-1}(t_x, t_y, t_z) = \mathbf{T}(-t_x, -t_y, -t_z)$
+- 与旋转的交换性：$\mathbf{T}\mathbf{R} \neq \mathbf{R}\mathbf{T}$（一般情况）
 
-**三维缩放**
+**应用场景**：
+- 物体世界定位
+- 相机运动（与视图矩阵相关）
+- 粒子系统的位置更新
+- 骨骼动画的关节偏移
+
+#### 三维缩放
+
+三维缩放影响物体的体积和比例：
 
 $$\mathbf{S}(s_x, s_y, s_z) = \begin{bmatrix}
 s_x & 0 & 0 & 0 \\
@@ -132,12 +347,38 @@ s_x & 0 & 0 & 0 \\
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
-体积变化：缩放后的体积是原体积的 $|s_x \cdot s_y \cdot s_z|$ 倍。
-特殊情况：
-- 体素化：$s_x = s_y = s_z < 1$（细节层次 LOD）
-- 各向异性缩放：用于模拟挤压、拉伸效果
+**几何意义**：
+1. **体积变化**：$V' = |s_x \cdot s_y \cdot s_z| \cdot V$
+2. **表面积变化**：取决于具体形状，如球体：$A' = (s_xs_y + s_ys_z + s_zs_x)/3 \cdot A$
+3. **法向量变换**：需要使用逆转置矩阵
 
-**三维旋转**
+**特殊缩放类型**：
+1. **均匀缩放**（$s_x = s_y = s_z = s$）：
+   - 保持形状和角度
+   - 用于LOD（Level of Detail）系统
+   - 透视投影中的深度缩放
+
+2. **平面缩放**（如 $s_z = 0$）：
+   - 将三维物体投影到平面
+   - 阴影生成的基础
+   - 注意：产生奇异矩阵
+
+3. **各向异性缩放**：
+   - 模拟物理变形（挤压、拉伸）
+   - 椭球体生成
+   - 纹理空间变换
+
+**缩放中心的选择**：
+```
+绕点P缩放 = T(P) × S(sx,sy,sz) × T(-P)
+常见中心：物体中心、包围盒中心、质心
+```
+
+#### 三维旋转
+
+三维旋转是最复杂的基本变换，有多种表示方法。
+
+**基本轴旋转**
 
 绕 x 轴旋转（俯仰 Pitch）：
 $$\mathbf{R}_x(\theta) = \begin{bmatrix}
@@ -163,16 +404,135 @@ $$\mathbf{R}_z(\theta) = \begin{bmatrix}
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
-**记忆技巧**：
-- $\mathbf{R}_x$：$x$ 坐标不变，在 $yz$ 平面旋转
-- $\mathbf{R}_y$：$y$ 坐标不变，在 $xz$ 平面旋转（注意负号位置）
-- $\mathbf{R}_z$：$z$ 坐标不变，在 $xy$ 平面旋转
+**记忆规则**：
+1. 旋转轴对应的行列保持单位向量形式
+2. 其他2×2子矩阵是二维旋转矩阵
+3. $\mathbf{R}_y$ 的符号相反（保持右手系）
 
-**欧拉角表示**：
-任意三维旋转可分解为三个基本旋转的组合：
-$$\mathbf{R}(\phi, \theta, \psi) = \mathbf{R}_z(\psi)\mathbf{R}_y(\theta)\mathbf{R}_x(\phi)$$
+**旋转矩阵的性质**：
+1. **正交性**：$\mathbf{R}^T\mathbf{R} = \mathbf{I}$
+2. **行列式**：$\det(\mathbf{R}) = 1$（保持手性）
+3. **特征值**：$\lambda = 1, e^{i\theta}, e^{-i\theta}$
+   - 实特征值1对应旋转轴
+   - 复特征值对描述旋转角度
+4. **群结构**：SO(3)特殊正交群
+   - 封闭性：旋转的复合仍是旋转
+   - 非交换：$\mathbf{R}_1\mathbf{R}_2 \neq \mathbf{R}_2\mathbf{R}_1$
 
-但存在万向锁问题：当 $\theta = \pm 90°$ 时，第一次和第三次旋转轴重合，失去一个自由度。
+**欧拉角表示**
+
+任意旋转可分解为三次基本旋转：
+
+1. **ZYX顺序**（偏航-俯仰-滚转）：
+   $$\mathbf{R} = \mathbf{R}_z(\psi)\mathbf{R}_y(\theta)\mathbf{R}_x(\phi)$$
+
+2. **XYZ顺序**（滚转-俯仰-偏航）：
+   $$\mathbf{R} = \mathbf{R}_x(\phi)\mathbf{R}_y(\theta)\mathbf{R}_z(\psi)$$
+
+**万向锁（Gimbal Lock）问题**：
+- 当中间旋转角为 ±90° 时发生
+- 第一和第三次旋转轴对齐
+- 失去一个旋转自由度
+- 导致动画不连续
+
+**解决方案**：
+1. 限制旋转范围
+2. 使用四元数
+3. 轴角表示
+4. 旋转矩阵直接插值
+
+#### 三维反射
+
+三维反射扩展了二维情况：
+
+**基本平面反射**：
+- XY平面（z=0）：$\mathbf{F}_{xy} = \text{diag}(1, 1, -1, 1)$
+- YZ平面（x=0）：$\mathbf{F}_{yz} = \text{diag}(-1, 1, 1, 1)$
+- XZ平面（y=0）：$\mathbf{F}_{xz} = \text{diag}(1, -1, 1, 1)$
+
+**任意平面反射**：
+对于平面 $\mathbf{n} \cdot \mathbf{p} = d$（$\mathbf{n}$ 是单位法向量）：
+
+$$\mathbf{F} = \mathbf{I} - 2\mathbf{n}\mathbf{n}^T$$
+
+展开为4×4矩阵：
+$$\mathbf{F} = \begin{bmatrix}
+1-2n_x^2 & -2n_xn_y & -2n_xn_z & -2dn_x \\
+-2n_yn_x & 1-2n_y^2 & -2n_yn_z & -2dn_y \\
+-2n_zn_x & -2n_zn_y & 1-2n_z^2 & -2dn_z \\
+0 & 0 & 0 & 1
+\end{bmatrix}$$
+
+**应用**：
+- 镜面效果
+- 对称建模
+- 阴影生成（平面投影）
+
+#### 三维错切
+
+三维错切比二维复杂，有多种形式：
+
+**XY错切**（沿z变化）：
+$$\mathbf{H}_{xy}(h_x, h_y) = \begin{bmatrix}
+1 & 0 & h_x & 0 \\
+0 & 1 & h_y & 0 \\
+0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1
+\end{bmatrix}$$
+
+**一般错切矩阵**：
+$$\mathbf{H} = \begin{bmatrix}
+1 & h_{xy} & h_{xz} & 0 \\
+h_{yx} & 1 & h_{yz} & 0 \\
+h_{zx} & h_{zy} & 1 & 0 \\
+0 & 0 & 0 & 1
+\end{bmatrix}$$
+
+**性质**：
+- 保持体积：$\det(\mathbf{H}) = 1$
+- 平行平面保持平行
+- 可分解为基本错切的组合
+
+#### 变换的组合与优化
+
+**组合顺序的重要性**：
+```
+局部到世界：Scale → Rotate → Translate
+世界到局部：Translate^(-1) → Rotate^(-1) → Scale^(-1)
+```
+
+**常见组合模式**：
+1. **TRS变换**：$\mathbf{M} = \mathbf{T}\mathbf{R}\mathbf{S}$
+   - 最常用的组合顺序
+   - 便于独立控制各分量
+   - 适合关键帧动画
+
+2. **枢轴点变换**：
+   $$\mathbf{M} = \mathbf{T}_{\text{pos}}\mathbf{T}_{\text{pivot}}\mathbf{R}\mathbf{S}\mathbf{T}_{-\text{pivot}}$$
+   - 支持任意点为中心的变换
+   - 用于3D软件的变换工具
+
+3. **层次变换**：
+   $$\mathbf{M}_{\text{child}} = \mathbf{M}_{\text{parent}} \mathbf{M}_{\text{local}}$$
+   - 场景图结构
+   - 骨骼动画系统
+   - 相对坐标系
+
+**性能优化考虑**：
+1. **矩阵缓存**：
+   - 预计算静态变换
+   - 缓存中间结果
+   - 避免重复计算
+
+2. **SIMD优化**：
+   - 4×4矩阵适合SSE/AVX
+   - 批量顶点变换
+   - 并行矩阵乘法
+
+3. **精度维护**：
+   - 定期正交化旋转部分
+   - 使用双精度关键计算
+   - 避免极小缩放值
 
 ### 2.1.4 任意轴旋转（Rodrigues' Rotation Formula）
 
