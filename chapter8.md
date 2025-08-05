@@ -15,6 +15,8 @@
 - 单位：焦耳（J）
 - 物理意义：光子携带的总能量
 - 与光子的关系：$Q = \sum_i h\nu_i$，其中 $h$ 是普朗克常数，$\nu_i$ 是第 $i$ 个光子的频率
+- 量子力学视角：每个光子能量 $E = h\nu = \frac{hc}{\lambda}$
+- 波长与颜色：可见光波长范围 380-780nm，对应不同颜色感知
 
 **辐射功率/辐射通量（Radiant Power/Flux）**
 - 符号：$\Phi = \frac{dQ}{dt}$
@@ -22,14 +24,18 @@
 - 物理意义：单位时间内通过某个表面或空间区域的能量
 - 实例：100W灯泡每秒辐射100焦耳的能量
 - 光度学对应：光通量（Luminous Flux），考虑人眼响应曲线
+- 光效转换：典型白炽灯约15 lm/W，LED可达100+ lm/W
+- 积分形式：$\Phi = \int_A \int_{\Omega} L(\mathbf{p}, \omega) \cos\theta \, d\omega \, dA$
 
 **辐射强度（Radiant Intensity）**
 - 符号：$I = \frac{d\Phi}{d\omega}$
 - 单位：W/sr（瓦特/球面度）
 - 物理意义：点光源在某个方向上单位立体角的功率
-- 适用条件：光源尺寸远小于到观察点的距离
+- 适用条件：光源尺寸远小于到观察点的距离（$r \gg d_{source}$）
 - 与点光源的关系：对于各向同性点光源，$I = \frac{\Phi}{4\pi}$
 - 实际应用：描述LED、远距离恒星等近似点光源
+- 方向分布：实际光源常有方向性，如聚光灯 $I(\theta) = I_0 \cos^n\theta$
+- 距离无关性：强度不随距离变化（但照度会以 $1/r^2$ 衰减）
 
 **辐照度（Irradiance）**
 - 符号：$E = \frac{d\Phi}{dA}$
@@ -38,6 +44,9 @@
 - 与入射方向的关系：$E = \int_{\Omega} L_i(\omega) \cos\theta \, d\omega$
 - 实际测量：照度计测量的就是辐照度的光度学对应量
 - 太阳常数：地球大气层外的太阳辐照度约为 1361 W/m²
+- 点光源辐照度：$E = \frac{I}{r^2} \cos\theta$（平方反比定律）
+- 环境光近似：常用常数辐照度 $E_{ambient}$ 模拟天空光
+- 半球辐照度：$E = \int_{\Omega^+} L_i \cos\theta \, d\omega$（只考虑上半球）
 
 **辐射出射度（Radiant Exitance）**
 - 符号：$M = \frac{d\Phi}{dA}$
@@ -45,6 +54,9 @@
 - 物理意义：单位面积发出的功率
 - 与辐照度的区别：方向相反，一个描述入射，一个描述出射
 - 与辐射度的关系：$M = \int_{\Omega} L_o(\omega) \cos\theta \, d\omega$
+- Lambertian发射体：$M = \pi L$（各向同性发射）
+- Stefan-Boltzmann定律：黑体 $M = \sigma T^4$
+- 面光源建模：用出射度描述发光表面
 
 **辐射度（Radiance）**
 - 符号：$L = \frac{d^2\Phi}{dA \cos\theta \, d\omega}$
@@ -54,10 +66,13 @@
   1. 沿光线传播不变（在真空中）
   2. 相机传感器响应与辐射度成正比
   3. 可以通过积分得到其他所有辐射度量
+  4. 人眼感知亮度直接对应辐射度
 - 与其他量的关系：
   - $d\Phi = L \, dA \cos\theta \, d\omega$
   - $dE = L \cos\theta \, d\omega$
   - $dI = L \, dA \cos\theta$
+- 光线束（Ray Bundle）：$d\Phi = L \, dA_{\perp} \, d\omega$
+- 典型值：太阳表面 $\approx 2 \times 10^7$ W/(m²·sr)
 
 ### 8.1.2 辐射度的性质
 
@@ -68,6 +83,8 @@
    - 这是一个五维函数（3D位置 + 2D方向）
    - 光场（Light Field）：固定 $z$，得到4D函数 $L(x, y, \theta, \phi)$
    - 环境贴图：固定位置，得到2D函数 $L(\theta, \phi)$
+   - 全光函数（Plenoptic Function）：$L(x, y, z, \theta, \phi, \lambda, t)$ 包含波长和时间
+   - 光场相机：通过微透镜阵列捕捉 4D 光场信息
 
 2. **传播不变性（Radiance Invariance）**
    在真空或均匀介质中传播时，辐射度沿光线保持不变：
@@ -78,26 +95,46 @@
    - 到达面元2：$d\Phi_2 = L_2 \, dA_2 \cos\theta_2 \, d\omega_2$
    - 由于 $d\omega_1 = \frac{dA_2 \cos\theta_2}{r^2}$ 和 $d\omega_2 = \frac{dA_1 \cos\theta_1}{r^2}$
    - 能量守恒要求：$d\Phi_1 = d\Phi_2$，因此 $L_1 = L_2$
+   
+   **几何光学含义**：
+   - 光线是辐射度的特征线
+   - 这个性质是射线跟踪算法的理论基础
+   - 在介质界面处会发生变化（折射定律）
 
 3. **线性叠加性**
    - 多个光源的贡献可以线性叠加：$L_{total} = \sum_i L_i$
    - 这是因为光子之间不相互作用（在线性光学范围内）
    - 使得我们可以独立计算每个光源的贡献
+   - 非线性效应：高强度激光、双光子吸收等特殊情况
+   - 波动光学效应：干涉、衍射需要考虑相位
 
 4. **与相机响应的关系**
    - 相机传感器的响应正比于入射辐射度
    - 像素值 $\propto \int_{\text{pixel}} \int_{\text{aperture}} L \cos\theta \, dA \, d\omega \, dt$
    - 这解释了为什么辐射度是渲染的核心量
+   - 曝光时间积分：$E_{sensor} = \int_0^T L(t) \, dt$
+   - 景深效应：孔径积分产生模糊
+   - HDR成像：扩展辐射度动态范围
 
 5. **能量维度分析**
    - 检查单位的一致性：$[L] = \frac{[\Phi]}{[A][\omega]} = \frac{W}{m^2 \cdot sr}$
    - 积分恢复功率：$\Phi = \int_A \int_{\Omega} L \cos\theta \, dA \, d\omega$
    - 单位立体角的物理含义：1 sr ≈ 65.5°的圆锥角
+   - 全球立体角：$4\pi$ sr，半球 $2\pi$ sr
+   - 小立体角近似：$\omega \approx \frac{A}{r^2}$ 当 $A \ll r^2$
 
 6. **参与介质中的衰减**
    在参与介质（如雾、烟）中，辐射度会衰减：
    $$\frac{dL}{ds} = -\sigma_t L + \sigma_s L_{scattered} + L_{emitted}$$
    其中 $\sigma_t$ 是消光系数，$\sigma_s$ 是散射系数
+   
+   **传输方程的解**：
+   $$L(s) = L(0) e^{-\tau(s)} + \int_0^s \sigma_s L_{in}(s') e^{-\tau(s,s')} ds'$$
+   其中光学厚度 $\tau(s) = \int_0^s \sigma_t(s') ds'$
+   
+   **相函数**：$p(\omega_i \to \omega_o)$ 描述散射方向分布
+   - Rayleigh散射：小粒子，蓝天效应
+   - Mie散射：大粒子，云雾效应
 
 ### 8.1.3 立体角与投影立体角
 
@@ -109,6 +146,8 @@
 - 整个球面的立体角：$4\pi$ sr
 - 半球的立体角：$2\pi$ sr
 - 计算公式：$\omega = \frac{A}{r^2}$（球面上面积$A$除以半径平方）
+- 平面角类比：2D中弧度 $\theta = \frac{s}{r}$，3D中立体角 $\omega = \frac{A}{r^2}$
+- 直观理解：圆锥角 $\omega = 2\pi(1 - \cos\theta)$，其中 $\theta$ 是半角
 
 **立体角的微分形式**
 在球坐标系 $(\theta, \phi)$ 中：
@@ -116,12 +155,24 @@ $$d\omega = \sin\theta \, d\theta \, d\phi$$
 
 推导：球面上的微分面元
 - 沿 $\theta$ 方向：$r \, d\theta$
-- 沿 $\phi$ 方向：$r \sin\theta \, d\phi$
+- 沿 $\phi$ 方向：$r \sin\theta \, d\phi$（纬度圈半径为 $r\sin\theta$）
 - 面积：$dA = r^2 \sin\theta \, d\theta \, d\phi$
 - 立体角：$d\omega = \frac{dA}{r^2} = \sin\theta \, d\theta \, d\phi$
 
+**笛卡尔坐标表示**：
+对于方向向量 $\omega = (\omega_x, \omega_y, \omega_z)$：
+- $\omega_x = \sin\theta\cos\phi$
+- $\omega_y = \sin\theta\sin\phi$  
+- $\omega_z = \cos\theta$
+- 约束：$\omega_x^2 + \omega_y^2 + \omega_z^2 = 1$
+
 **半球积分**
 $$\int_{\Omega} d\omega = \int_0^{2\pi} \int_0^{\pi/2} \sin\theta \, d\theta \, d\phi = 2\pi \int_0^{\pi/2} \sin\theta \, d\theta = 2\pi[-\cos\theta]_0^{\pi/2} = 2\pi$$
+
+**常见积分公式**：
+- 全球：$\int_{4\pi} d\omega = 4\pi$
+- 圆锥：$\int_{\theta_0} d\omega = 2\pi(1 - \cos\theta_0)$
+- 小立体角近似：$\Delta\omega \approx \sin\theta \Delta\theta \Delta\phi$
 
 **投影立体角（Projected Solid Angle）**
 $$d\omega^\perp = \cos\theta \, d\omega = \cos\theta \sin\theta \, d\theta \, d\phi$$
@@ -130,22 +181,47 @@ $$d\omega^\perp = \cos\theta \, d\omega = \cos\theta \sin\theta \, d\theta \, d\
 - 考虑了表面法线与入射方向的夹角
 - Lambert余弦定律的体现
 - 垂直入射的贡献最大，掠射角贡献趋于零
+- 几何解释：在法线方向投影的立体角
+
+**应用场景**：
+- 辐照度计算：$E = \int_{\Omega} L \cos\theta \, d\omega = \int_{\Omega} L \, d\omega^\perp$
+- 形状因子（Form Factor）计算
+- 半球采样权重
 
 **关键积分结果**
 1. 半球上的投影立体角积分：
    $$\int_{\Omega} \cos\theta \, d\omega = \int_0^{2\pi} \int_0^{\pi/2} \cos\theta \sin\theta \, d\theta \, d\phi = \pi$$
+   
+   **推导过程**：
+   $$\int_0^{\pi/2} \cos\theta \sin\theta \, d\theta = \int_0^{\pi/2} \frac{1}{2}\sin(2\theta) \, d\theta = \frac{1}{2}$$
 
 2. 余弦的$n$次方积分（用于BRDF分析）：
    $$\int_{\Omega} \cos^n\theta \, d\omega = \frac{2\pi}{n+1}$$
+   
+   **特例**：
+   - $n=0$: $2\pi$ （半球立体角）
+   - $n=1$: $\pi$ （投影立体角）
+   - $n=2$: $\frac{2\pi}{3}$ （Phong模型常用）
 
 3. 立体角与面积的转换：
    $$d\omega = \frac{\cos\theta' \, dA'}{||\mathbf{p} - \mathbf{p}'||^2}$$
    其中 $\theta'$ 是 $\mathbf{p}'$ 处表面法线与连线的夹角
+   
+   **双向形式**：
+   $$dA \, d\omega = \frac{\cos\theta \cos\theta' \, dA \, dA'}{||\mathbf{p} - \mathbf{p}'||^2}$$
 
 **实际应用**
 - **辐照度计算**：$E = \int_{\Omega} L_i \cos\theta \, d\omega$
 - **环境贴图采样**：需要考虑 $\sin\theta$ 项进行重要性采样
+  - 纬度-经度映射：$(u,v) \to (\theta,\phi) = (\pi v, 2\pi u)$
+  - PDF转换：$p(\theta,\phi) = \frac{p(u,v)}{2\pi^2 \sin\theta}$
 - **面光源采样**：从立体角域转换到面积域进行采样
+  - 均匀采样面积：$p_A = 1/A_{light}$
+  - 转换到立体角：$p_\omega = p_A \cdot \frac{r^2}{\cos\theta'}$
+- **半球均匀采样**：
+  - 随机变量：$(\xi_1, \xi_2) \in [0,1]^2$
+  - 转换：$\theta = \arccos(\xi_1)$, $\phi = 2\pi\xi_2$
+  - PDF: $p(\omega) = 1/(2\pi)$
 
 ### 8.1.4 BRDF与反射方程
 
@@ -158,6 +234,11 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
 - 入射辐照度引起的出射辐射度变化率
 - 单位：$1/sr$（因为 $[L]/[E] = [W/(m^2 \cdot sr)]/[W/m^2] = 1/sr$）
 - 描述了材质的反射特性，与几何形状无关
+
+**微观解释**：
+- BRDF描述大量微观交互的统计平均
+- 微表面模型提供物理基础
+- 波长依赖性：$f_r(\omega_i \to \omega_o, \lambda)$
 
 **BRDF的基本性质**
 
@@ -175,10 +256,19 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
    - 反射的能量不能超过入射能量
    - 等号成立：完美反射（如理想镜面）
    - 小于1：部分能量被吸收
+   
+   **白炉测试**：
+   在均匀入射照明下，出射辐射度应等于入射辐射度：
+   $$L_o = \int_{\Omega^+} f_r \cdot L_i \cos\theta_i \, d\omega_i = L_i \int_{\Omega^+} f_r \cos\theta_i \, d\omega_i \leq L_i$$
 
 4. **线性性**：
    - BRDF对入射光强度是线性的
    - 允许叠加原理的应用
+   - 多光源：$L_o = \sum_k \int f_r L_{i,k} \cos\theta_i \, d\omega_i$
+
+5. **各向同性 vs 各向异性**：
+   - 各向同性：BRDF不依赖于旋转角 $\phi$
+   - 各向异性：如拉丝金属、织物、木材纹理
 
 **常见BRDF模型**
 
@@ -187,24 +277,35 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
    - $\rho$：反射率（albedo），$0 \leq \rho \leq 1$
    - 各向同性，与方向无关
    - 能量守恒验证：$\int_{\Omega} \frac{\rho}{\pi} \cos\theta \, d\omega = \rho$
+   - 典型材质：石膏、粗糙纸张、未抛光的石头
+   - 为什么除以$\pi$：保证 $\int \cos\theta \, d\omega = \pi$ 后总反射率为 $\rho$
 
 2. **理想镜面反射**：
    $$f_r(\omega_i \to \omega_o) = \frac{\delta(\omega_i - R(\omega_o))}{\cos\theta_i}$$
-   - $R(\omega_o)$：反射方向
+   - $R(\omega_o)$：反射方向 $R(\omega_o) = 2(\mathbf{n} \cdot \omega_o)\mathbf{n} - \omega_o$
    - 使用Dirac delta函数表示
+   - 积分后：$L_o(\omega_o) = L_i(R(\omega_o))$
+   - 实际实现：显式跟踪镜面反射，而非采样
 
 3. **Phong模型**（经验模型）：
    $$f_r = \frac{k_d}{\pi} + k_s \frac{n+2}{2\pi} \cos^n\alpha$$
    - $\alpha$：反射方向与视线方向的夹角
-   - $n$：光泽度指数
+   - $n$：光泽度指数（典型值：5-1000）
    - 注意：不满足能量守恒
+   - 修正的Phong：使用半向量 $\mathbf{h}$ 代替反射向量
+   - 归一化因子 $\frac{n+2}{2\pi}$ 保证积分为1
 
 4. **微表面模型（Microfacet）**：
    $$f_r = \frac{D(\mathbf{h}) G(\omega_i, \omega_o) F(\omega_i, \mathbf{h})}{4 \cos\theta_i \cos\theta_o}$$
    - $D$：法线分布函数（如GGX）
    - $G$：几何遮蔽函数
    - $F$：Fresnel项
-   - $\mathbf{h}$：半向量
+   - $\mathbf{h}$：半向量 $\mathbf{h} = \frac{\omega_i + \omega_o}{||\omega_i + \omega_o||}$
+   
+   **常用分布**：
+   - GGX/Trowbridge-Reitz: $D(\mathbf{h}) = \frac{\alpha^2}{\pi((\mathbf{n} \cdot \mathbf{h})^2(\alpha^2 - 1) + 1)^2}$
+   - Beckmann: $D(\mathbf{h}) = \frac{1}{\pi\alpha^2\cos^4\theta_h} e^{-\frac{\tan^2\theta_h}{\alpha^2}}$
+   - $\alpha$：粗糙度参数
 
 **反射方程（Reflection Equation）**
 $$L_o(\mathbf{p}, \omega_o) = L_e(\mathbf{p}, \omega_o) + \int_{\Omega^+} f_r(\mathbf{p}, \omega_i \to \omega_o) L_i(\mathbf{p}, \omega_i) \cos\theta_i \, d\omega_i$$
