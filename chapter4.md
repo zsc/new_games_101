@@ -12,13 +12,56 @@
 - 强度（Intensity）：光的能量大小，通常用辐射度量学中的辐照度（Irradiance）或辐亮度（Radiance）表示
 - 方向（Direction）：光传播的方向，在局部光照模型中假设为直线传播
 - 颜色（Color）：由光谱分布决定，实践中常用RGB三通道近似
+- 偏振（Polarization）：电磁波的振动方向，在高级渲染中用于表现某些材质特性
+
+**辐射度量学基础：**
+理解光照计算需要掌握几个关键的辐射度量学概念：
+
+1. **辐射通量（Radiant Flux）**：$\Phi$，单位时间内通过表面的总能量，单位：瓦特(W)
+   $$\Phi = \frac{dQ}{dt}$$
+
+2. **辐照度（Irradiance）**：$E$，单位面积接收的辐射通量，单位：$W/m^2$
+   $$E = \frac{d\Phi}{dA}$$
+
+3. **辐射强度（Radiant Intensity）**：$I$，点光源在特定方向上的功率，单位：$W/sr$
+   $$I = \frac{d\Phi}{d\omega}$$
+
+4. **辐亮度（Radiance）**：$L$，最重要的量，描述光线的"亮度"，单位：$W/(m^2 \cdot sr)$
+   $$L = \frac{d^2\Phi}{dA \cos\theta \, d\omega}$$
 
 **光与表面的相互作用：**
 当光线到达物体表面时，会发生以下现象：
+
 1. **反射（Reflection）**：光线从表面弹回，分为镜面反射和漫反射
+   - 镜面反射：遵循反射定律，入射角等于反射角
+   - 漫反射：光线向各个方向均匀散射
+   - 光泽反射：介于两者之间，有方向性但不完全镜面
+
 2. **折射（Refraction）**：光线穿透表面进入物体内部，遵循斯涅尔定律
+   $$n_1 \sin\theta_1 = n_2 \sin\theta_2$$
+   其中$n_1, n_2$为介质的折射率
+
 3. **吸收（Absorption）**：部分光能被材质吸收转化为热能
+   - 遵循比尔-朗伯定律：$I(x) = I_0 e^{-\sigma_a x}$
+   - $\sigma_a$为吸收系数，$x$为传播距离
+
 4. **散射（Scattering）**：光线在介质内部发生多次反射和折射
+   - 瑞利散射：粒子尺寸远小于波长（天空为蓝色的原因）
+   - 米氏散射：粒子尺寸与波长相当（云和雾的外观）
+
+**菲涅尔效应（Fresnel Effect）：**
+反射率随入射角变化的现象，由菲涅尔方程描述：
+
+对于非偏振光的反射率：
+$$F(\theta) = \frac{1}{2}(F_\parallel^2 + F_\perp^2)$$
+
+其中：
+$$F_\parallel = \frac{n_2 \cos\theta_i - n_1 \cos\theta_t}{n_2 \cos\theta_i + n_1 \cos\theta_t}$$
+$$F_\perp = \frac{n_1 \cos\theta_i - n_2 \cos\theta_t}{n_1 \cos\theta_i + n_2 \cos\theta_t}$$
+
+Schlick近似（常用于实时渲染）：
+$$F(\theta) = F_0 + (1 - F_0)(1 - \cos\theta)^5$$
+其中$F_0$是垂直入射时的反射率。
 
 在基本着色模型中，我们主要关注反射现象，将其简化为漫反射和镜面反射两个分量。
 
@@ -39,10 +82,42 @@ $$I = I_0 \cos\theta = I_0 (\mathbf{n} \cdot \mathbf{l})$$
 **物理解释：**
 余弦项$\cos\theta$反映了有效照射面积的变化。当光线垂直入射时（$\theta = 0$），单位面积接收最多能量；当光线平行于表面时（$\theta = 90°$），没有能量到达表面。
 
+从微观角度理解：
+- 粗糙表面由无数微小面元组成，朝向随机分布
+- 每个微面元都是完美镜面，但整体表现为漫反射
+- 余弦项反映了朝向光源的微面元比例
+
+**BRDF形式：**
+Lambertian反射的双向反射分布函数（BRDF）为常数：
+$$f_r = \frac{\rho}{\pi}$$
+
+其中$\rho$是反照率（albedo），表示表面反射的能量比例。除以$\pi$是为了满足能量守恒：
+$$\int_{\Omega} f_r \cos\theta \, d\omega = \int_0^{2\pi} \int_0^{\pi/2} \frac{\rho}{\pi} \cos\theta \sin\theta \, d\theta \, d\phi = \rho$$
+
+**漫反射的渲染方程：**
+对于单个光源，出射辐亮度为：
+$$L_o(\mathbf{x}, \omega_o) = f_r L_i(\mathbf{x}, \omega_i) (\mathbf{n} \cdot \omega_i)$$
+
+展开后：
+$$L_o = \frac{\rho}{\pi} L_i \max(0, \mathbf{n} \cdot \mathbf{l})$$
+
 **实际应用考虑：**
 - 需要clamp负值：$\max(0, \mathbf{n} \cdot \mathbf{l})$，避免背面照明
 - 双面材质需要特殊处理：$|\mathbf{n} \cdot \mathbf{l}|$
 - 可以乘以材质的漫反射系数$k_d$和颜色$\mathbf{c}_d$得到最终颜色
+
+**高级扩展：**
+
+1. **Oren-Nayar模型**：考虑表面粗糙度的改进模型
+   $$f_r = \frac{\rho}{\pi}(A + B \max(0, \cos(\phi_i - \phi_o)) \sin\alpha \tan\beta)$$
+   其中$A = 1 - 0.5\frac{\sigma^2}{\sigma^2 + 0.33}$，$B = 0.45\frac{\sigma^2}{\sigma^2 + 0.09}$，$\sigma$是表面粗糙度
+
+2. **次表面散射（Subsurface Scattering）**：
+   - 光线进入材质内部散射后射出
+   - 常见于皮肤、蜡、大理石等半透明材质
+   - 需要考虑光线入射点和出射点的距离
+
+3. **预积分皮肤着色**：使用查找表（LUT）存储不同角度的散射结果
 
 ### 4.1.3 Phong光照模型
 
@@ -55,6 +130,11 @@ $$I_a = k_a I_{a,light}$$
 
 环境光模拟间接光照，是对全局光照的粗糙近似。它确保场景中没有完全黑暗的区域，提供基础亮度。
 
+物理意义：
+- 真实世界中，光线会在表面间多次反弹
+- 环境光是这种复杂相互作用的简化
+- 现代渲染中常用环境贴图或球谐函数代替
+
 **2. 漫反射（Diffuse）：**
 $$I_d = k_d I_{light} \max(0, \mathbf{n} \cdot \mathbf{l})$$
 
@@ -66,6 +146,15 @@ $$I_s = k_s I_{light} \max(0, \mathbf{r} \cdot \mathbf{v})^p$$
 模拟光滑表面的高光效果。反射向量$\mathbf{r}$通过镜面反射定律计算：
 $$\mathbf{r} = 2(\mathbf{n} \cdot \mathbf{l})\mathbf{n} - \mathbf{l}$$
 
+**推导反射向量公式：**
+设入射向量为$-\mathbf{l}$，法线为$\mathbf{n}$：
+1. 将$-\mathbf{l}$分解为平行和垂直于$\mathbf{n}$的分量
+2. 平行分量：$(-\mathbf{l} \cdot \mathbf{n})\mathbf{n}$
+3. 垂直分量：$-\mathbf{l} - (-\mathbf{l} \cdot \mathbf{n})\mathbf{n}$
+4. 反射时，平行分量反向，垂直分量不变
+5. $\mathbf{r} = -(-\mathbf{l} \cdot \mathbf{n})\mathbf{n} + [-\mathbf{l} - (-\mathbf{l} \cdot \mathbf{n})\mathbf{n}]$
+6. 简化得：$\mathbf{r} = 2(\mathbf{n} \cdot \mathbf{l})\mathbf{n} - \mathbf{l}$
+
 **参数说明：**
 - $k_a, k_d, k_s$：材质系数，满足能量守恒时通常$k_a + k_d + k_s \leq 1$
 - $p$：镜面反射指数（Shininess），典型值：
@@ -75,11 +164,36 @@ $$\mathbf{r} = 2(\mathbf{n} \cdot \mathbf{l})\mathbf{n} - \mathbf{l}$$
   - 镜面：1000+
 - $\mathbf{v}$：归一化的观察方向（从表面指向相机）
 
+**镜面反射的微面元理论解释：**
+- 表面由许多微小镜面组成
+- 只有法线恰好在$\mathbf{l}$和$\mathbf{v}$中间的微面元才能将光反射到观察者
+- 指数$p$控制微面元法线分布的集中程度
+- 高$p$值表示分布集中，产生小而亮的高光
+
+**RGB颜色扩展：**
+实际应用中，每个颜色通道独立计算：
+$$\mathbf{I}_{RGB} = k_a \mathbf{c}_a \odot \mathbf{I}_{a,light} + k_d \mathbf{c}_d \odot \mathbf{I}_{light} (\mathbf{n} \cdot \mathbf{l}) + k_s \mathbf{c}_s \odot \mathbf{I}_{light} (\mathbf{r} \cdot \mathbf{v})^p$$
+
+其中$\odot$表示逐元素乘法，$\mathbf{c}_a, \mathbf{c}_d, \mathbf{c}_s$分别是环境光、漫反射和镜面反射颜色。
+
 **Phong模型的局限性：**
-1. 非物理准确：不遵循能量守恒
-2. 镜面反射在掠射角下表现不真实
-3. 无法表现菲涅尔效应
-4. 对各向异性材质无能为力
+1. **非物理准确**：
+   - 不遵循能量守恒
+   - 镜面反射项不满足互易性（reciprocity）
+   - 无法准确模拟粗糙表面的镜面反射
+
+2. **掠射角问题**：
+   - 在掠射角下，镜面反射强度下降过快
+   - 真实材质在掠射角下反射率增加（菲涅尔效应）
+
+3. **材质表现力有限**：
+   - 无法表现菲涅尔效应
+   - 对各向异性材质（如拉丝金属）无能为力
+   - 不支持分层材质（如汽车漆）
+
+4. **高光形状单一**：
+   - 只能产生圆形高光
+   - 无法表现拉长或其他形状的高光
 
 ### 4.1.4 Blinn-Phong模型
 
@@ -93,20 +207,42 @@ $$I_s = k_s I_{light} \max(0, \mathbf{n} \cdot \mathbf{h})^p$$
 **物理解释：**
 半角向量$\mathbf{h}$代表了微表面法线的统计分布。当$\mathbf{n} \cdot \mathbf{h}$较大时，意味着有更多的微表面朝向能够将光线反射到观察者。
 
+**微面元理论深入：**
+- 完美镜面反射发生在微面元法线等于$\mathbf{h}$时
+- $(\mathbf{n} \cdot \mathbf{h})^p$近似微面元法线分布函数
+- 这是后来Cook-Torrance BRDF的前身
+
+**数学关系推导：**
+设$\theta$为$\mathbf{n}$与$\mathbf{h}$的夹角，$\alpha$为$\mathbf{r}$与$\mathbf{v}$的夹角：
+$$\cos\alpha = \mathbf{r} \cdot \mathbf{v} = 2\cos^2\theta - 1$$
+
+因此：
+$$(\mathbf{r} \cdot \mathbf{v})^{p_{Phong}} = (2\cos^2\theta - 1)^{p_{Phong}} \approx (\cos\theta)^{4p_{Phong}} = (\mathbf{n} \cdot \mathbf{h})^{4p_{Phong}}$$
+
+这解释了为什么$p_{Blinn} \approx 4p_{Phong}$。
+
 **优点：**
 - 计算更高效（避免计算反射向量）
 - 在某些情况下更符合物理规律
 - 处理掠射角时表现更好
 - 当光源和视点都在无穷远时，$\mathbf{h}$为常量
 
-**与Phong模型的关系：**
-由于$\mathbf{n} \cdot \mathbf{h}$的变化比$\mathbf{r} \cdot \mathbf{v}$慢，要达到相同的视觉效果，Blinn-Phong通常需要更大的指数值：
-$$p_{Blinn} \approx 4 \cdot p_{Phong}$$
-
 **实现细节：**
 - 需要检查$\mathbf{l} + \mathbf{v}$是否为零向量（光源在视点后方）
 - 半角向量的计算可以在顶点着色器中完成并插值
 - 现代实时渲染几乎都使用Blinn-Phong而非原始Phong
+
+**改进的归一化Blinn-Phong：**
+为了更好的能量守恒，可以使用归一化版本：
+$$I_s = \frac{p + 8}{8\pi} k_s I_{light} \max(0, \mathbf{n} \cdot \mathbf{h})^p$$
+
+归一化因子确保镜面反射瓣的积分为$k_s$。
+
+**各向异性扩展：**
+对于各向异性材质，可以将标量指数$p$扩展为两个方向的指数：
+$$I_s = k_s I_{light} \max(0, \mathbf{n} \cdot \mathbf{h})^{p_u \cos^2\phi + p_v \sin^2\phi}$$
+
+其中$\phi$是半角向量在切平面上的投影与主切线方向的夹角。
 
 ### 4.1.5 多光源处理
 
@@ -122,9 +258,17 @@ $$I_{total} = I_a + \sum_{i=1}^{n} (I_{d,i} + I_{s,i})$$
 从一点向所有方向发出光线，强度随距离衰减：
 $$I(d) = \frac{I_0}{d^2}$$
 
+**物理正确的衰减：**
+- 遵循平方反比定律：能量在球面上均匀分布
+- 球面面积$A = 4\pi d^2$，故单位面积能量$\propto 1/d^2$
+
 实践中常用更灵活的衰减公式避免除零和过度衰减：
 $$f_{att} = \frac{1}{k_c + k_l d + k_q d^2}$$
 其中$k_c$（常数项）、$k_l$（线性项）、$k_q$（二次项）是衰减系数。
+
+**改进的衰减模型：**
+$$f_{att} = \frac{1}{\max(d, r_{min})^2}$$
+其中$r_{min}$是光源的物理半径，避免近距离的无限亮度。
 
 **2. 方向光（Directional Light）**
 模拟无限远的光源（如太阳）：
@@ -132,6 +276,11 @@ $$f_{att} = \frac{1}{k_c + k_l d + k_q d^2}$$
 - 无衰减：$f_{att} = 1$
 - 适合室外场景的主光源
 - 可产生平行阴影
+
+**级联阴影贴图（Cascaded Shadow Maps）：**
+- 将视锥体分成多个层级
+- 每层使用不同分辨率的阴影贴图
+- 近处高分辨率，远处低分辨率
 
 **3. 聚光灯（Spot Light）**
 具有位置、方向和照射角度的光源：
@@ -144,23 +293,80 @@ $$f_{spot}(\theta) = \begin{cases}
 0 & \text{otherwise}
 \end{cases}$$
 
-其中：
-- $\theta$：光线方向与聚光灯朝向的夹角
-- $\theta_{inner}$：内锥角（全强度）
-- $\theta_{outer}$：外锥角（开始衰减）
-- $f$：聚光指数，控制边缘软硬
+**平滑过渡函数：**
+使用Hermite插值实现软边缘：
+$$\text{smooth}(\theta) = \text{smoothstep}(\cos\theta_{outer}, \cos\theta_{inner}, \cos\theta)$$
+$$\text{smoothstep}(a, b, x) = t^2(3 - 2t), \quad t = \frac{x - a}{b - a}$$
+
+**投影纹理聚光灯：**
+- 使用纹理调制光强分布
+- 可实现复杂图案投影（如舞台灯光）
+- 纹理坐标从光源空间投影矩阵计算
 
 **4. 面光源（Area Light）**
-真实世界的光源都有一定面积，但精确计算需要积分。常用近似方法：
-- 用多个点光源近似
-- 使用预计算的光照贴图
-- 球谐函数（Spherical Harmonics）近似
+真实世界的光源都有一定面积，但精确计算需要积分。
+
+**解析解（仅限简单几何）：**
+矩形面光源对点的辐照度：
+$$E = \int_A \frac{L \cos\theta_i \cos\theta_o}{r^2} dA$$
+
+对于均匀发光的矩形，存在闭式解（使用边界积分）。
+
+**近似方法：**
+1. **多点近似**：
+   - 将面光源离散为$N$个点光源
+   - 权重根据面积元分配
+   - 计算复杂度：$O(N)$
+
+2. **线性变换球面光源（LTCs）**：
+   - 将复杂BRDF变换为余弦分布
+   - 使用预计算的查找表
+   - 实时性能优秀
+
+3. **球谐函数近似**：
+   - 将光源投影到SH基函数
+   - 适合低频光照
+   - 系数预计算
+
+**5. 环境光照（Environment Lighting）**
+使用环境贴图表示来自所有方向的光照：
+
+**重要性采样：**
+- 根据环境贴图亮度分布采样
+- 减少噪声，提高收敛速度
+- 预计算CDF用于快速采样
+
+**预滤波环境贴图：**
+- 不同粗糙度级别的预滤波
+- 存储在mipmap链中
+- 实时查询，无需运行时积分
 
 **性能优化策略：**
-1. **光源剔除**：只处理影响当前片段的光源
-2. **延迟着色**：将几何和光照计算分离
-3. **光源分级**：重要光源精确计算，次要光源简化处理
-4. **光照烘焙**：静态光源预计算到光照贴图
+
+1. **光源剔除**：
+   - 视锥剔除：丢弃视野外光源
+   - 距离剔除：忽略超过最大影响距离的光源
+   - 遮挡剔除：使用层次Z缓冲（Hi-Z）
+
+2. **延迟着色（Deferred Shading）**：
+   - 几何复杂度与光源数量解耦
+   - G-Buffer存储几何属性
+   - 光照以屏幕空间处理
+
+3. **光源分级（Light Hierarchy）**：
+   - 主光源：完整计算
+   - 次要光源：简化BRDF
+   - 环境光源：预积分近似
+
+4. **光照烘焙（Light Baking）**：
+   - 静态光源预计算
+   - 存储在光照贴图或探针
+   - 运行时仅处理动态光源
+
+5. **Tiled/Clustered Shading**：
+   - 将屏幕/视锥分块
+   - 每块维护光源列表
+   - 减少光源遍历开销
 
 ## 4.2 着色频率与图形管线
 
