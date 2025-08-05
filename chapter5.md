@@ -21,98 +21,651 @@ $$P = u \cdot A + v \cdot B + w \cdot C$$
 
 其中 $u + v + w = 1$。
 
-重心坐标的计算可以通过面积比得到：
+#### 几何意义
+
+重心坐标具有直观的几何解释：
+- $u$表示点P到边BC的"相对距离"
+- 当$u=1$时，P位于顶点A；当$u=0$时，P位于边BC上
+- 重心坐标在仿射变换下保持不变
+
+#### 计算方法
+
+**方法1：面积比**
 
 $$u = \frac{\text{Area}(PBC)}{\text{Area}(ABC)}, \quad v = \frac{\text{Area}(APC)}{\text{Area}(ABC)}, \quad w = \frac{\text{Area}(ABP)}{\text{Area}(ABC)}$$
 
-使用叉积计算：
+**方法2：叉积形式**
 
-$$u = \frac{(B-P) \times (C-P) \cdot \mathbf{n}}{(B-A) \times (C-A) \cdot \mathbf{n}}$$
+对于2D情况：
+$$u = \frac{(B-P) \times (C-P)}{(B-A) \times (C-A)}$$
+
+对于3D情况，需要投影到合适的平面：
+$$u = \frac{|(B-P) \times (C-P) \cdot \mathbf{n}|}{|(B-A) \times (C-A) \cdot \mathbf{n}|}$$
 
 其中$\mathbf{n}$是三角形法向量。
 
+**方法3：直接求解线性系统**
+
+设$P = (p_x, p_y)$，可以建立方程：
+$$\begin{pmatrix} a_x & b_x & c_x \\ a_y & b_y & c_y \\ 1 & 1 & 1 \end{pmatrix} \begin{pmatrix} u \\ v \\ w \end{pmatrix} = \begin{pmatrix} p_x \\ p_y \\ 1 \end{pmatrix}$$
+
+使用Cramer法则求解：
+$$u = \frac{\begin{vmatrix} p_x & b_x & c_x \\ p_y & b_y & c_y \\ 1 & 1 & 1 \end{vmatrix}}{\begin{vmatrix} a_x & b_x & c_x \\ a_y & b_y & c_y \\ 1 & 1 & 1 \end{vmatrix}}$$
+
+#### 数值稳定性
+
+在实际实现中，需要考虑：
+1. **退化情况**：当三角形接近共线时，分母接近0
+2. **精度问题**：使用double精度计算中间结果
+3. **边界处理**：$u, v, w \in [0, 1]$的严格判断
+
+#### 优化实现
+
+对于光栅化中的大量计算，可以使用增量算法：
+$$u(x+1, y) = u(x, y) + \Delta u_x$$
+$$u(x, y+1) = u(x, y) + \Delta u_y$$
+
+其中$\Delta u_x$和$\Delta u_y$是常数，可预计算。
+
 ### 5.1.2 透视正确插值
 
-屏幕空间的线性插值在透视投影下会产生错误。考虑属性$\phi$在三角形顶点的值为$\phi_0, \phi_1, \phi_2$，正确的插值公式为：
+屏幕空间的线性插值在透视投影下会产生错误。这是因为透视投影是非线性变换，破坏了属性的线性关系。
 
-$$\phi = \frac{u\frac{\phi_0}{z_0} + v\frac{\phi_1}{z_1} + w\frac{\phi_2}{z_2}}{u\frac{1}{z_0} + v\frac{1}{z_1} + w\frac{1}{z_2}}$$
+#### 问题的本质
 
-其中$z_i$是顶点的视空间深度。
+考虑世界空间中的线段，其属性（如纹理坐标）线性变化。经过透视投影后：
+1. 空间位置被非线性压缩
+2. 但屏幕空间的光栅化假设线性插值
+3. 导致属性插值出现扭曲
 
-推导过程：在投影变换下，属性$\phi/z$是线性的，因此：
+#### 数学推导
 
-$$\frac{\phi}{z} = u\frac{\phi_0}{z_0} + v\frac{\phi_1}{z_1} + w\frac{\phi_2}{z_2}$$
+设顶点属性为$\phi_0, \phi_1, \phi_2$，视空间深度为$z_0, z_1, z_2$。
 
-$$\frac{1}{z} = u\frac{1}{z_0} + v\frac{1}{z_1} + w\frac{1}{z_2}$$
+**关键观察**：在齐次坐标系中，属性$\phi/w$（其中$w=z$）保持线性。
+
+**推导步骤**：
+
+1. 齐次空间的线性插值：
+   $$\left(\frac{\phi}{z}\right)_p = u\frac{\phi_0}{z_0} + v\frac{\phi_1}{z_1} + w\frac{\phi_2}{z_2}$$
+
+2. 深度的倒数也线性插值：
+   $$\frac{1}{z_p} = u\frac{1}{z_0} + v\frac{1}{z_1} + w\frac{1}{z_2}$$
+
+3. 恢复原始属性：
+   $$\phi_p = \frac{\left(\frac{\phi}{z}\right)_p}{\frac{1}{z_p}} = \frac{u\frac{\phi_0}{z_0} + v\frac{\phi_1}{z_1} + w\frac{\phi_2}{z_2}}{u\frac{1}{z_0} + v\frac{1}{z_1} + w\frac{1}{z_2}}$$
+
+#### 实现细节
+
+**顶点着色器输出**：
+```glsl
+// 输出属性除以w
+out_texcoord = texcoord / gl_Position.w;
+out_inv_w = 1.0 / gl_Position.w;
+```
+
+**片元着色器恢复**：
+```glsl
+// 硬件自动插值后恢复
+texcoord = in_texcoord / in_inv_w;
+```
+
+#### 性能优化
+
+1. **预计算优化**：在顶点着色器计算$1/z$，避免片元着色器除法
+2. **向量化**：同时处理多个属性的透视校正
+3. **精度控制**：关键计算使用highp精度
+
+#### 特殊情况
+
+**屏幕空间属性**：某些属性（如屏幕空间导数）不需要透视校正，使用`noperspective`限定符：
+```glsl
+noperspective out vec2 screen_coord;
+```
+
+**常见错误案例**：
+- 法线插值：需要先归一化再插值
+- 颜色插值：线性颜色空间vs sRGB空间
+- 切线空间：需要保持正交性
 
 ### 5.1.3 属性插值的硬件实现
 
-现代GPU使用专门的插值器硬件。常见的插值模式包括：
+现代GPU使用专门的插值器硬件，这是固定功能管线的关键组件之一。
 
-1. **flat shading**: 使用provoking vertex的属性值
-2. **smooth shading**: 透视正确插值
-3. **noperspective**: 屏幕空间线性插值
+#### 插值模式详解
 
-插值器的优化策略：
-- 增量计算：利用$\Delta u, \Delta v$沿扫描线递增
-- SIMD并行：同时插值多个片元
-- 缓存优化：重用顶点属性
+1. **flat shading**: 
+   - 使用provoking vertex（通常是最后一个顶点）的属性值
+   - 整个三角形使用同一值，无插值计算
+   - 适用于：图元ID、材质索引等离散属性
+
+2. **smooth shading**: 
+   - 执行完整的透视正确插值
+   - 默认模式，适用于大多数属性
+   - 硬件自动处理$1/w$的计算和恢复
+
+3. **noperspective**: 
+   - 屏幕空间线性插值，跳过透视校正
+   - 适用于：屏幕空间效果、后处理坐标
+   - 性能更高但可能产生透视失真
+
+4. **centroid sampling**:
+   - 在MSAA情况下，确保采样点在三角形内部
+   - 避免边缘artifacts但可能影响导数计算
+
+#### 硬件架构
+
+**参数缓存**：
+- 存储三角形的插值参数（梯度、起始值）
+- 典型大小：32-64个三角形
+- LRU替换策略
+
+**插值管线**：
+```
+顶点属性 → 参数计算 → 参数缓存 → 片元插值 → 属性输出
+           ↓                      ↑
+      梯度计算单元            扫描线生成器
+```
+
+#### 增量算法实现
+
+对于属性$\phi$在屏幕坐标$(x,y)$的值：
+
+$$\phi(x,y) = \phi_0 + \frac{\partial \phi}{\partial x}(x-x_0) + \frac{\partial \phi}{\partial y}(y-y_0)$$
+
+梯度计算：
+$$\frac{\partial \phi}{\partial x} = \frac{(\phi_1 - \phi_0)(y_2 - y_0) - (\phi_2 - \phi_0)(y_1 - y_0)}{(x_1 - x_0)(y_2 - y_0) - (x_2 - x_0)(y_1 - y_0)}$$
+
+**扫描线遍历优化**：
+```
+// 沿扫描线的增量
+for (x = x_start; x <= x_end; x++) {
+    phi += dphi_dx;
+    inv_w += dinv_w_dx;
+}
+// 换行时的调整
+phi_row += dphi_dy;
+inv_w_row += dinv_w_dy;
+```
+
+#### SIMD并行策略
+
+**2×2 Quad并行**：
+- GPU以2×2像素块（quad）为单位处理
+- 便于计算屏幕空间导数
+- 共享插值参数，减少带宽
+
+**导数计算**：
+$$\frac{\partial \phi}{\partial x} \approx \phi_{x+1,y} - \phi_{x,y}$$
+$$\frac{\partial \phi}{\partial y} \approx \phi_{x,y+1} - \phi_{x,y}$$
+
+#### 精度与性能权衡
+
+**定点数优化**：
+- 屏幕坐标使用定点数（如16.8格式）
+- 避免浮点累积误差
+- 提高遍历精度
+
+**属性压缩**：
+- 16位浮点用于颜色、纹理坐标
+- 32位浮点用于位置、深度
+- 打包多个小属性到单个寄存器
+
+**缓存优化策略**：
+1. **顶点缓存**：避免重复变换
+2. **参数缓存**：重用三角形设置
+3. **纹理缓存**：利用2D局部性
 
 ### 5.1.4 高阶插值
 
-对于曲面片元，可能需要高阶插值。二次插值示例：
+线性插值可能不足以表示复杂的属性变化，特别是在曲面渲染和高质量着色中。
 
-$$\phi(u,v) = \sum_{i+j \leq 2} a_{ij} u^i v^j$$
+#### 二次插值
 
-系数通过解线性系统确定。
+**Bézier三角形表示**：
+对于二次Bézier三角形，使用6个控制点：
+$$\phi(u,v,w) = \sum_{i+j+k=2} \binom{2}{i,j,k} u^i v^j w^k \phi_{ijk}$$
+
+其中$\binom{2}{i,j,k} = \frac{2!}{i!j!k!}$是多项式系数。
+
+**展开形式**：
+$$\phi(u,v,w) = u^2\phi_{200} + v^2\phi_{020} + w^2\phi_{002} + 2uv\phi_{110} + 2vw\phi_{011} + 2uw\phi_{101}$$
+
+**控制点布局**：
+```
+      φ200
+     /    \
+  φ110    φ101
+   /        \
+φ020--φ011--φ002
+```
+
+#### 三次插值
+
+**PN三角形（Point-Normal Triangles）**：
+用于几何细分和光滑表面：
+
+1. **几何控制点**：
+   $$b_{ijk} = \frac{i\mathbf{P}_1 + j\mathbf{P}_2 + k\mathbf{P}_3}{3} + \frac{ij}{3}\mathbf{w}_{12} + \frac{jk}{3}\mathbf{w}_{23} + \frac{ki}{3}\mathbf{w}_{31}$$
+   
+   其中$\mathbf{w}_{ij}$是修正向量。
+
+2. **法线插值**：
+   使用二次插值保证$C^1$连续性
+
+#### 有理插值
+
+**NURBS三角形**：
+$$\phi(u,v,w) = \frac{\sum_{i+j+k=n} w_{ijk} \phi_{ijk} B_{ijk}^n(u,v,w)}{\sum_{i+j+k=n} w_{ijk} B_{ijk}^n(u,v,w)}$$
+
+其中$w_{ijk}$是权重，$B_{ijk}^n$是Bernstein基函数。
+
+#### 自适应插值
+
+**误差驱动细分**：
+根据插值误差动态选择插值阶数：
+
+$$E = \max_{\mathbf{p} \in T} |\phi_{linear}(\mathbf{p}) - \phi_{exact}(\mathbf{p})|$$
+
+当$E > \epsilon$时，使用高阶插值或细分三角形。
+
+#### 实现考虑
+
+**存储开销**：
+- 线性：3个系数
+- 二次：6个系数
+- 三次：10个系数
+
+**计算复杂度**：
+- 线性：3次乘法，2次加法
+- 二次：6次乘法，5次加法，3次平方
+- 三次：10次乘法，9次加法，需要立方计算
+
+**硬件支持**：
+- 现代GPU主要支持线性插值
+- 高阶插值通过着色器实现
+- 曲面细分着色器提供硬件加速
+
+**应用场景**：
+1. **位移贴图**：需要平滑的几何变化
+2. **法线插值**：避免Gouraud着色的棱角
+3. **程序化纹理**：平滑的参数变化
 
 ## 5.2 高级纹理映射
 
 ### 5.2.1 纹理坐标的生成与变换
 
-纹理坐标生成方法：
+纹理坐标是将二维图像映射到三维几何体的桥梁。不同的生成方法适用于不同的几何形状和应用场景。
 
-1. **参数化映射**：通过UV展开
-2. **投影映射**：平面、圆柱、球面投影
-3. **环境映射**：立方体贴图坐标计算
+#### 参数化映射
 
-球面映射的数学表达：
-$$u = \frac{1}{2\pi} \arctan\left(\frac{y}{x}\right) + 0.5$$
-$$v = \frac{1}{\pi} \arccos(z) $$
+**UV展开算法**：
+
+1. **保角映射（Conformal Mapping）**：
+   - 保持局部角度，适合纹理绘制
+   - 使用复变函数理论：$f: \mathbb{C} \to \mathbb{C}$
+   - 满足Cauchy-Riemann方程：$\frac{\partial u}{\partial x} = \frac{\partial v}{\partial y}$, $\frac{\partial u}{\partial y} = -\frac{\partial v}{\partial x}$
+
+2. **保面积映射（Area-Preserving）**：
+   - 保持三角形面积比
+   - 优化目标：$\min \sum_T \left(\frac{A_{3D}}{A_{2D}} - 1\right)^2$
+
+3. **LSCM（Least Squares Conformal Maps）**：
+   - 最小二乘保角映射
+   - 线性系统求解，适合大规模网格
+
+#### 投影映射
+
+**平面投影**：
+```
+u = dot(position - origin, uAxis) / uScale
+v = dot(position - origin, vAxis) / vScale
+```
+
+**圆柱投影**：
+$$u = \frac{1}{2\pi} \arctan2(y, x) + 0.5$$
+$$v = \frac{z - z_{min}}{z_{max} - z_{min}}$$
+
+**球面投影**：
+$$u = \frac{1}{2\pi} \arctan2(y, x) + 0.5$$
+$$v = \frac{1}{\pi} \arccos\left(\frac{z}{|\mathbf{r}|}\right)$$
+
+注意：在极点处存在奇异性，需要特殊处理。
+
+#### 环境映射
+
+**立方体贴图（Cube Mapping）**：
+
+1. **面选择**：
+   ```
+   absX = |direction.x|
+   absY = |direction.y|
+   absZ = |direction.z|
+   
+   if (absX >= absY && absX >= absZ) {
+       face = (direction.x > 0) ? +X : -X
+   }
+   // 类似处理Y和Z
+   ```
+
+2. **坐标计算**：
+   对于+X面：
+   $$u = 0.5 \times \left(1 + \frac{-direction.z}{direction.x}\right)$$
+   $$v = 0.5 \times \left(1 + \frac{-direction.y}{direction.x}\right)$$
+
+**球面环境贴图**：
+- Equirectangular：直接使用球面坐标
+- Dual-Paraboloid：两个抛物面覆盖全球
+
+#### 动态纹理坐标生成
+
+**三平面映射（Triplanar Mapping）**：
+```glsl
+vec3 blendWeights = abs(normal);
+blendWeights = normalize(max(blendWeights, 0.00001));
+
+vec3 xaxis = texture(tex, position.yz) * blendWeights.x;
+vec3 yaxis = texture(tex, position.xz) * blendWeights.y;
+vec3 zaxis = texture(tex, position.xy) * blendWeights.z;
+
+return xaxis + yaxis + zaxis;
+```
+
+**投影纹理**：
+从光源视角投影：
+$$\mathbf{uv} = \frac{1}{2} + \frac{1}{2} \times \frac{\mathbf{P}_{light}}{w_{light}}$$
+
+#### 纹理坐标变换
+
+**仿射变换**：
+$$\begin{pmatrix} u' \\ v' \end{pmatrix} = \begin{pmatrix} a & b \\ c & d \end{pmatrix} \begin{pmatrix} u \\ v \end{pmatrix} + \begin{pmatrix} t_x \\ t_y \end{pmatrix}$$
+
+**透视变换**：
+$$u' = \frac{au + bv + c}{gu + hv + 1}$$
+$$v' = \frac{du + ev + f}{gu + hv + 1}$$
 
 ### 5.2.2 MIP映射原理
 
-MIP映射解决纹理采样的走样问题。对于屏幕空间导数：
+MIP（Multum In Parvo，“多在小中”）映射是解决纹理走样的核心技术。它通过预计算不同分辨率的纹理金字塔，在渲染时选择合适的级别。
 
-$$\frac{\partial u}{\partial x} = \frac{\partial u}{\partial s} \cdot \frac{\partial s}{\partial x}$$
+#### 走样问题分析
 
-其中$s$是屏幕坐标。LOD级别计算：
+**欠采样（Undersampling）**：
+- 当纹理频率超过Nyquist频率时发生
+- 产生摩尔纹、闪烁等artifacts
+- 根本原因：屏幕像素覆盖多个纹素
 
-$$\text{LOD} = \log_2 \left( \max \left( \sqrt{\left(\frac{\partial u}{\partial x}\right)^2 + \left(\frac{\partial v}{\partial x}\right)^2}, \sqrt{\left(\frac{\partial u}{\partial y}\right)^2 + \left(\frac{\partial v}{\partial y}\right)^2} \right) \cdot \text{textureSize} \right)$$
+**过采样（Oversampling）**：
+- 浪费带宽和计算资源
+- 可能导致纹理缓存效率低下
+
+#### MIP级别计算
+
+**屏幕空间导数**：
+使用雾可比矩阵计算纹理坐标的变化率：
+
+$$\mathbf{J} = \begin{pmatrix} \frac{\partial u}{\partial x} & \frac{\partial u}{\partial y} \\ \frac{\partial v}{\partial x} & \frac{\partial v}{\partial y} \end{pmatrix}$$
+
+**像素覆盖区域估计**：
+1. **各向同性估计**（标准MIP）：
+   $$\rho = \max\left(||\mathbf{J} \cdot (1, 0)^T||, ||\mathbf{J} \cdot (0, 1)^T||\right)$$
+
+2. **完整LOD计算**：
+   $$\text{LOD} = \log_2(\rho \cdot \text{textureSize})$$
+
+3. **LOD偏移与约束**：
+   $$\text{LOD}_{final} = \text{clamp}(\text{LOD} + \text{bias}, \text{minLOD}, \text{maxLOD})$$
+
+#### MIP金字塔生成
+
+**滤波核选择**：
+
+1. **简单平均（Box Filter）**：
+   $$\text{MIP}_{i+1}(x,y) = \frac{1}{4}\sum_{dx,dy \in \{0,1\}} \text{MIP}_i(2x+dx, 2y+dy)$$
+
+2. **高斯滤波**：
+   $$w(x,y) = \frac{1}{2\pi\sigma^2} e^{-\frac{x^2+y^2}{2\sigma^2}}$$
+
+3. **Lanczos滤波**：
+   $$L(x) = \begin{cases}
+   \text{sinc}(x) \cdot \text{sinc}(x/a) & |x| < a \\
+   0 & \text{otherwise}
+   \end{cases}$$
+
+**边界处理**：
+- Clamp: 防止越界采样
+- Wrap: 周期性纹理
+- Mirror: 镜像反射
+
+#### 三线性过滤
+
+在两个MIP级别之间进行线性插值：
+
+$$\text{color} = (1-\alpha) \cdot \text{sample}(\lfloor\text{LOD}\rfloor, u, v) + \alpha \cdot \text{sample}(\lceil\text{LOD}\rceil, u, v)$$
+
+其中$\alpha = \text{fract}(\text{LOD})$。
+
+#### 导数计算优化
+
+**显式导数传递**：
+```glsl
+vec4 textureGrad(sampler2D tex, vec2 uv, vec2 dPdx, vec2 dPdy)
+```
+
+**自动导数计算**：
+GPU在2×2 quad内使用差分：
+$$\frac{\partial f}{\partial x} \approx f(x+1, y) - f(x, y)$$
+
+#### 存储优化
+
+**内存占用**：
+完整MIP链增加约33%的存储：
+$$\text{Total} = \text{Base} \times \sum_{i=0}^{\infty} \frac{1}{4^i} = \frac{4}{3} \times \text{Base}$$
+
+**紧凑布局**：
+```
++--------+----+--+-+
+| Level0 | L1 |L2|3|
+|        +----+--+-+
+|        | L1 |L2|3|
++--------+----+--+-+
+```
 
 ### 5.2.3 各向异性过滤
 
-各向异性过滤考虑纹理在不同方向的拉伸。EWA (Elliptical Weighted Average) 过滤器：
+各向异性过滤解决了标准MIP映射在倾斜视角下的模糊问题。当纹理在不同方向上拉伸程度不同时，各向同性的MIP滤波会过度模糊。
 
-纹理空间的椭圆方程：
+#### 像素足迹分析
+
+**像素在纹理空间的投影**：
+屏幕像素在纹理空间形成一个近似椭圆的区域。
+
+**雅可比矩阵**：
 $$\mathbf{J} = \begin{pmatrix} \frac{\partial u}{\partial x} & \frac{\partial u}{\partial y} \\ \frac{\partial v}{\partial x} & \frac{\partial v}{\partial y} \end{pmatrix}$$
 
-椭圆的形状矩阵：
-$$\mathbf{M} = \mathbf{J}^T \mathbf{J}$$
+**形状矩阵**：
+$$\mathbf{M} = \mathbf{J}^T \mathbf{J} = \begin{pmatrix} E & F \\ F & G \end{pmatrix}$$
+
+其中：
+- $E = \left(\frac{\partial u}{\partial x}\right)^2 + \left(\frac{\partial v}{\partial x}\right)^2$
+- $F = \frac{\partial u}{\partial x}\frac{\partial u}{\partial y} + \frac{\partial v}{\partial x}\frac{\partial v}{\partial y}$
+- $G = \left(\frac{\partial u}{\partial y}\right)^2 + \left(\frac{\partial v}{\partial y}\right)^2$
+
+#### 椭圆参数计算
+
+**特征值分解**：
+$$\lambda_{1,2} = \frac{E + G \pm \sqrt{(E-G)^2 + 4F^2}}{2}$$
+
+**椭圆主轴**：
+- 长轴：$a = \sqrt{\lambda_{max}}$
+- 短轴：$b = \sqrt{\lambda_{min}}$
+- 旋转角：$\theta = \frac{1}{2}\arctan\left(\frac{2F}{E-G}\right)$
+
+**各向异性比**：
+$$r = \frac{a}{b} = \sqrt{\frac{\lambda_{max}}{\lambda_{min}}}$$
+
+#### EWA过滤器
+
+**椭圆加权平均（EWA）**：
+$$c = \frac{\sum_{(s,t) \in E} w(s,t) \cdot \text{texture}(s,t)}{\sum_{(s,t) \in E} w(s,t)}$$
+
+**高斯权重函数**：
+$$w(s,t) = \exp\left(-\frac{1}{2}(s,t)\mathbf{M}^{-1}(s,t)^T\right)$$
+
+#### 实现方法
+
+**1. Ripmap**：
+- 存储各种宽高比的预滤波纹理
+- 内存开销：原始纹理的4倍
+- 索引：$(\log_2(width), \log_2(height))$
+
+**2. 多采样近似**：
+```glsl
+vec4 anisotropicSample(sampler2D tex, vec2 uv, vec2 ddx, vec2 ddy) {
+    float maxAniso = 16.0;
+    
+    // 计算各向异性方向
+    vec2 dx = ddx * textureSize(tex, 0);
+    vec2 dy = ddy * textureSize(tex, 0);
+    float px = dot(dx, dx);
+    float py = dot(dy, dy);
+    
+    float maxLod = 0.5 * log2(max(px, py));
+    float minLod = 0.5 * log2(min(px, py));
+    
+    float anisoRatio = min(2.0 * (maxLod - minLod), log2(maxAniso));
+    float samples = exp2(anisoRatio);
+    
+    // 沿主轴采样
+    vec2 majorAxis = (px > py) ? normalize(ddx) : normalize(ddy);
+    vec4 color = vec4(0.0);
+    
+    for (float i = 0; i < samples; i++) {
+        float t = (i + 0.5) / samples - 0.5;
+        vec2 offset = t * majorAxis * length(ddx + ddy);
+        color += textureLod(tex, uv + offset, minLod);
+    }
+    
+    return color / samples;
+}
+```
+
+**3. 硬件实现策略**：
+- 限制最大采样数（通常8x或8x）
+- 使用查找表加速三角函数
+- 缓存友好的采样模式
+
+#### 性能与质量权衡
+
+**自适应采样**：
+- 根据各向异性比动态调整采样数
+- 远处物体使用较少采样
+- 近处倾斜表面增加采样
+
+**LOD偏移优化**：
+$$\text{LOD}_{aniso} = \text{LOD}_{iso} - \frac{1}{2}\log_2(\text{samples})$$
 
 ### 5.2.4 纹理压缩技术
 
-常见压缩格式的数学原理：
+纹理压缩是平衡内存占用和视觉质量的关键技术。现代GPU在硬件级别支持实时解压。
 
-**BC1 (DXT1)**：4×4块压缩到64位
-- 2个16位颜色端点
-- 32位索引（每像素2位）
+#### 块压缩原理
 
-压缩率：$\frac{16 \times 24}{64} = 6:1$
+**基本思想**：
+- 将纹理分成4×4的块
+- 每块独立压缩，便于随机访问
+- 利用块内颜色相关性
 
-**BC7**：高质量压缩，支持alpha通道
-- 多种模式选择
-- 更精细的颜色量化
+#### BC1/DXT1格式
+
+**数据结构**（每块64位）：
+```
+color0: 16 bits (R5G6B5)
+color1: 16 bits (R5G6B5)
+indices: 32 bits (2 bits × 16 pixels)
+```
+
+**颜色插值规则**：
+当color0 > color1：
+- $c_0 = color0$
+- $c_1 = color1$
+- $c_2 = \frac{2}{3}c_0 + \frac{1}{3}c_1$
+- $c_3 = \frac{1}{3}c_0 + \frac{2}{3}c_1$
+
+当color0 ≤ color1（透明模式）：
+- $c_0 = color0$
+- $c_1 = color1$
+- $c_2 = \frac{1}{2}c_0 + \frac{1}{2}c_1$
+- $c_3 = $ 透明/黑色
+
+**压缩比**：$\frac{16 \times 24}{64} = 6:1$
+
+#### BC7/BPTC格式
+
+**高级特性**：
+- 8种压缩模式
+- 每块128位
+- 支持完整Alpha通道
+- 适合高质量贴图
+
+**模式选择策略**：
+```
+Mode 0: 3 subsets, 4-bit endpoints
+Mode 1: 2 subsets, 6-bit endpoints
+Mode 2: 3 subsets, 5-bit endpoints
+...
+Mode 7: 2 subsets, 5-bit RGBA
+```
+
+**分区模式**：
+将块分为多个子集，每个子集独立插值：
+$$c = \sum_{i} w_i \cdot endpoint_i$$
+
+#### ASTC格式
+
+**灵活块大小**：
+- 从4×4到8×8、甚至12×12
+- 可变压缩率：8 bpp切0.89 bpp
+- 支持HDR
+
+**编码原理**：
+1. **颜色端点编码**：使用BISE（Bounded Integer Sequence Encoding）
+2. **权重编码**：量化到3、5、7位等
+3. **分区模式**：支持1-4个分区
+
+#### 纹理压缩选择策略
+
+**根据内容类型**：
+
+1. **漫反射贴图**：
+   - BC1/DXT1：一般质量足够
+   - BC7：高质量需求
+
+2. **法线贴图**：
+   - BC5：两通道，适合存储XY
+   - 重建Z：$z = \sqrt{1 - x^2 - y^2}$
+
+3. **HDR纹理**：
+   - BC6H：半精度浮点
+   - ASTC HDR模式
+
+**性能考虑**：
+```
+缓存命中率 ∝ 1/压缩后大小
+带宽需求 = 采样率 × 压缩后大小
+```
+
+#### 实时压缩优化
+
+**快速编码算法**：
+1. **PCA颜色选择**：使用主成分分析选择端点
+2. **误差度量**：$E = \sum_{i} ||c_i - \hat{c}_i||^2$
+3. **快速模式决策**：基于块的统计特性
+
+**GPU加速编码**：
+- 并行处理多个块
+- 使用计算着色器
+- 实时纹理流
 
 ### 5.2.5 虚拟纹理
 
