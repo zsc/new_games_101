@@ -14,6 +14,14 @@ $$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$$
 - $\mathbf{d}$ 是归一化的方向向量（direction）
 - $t \geq 0$ 是参数，表示沿光线方向的距离
 
+**扩展表示**：为了数值稳定性，实际应用中常使用：
+$$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}, \quad t \in [t_{\min}, t_{\max}]$$
+
+其中 $t_{\min} > 0$ 避免自相交，$t_{\max}$ 限制光线长度。
+
+**光线微分**：用于抗锯齿和纹理过滤，追踪光线的微分信息：
+$$\frac{\partial \mathbf{r}}{\partial x} = \frac{\partial \mathbf{o}}{\partial x} + t\frac{\partial \mathbf{d}}{\partial x}$$
+
 ### 7.1.2 基本光线追踪算法
 
 光线追踪的核心步骤：
@@ -24,17 +32,35 @@ $$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$$
    
    其中 $\mathbf{e}$ 是相机位置，$\mathbf{p}_{i,j}$ 是像素在世界坐标系中的位置。
 
+   **子像素采样**：为了抗锯齿，在像素内部进行多次采样：
+   $$\mathbf{p}_{i,j}^{(k)} = \mathbf{p}_{i,j} + \xi_x \Delta_x \mathbf{right} + \xi_y \Delta_y \mathbf{up}$$
+   
+   其中 $\xi_x, \xi_y \in [-0.5, 0.5]$ 是采样偏移。
+
 2. **光线-场景相交测试**
    对每条光线，找到最近的相交点：
    $$t_{\text{hit}} = \min_{k \in \text{objects}} t_k$$
    
    其中 $t_k$ 是光线与第 $k$ 个物体的相交参数。
+   
+   **相交信息记录**：
+   ```
+   struct HitRecord {
+       float t;           // 相交参数
+       vec3 point;        // 相交点
+       vec3 normal;       // 表面法线
+       vec2 uv;          // 纹理坐标
+       Material* mat;     // 材质指针
+       float pdf_area;    // 面积概率密度
+   }
+   ```
 
 3. **着色计算**
    在相交点处计算颜色，考虑：
    - 直接光照（使用阴影光线）
    - 反射（递归追踪反射光线）
    - 折射（对透明物体）
+   - 环境光照（环境贴图采样）
 
 ### 7.1.3 递归光线追踪
 
@@ -42,7 +68,30 @@ $$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$$
 
 $$L_o(\mathbf{x}, \omega_o) = L_e(\mathbf{x}, \omega_o) + \int_{\Omega} f_r(\mathbf{x}, \omega_i, \omega_o) L_i(\mathbf{x}, \omega_i) (\omega_i \cdot \mathbf{n}) d\omega_i$$
 
-实际实现中，通常限制递归深度或使用俄罗斯轮盘赌（Russian Roulette）来终止递归。
+**Whitted-style光线追踪**简化为：
+$$L_o = L_e + k_d L_{\text{direct}} + k_s L_{\text{reflect}} + k_t L_{\text{refract}}$$
+
+其中：
+- $L_{\text{direct}}$：直接光照（Lambert + Phong）
+- $L_{\text{reflect}}$：镜面反射贡献
+- $L_{\text{refract}}$：折射贡献
+
+**反射方向计算**：
+$$\mathbf{r}_{\text{reflect}} = \mathbf{d} - 2(\mathbf{d} \cdot \mathbf{n})\mathbf{n}$$
+
+**折射方向计算**（Snell定律）：
+$$\mathbf{r}_{\text{refract}} = \frac{\eta_i}{\eta_t}\mathbf{d} + \left(\frac{\eta_i}{\eta_t}(\mathbf{n} \cdot \mathbf{d}) - \sqrt{1 - \sin^2\theta_t}\right)\mathbf{n}$$
+
+其中 $\sin^2\theta_t = \left(\frac{\eta_i}{\eta_t}\right)^2(1 - (\mathbf{n} \cdot \mathbf{d})^2)$
+
+**全内反射判断**：当 $\sin^2\theta_t > 1$ 时发生全内反射。
+
+**俄罗斯轮盘赌**终止策略：
+```
+float p = max(color.r, color.g, color.b);
+if (random() > p) return black;
+return color / p;  // 能量补偿
+```
 
 ### 7.1.4 相机模型与光线生成
 
@@ -56,11 +105,41 @@ v &= \frac{2j - \text{height}}{\text{height}} \cdot \tan(\text{fov}/2) \\
 \mathbf{d} &= \text{normalize}(u\mathbf{right} + v\mathbf{up} - \mathbf{forward})
 \end{aligned}$$
 
+**薄透镜相机模型**（景深效果）：
+1. 计算焦平面上的目标点：
+   $$\mathbf{p}_{\text{focus}} = \mathbf{o} + \frac{\text{focus\_distance}}{|\mathbf{d} \cdot \mathbf{forward}|} \mathbf{d}$$
+
+2. 在透镜上采样：
+   $$\mathbf{o}' = \mathbf{o} + r(\cos\theta \mathbf{right} + \sin\theta \mathbf{up})$$
+   
+   其中 $r \leq \text{aperture}/2$
+
+3. 新的光线方向：
+   $$\mathbf{d}' = \text{normalize}(\mathbf{p}_{\text{focus}} - \mathbf{o}')$$
+
+**鱼眼相机**：
+$$\begin{aligned}
+r &= \sqrt{u^2 + v^2} \\
+\theta &= r \cdot \text{fov} / 2 \\
+\phi &= \arctan2(v, u) \\
+\mathbf{d} &= \sin\theta\cos\phi \mathbf{right} + \sin\theta\sin\phi \mathbf{up} - \cos\theta \mathbf{forward}
+\end{aligned}$$
+
 ## 7.2 加速结构（BVH、KD-Tree）
 
 ### 7.2.1 空间数据结构的必要性
 
 朴素的光线追踪需要测试每条光线与场景中所有物体的相交，复杂度为 $O(N)$。对于包含百万级三角形的场景，这是不可接受的。空间加速结构可以将平均复杂度降低到 $O(\log N)$。
+
+**理论分析**：
+- 无加速结构：每条光线需要 $N$ 次相交测试
+- 理想加速结构：$O(\log N)$ 次节点访问 + $O(1)$ 次图元测试
+- 实际性能：取决于场景分布和构建质量
+
+**常见加速结构分类**：
+1. **空间分割**：KD-Tree、Octree、BSP Tree
+2. **物体分割**：BVH、R-Tree
+3. **混合方法**：SBVH、Dual-Split BVH
 
 ### 7.2.2 层次包围盒（BVH）
 
@@ -68,9 +147,17 @@ v &= \frac{2j - \text{height}}{\text{height}} \cdot \tan(\text{fov}/2) \\
 
 1. **自顶向下构建**
    ```
-   选择分割轴和分割位置
-   将物体分为两组
-   递归构建子树
+   function BuildBVH(primitives, start, end):
+       if (end - start <= leaf_threshold):
+           return CreateLeaf(primitives[start:end])
+       
+       axis = ChooseSplitAxis(primitives[start:end])
+       mid = Partition(primitives, start, end, axis)
+       
+       left = BuildBVH(primitives, start, mid)
+       right = BuildBVH(primitives, mid, end)
+       
+       return CreateNode(left, right)
    ```
 
 2. **SAH（Surface Area Heuristic）**
@@ -78,19 +165,62 @@ v &= \frac{2j - \text{height}}{\text{height}} \cdot \tan(\text{fov}/2) \\
    $$C = C_{\text{trav}} + \frac{A_L}{A} \cdot N_L \cdot C_{\text{isect}} + \frac{A_R}{A} \cdot N_R \cdot C_{\text{isect}}$$
    
    其中：
-   - $C_{\text{trav}}$ 是遍历节点的代价
-   - $C_{\text{isect}}$ 是相交测试的代价
+   - $C_{\text{trav}}$ 是遍历节点的代价（典型值：1.0）
+   - $C_{\text{isect}}$ 是相交测试的代价（典型值：4.0）
    - $A_L, A_R$ 是左右子节点的表面积
    - $N_L, N_R$ 是左右子节点包含的图元数
+   
+   **完整SAH实现考虑**：
+   $$C_{\text{split}} = C_{\text{trav}} + P_L \cdot C_L + P_R \cdot C_R$$
+   
+   其中概率 $P_L = \frac{A_L}{A}$，$P_R = \frac{A_R}{A}$
 
 3. **BVH遍历**
-   使用栈式遍历或递归遍历：
+   
+   **递归遍历**：
    ```
-   如果是叶节点：测试所有图元
-   否则：
-     测试左右子节点的包围盒
-     优先遍历较近的子节点
+   function Intersect(node, ray, tmin, tmax):
+       if (IsLeaf(node)):
+           return IntersectPrimitives(node.primitives, ray)
+       
+       t1 = IntersectAABB(node.left.bbox, ray)
+       t2 = IntersectAABB(node.right.bbox, ray)
+       
+       if (t1.hit && t2.hit):
+           first = (t1.tmin < t2.tmin) ? node.left : node.right
+           second = (t1.tmin < t2.tmin) ? node.right : node.left
+           
+           hit1 = Intersect(first, ray, tmin, tmax)
+           if (hit1.t < second.tmin) return hit1
+           
+           hit2 = Intersect(second, ray, tmin, tmax)
+           return Closer(hit1, hit2)
    ```
+   
+   **栈式遍历**（更适合GPU）：
+   ```
+   stack[0] = root
+   while (stack not empty):
+       node = stack.pop()
+       if (IntersectAABB(node.bbox, ray)):
+           if (IsLeaf(node)):
+               ProcessPrimitives(node)
+           else:
+               stack.push(node.farChild)
+               stack.push(node.nearChild)
+   ```
+
+4. **高级BVH技术**：
+   
+   **SBVH（Spatial Split BVH）**：
+   - 允许空间分割，不仅是物体分割
+   - 可以减少包围盒重叠
+   - 代价：可能增加图元引用数
+   
+   **压缩BVH**：
+   - 量化包围盒坐标（16位或8位）
+   - 节点合并（将多个节点打包）
+   - 典型压缩率：50-75%
 
 ### 7.2.3 KD-Tree
 
@@ -100,23 +230,96 @@ v &= \frac{2j - \text{height}}{\text{height}} \cdot \tan(\text{fov}/2) \\
 - 可能需要处理跨越分割平面的三角形
 
 **构建策略**：
-1. 选择分割轴（循环或基于方差）
-2. 选择分割位置（中位数或SAH）
-3. 递归构建，直到满足终止条件
+
+1. **分割位置选择**：
+   
+   **中位数分割**：
+   $$p_{\text{split}} = \text{median}(\{p_i \cdot \mathbf{axis} : i \in \text{primitives}\})$$
+   
+   **SAH分割**：
+   最小化代价函数：
+   $$C(p) = C_{\text{trav}} + \frac{V_L(p)}{V} N_L(p) C_{\text{isect}} + \frac{V_R(p)}{V} N_R(p) C_{\text{isect}}$$
+   
+   **空盒优化**：
+   $$C_{\text{empty}} = 0.8 \cdot C_{\text{trav}}$$
+
+2. **精确SAH计算**：
+   ```
+   for each candidate position p:
+       leftCount = CountPrimitivesLeft(p)
+       rightCount = CountPrimitivesRight(p)
+       leftVolume = ComputeVolume(min, p)
+       rightVolume = ComputeVolume(p, max)
+       cost = EvaluateSAH(leftCount, rightCount, leftVolume, rightVolume)
+   ```
+
+3. **KD-Tree遍历算法**：
+   ```
+   function TraverseKDTree(ray, tmin, tmax, node):
+       if (IsLeaf(node)):
+           return IntersectPrimitives(node.primitives, ray)
+       
+       axis = node.splitAxis
+       t_split = (node.splitPos - ray.origin[axis]) / ray.dir[axis]
+       
+       nearNode = (ray.origin[axis] < node.splitPos) ? node.left : node.right
+       farNode = (ray.origin[axis] < node.splitPos) ? node.right : node.left
+       
+       if (t_split > tmax || t_split < 0):
+           return TraverseKDTree(ray, tmin, tmax, nearNode)
+       if (t_split < tmin):
+           return TraverseKDTree(ray, tmin, tmax, farNode)
+       
+       hit = TraverseKDTree(ray, tmin, t_split, nearNode)
+       if (hit.valid) return hit
+       
+       return TraverseKDTree(ray, t_split, tmax, farNode)
+   ```
 
 **遍历优化**：
-- 使用 Mailboxing 避免重复相交测试
-- 早期终止（当找到相交点后）
+- **Mailboxing**：避免重复相交测试
+  ```
+  struct Mailbox {
+      int rayID;
+      float t;
+  }
+  ```
+- **早期终止**：当找到相交点后提前退出
+- **Rope技术**：存储邻居指针加速遍历
 
 ### 7.2.4 加速结构比较
 
-| 特性 | BVH | KD-Tree |
-|-----|-----|---------|
-| 构建复杂度 | $O(N\log N)$ | $O(N\log N)$ |
-| 内存占用 | 较低 | 较高 |
-| 遍历效率 | 中等 | 高 |
-| 动态更新 | 支持 | 困难 |
-| GPU友好性 | 高 | 低 |
+| 特性 | BVH | KD-Tree | Octree |
+|-----|-----|---------|--------|
+| 构建复杂度 | $O(N\log N)$ | $O(N\log N)$ | $O(N)$ |
+| 内存占用 | $O(N)$ | $O(N) - O(N\log N)$ | $O(N)$ |
+| 遍历效率 | 中等 | 高 | 低 |
+| 动态更新 | 支持（重拟合） | 困难 | 中等 |
+| GPU友好性 | 高 | 低（分支多） | 中等 |
+| 空间利用率 | 可能重叠 | 无重叠 | 可能稀疏 |
+
+**性能模型**：
+给定场景包含 $N$ 个图元，光线数量为 $R$：
+
+1. **构建时间**：
+   - BVH: $T_{\text{build}} = O(N\log N)$
+   - KD-Tree: $T_{\text{build}} = O(N\log^2 N)$（SAH）
+
+2. **遍历时间**：
+   - 期望深度：$D = O(\log N)$
+   - 每条光线：$T_{\text{ray}} = D \cdot C_{\text{node}} + L \cdot C_{\text{leaf}}$
+   - 总时间：$T_{\text{total}} = R \cdot T_{\text{ray}}$
+
+3. **内存访问模式**：
+   - BVH：更好的空间局部性
+   - KD-Tree：更深的树，更多cache miss
+
+**混合加速结构**：
+```
+顶层：BVH（场景级别）
+  ├── 中层：KD-Tree（物体级别）
+  └── 底层：Grid（密集三角形）
+```
 
 ## 7.3 光线-物体相交算法优化
 
