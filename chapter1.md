@@ -13,6 +13,29 @@ $$f: \mathbb{R}^3 \times \mathcal{L} \times \mathcal{M} \rightarrow \mathbb{R}^2
 
 其中$\mathbb{R}^3$表示三维空间坐标，$\mathcal{L}$表示光照条件，$\mathcal{M}$表示材质属性，$\mathbb{R}^2$表示图像平面坐标，$\mathcal{C}$表示颜色空间。
 
+**图形学的层次化视角**
+
+从不同抽象层次理解图形学：
+
+1. **信号处理层**：图像是二维信号，渲染是重建过程
+   $$I(x,y) = \int\int h(x-x', y-y') S(x', y') dx' dy'$$
+   其中$h$是重建核，$S$是理想信号
+
+2. **几何变换层**：坐标系变换链
+   $$\mathbf{p}_{screen} = \mathbf{M}_{viewport} \cdot \mathbf{M}_{proj} \cdot \mathbf{M}_{view} \cdot \mathbf{M}_{model} \cdot \mathbf{p}_{local}$$
+
+3. **光传输层**：辐射度量学描述光能传播
+   $$L(\mathbf{x}, \omega) = L_e(\mathbf{x}, \omega) + \int_\Omega f_r(\mathbf{x}, \omega', \omega) L(\mathbf{x}', -\omega') G(\mathbf{x}, \mathbf{x}') V(\mathbf{x}, \mathbf{x}') d\omega'$$
+
+**渲染的信息论视角**
+
+从信息论角度，渲染是信息压缩过程：
+- **输入信息**：3D场景描述，信息熵$H(S)$
+- **输出信息**：2D图像，信息熵$H(I)$
+- **信息损失**：$I(S;I) = H(S) - H(S|I)$
+
+理想渲染器最大化互信息$I(S;I)$，同时满足人类视觉系统的感知约束。
+
 **渲染方程的统一框架**
 
 更严格地说，渲染的本质是求解渲染方程（Kajiya, 1986）：
@@ -36,6 +59,30 @@ $$L_o(\mathbf{x}, \omega_o) = L_e(\mathbf{x}, \omega_o) + \int_{\Omega} f_r(\mat
 4. **全局光照**：递归的光线传播，复杂度可达$O(n^2p)$
 
 因此，总复杂度在最坏情况下为$O(nlp)$，这解释了为什么需要各种加速算法。
+
+**复杂度优化策略**
+
+现代图形学通过多种策略降低复杂度：
+
+1. **空间数据结构**：
+   - BVH（包围体层次）：构建$O(n\log n)$，查询$O(\log n)$
+   - KD-Tree：空间划分，平均查询$O(\log n)$
+   - 八叉树：稀疏体素化，内存效率高
+
+2. **时间相干性**：
+   - 帧间复用：$I_t = \alpha I_{t-1} + (1-\alpha)I_{new}$
+   - 运动向量：$\mathbf{p}_t = \mathbf{p}_{t-1} + \mathbf{v}\Delta t$
+   - 时序抗锯齿（TAA）：累积多帧样本
+
+3. **层次化加速**：
+   - LOD（细节层次）：$L(d) = L_{max} \cdot \max(0, 1 - \frac{d}{d_{max}})$
+   - Mipmap：预过滤纹理，$O(1)$查询
+   - 视锥体裁剪：$\mathbf{n} \cdot (\mathbf{p} - \mathbf{p}_0) \geq 0$
+
+4. **近似算法**：
+   - 屏幕空间技术：SSAO、SSR
+   - 预计算辐照度：球谐函数展开
+   - 神经网络降噪：$\tilde{I} = D_\theta(I_{noisy})$
 
 ### 1.1.2 实时渲染与离线渲染
 
@@ -89,6 +136,37 @@ $$t_{frame} = t_{CPU} + t_{GPU} \leq \frac{1}{FPS_{target}}$$
 
 每个阶段都涉及特定的数学变换和算法优化，我们将在后续章节详细探讨。
 
+**管线阶段的详细分析**
+
+各阶段的核心算法和数据流：
+
+1. **应用阶段（CPU）**：
+   - 场景图遍历：$O(n)$复杂度
+   - 视锥体裁剪：6个平面测试
+   - 物理模拟：$\mathbf{x}_{t+\Delta t} = \mathbf{x}_t + \mathbf{v}_t\Delta t + \frac{1}{2}\mathbf{a}_t\Delta t^2$
+   - 动画更新：骨骼矩阵插值
+
+2. **顶点处理（GPU）**：
+   - 模型变换：$\mathbf{v}_{world} = \mathbf{M}_{model} \cdot \mathbf{v}_{local}$
+   - 视图变换：$\mathbf{v}_{view} = \mathbf{M}_{view} \cdot \mathbf{v}_{world}$
+   - 投影变换：$\mathbf{v}_{clip} = \mathbf{M}_{proj} \cdot \mathbf{v}_{view}$
+   - 透视除法：$\mathbf{v}_{ndc} = \mathbf{v}_{clip} / w_{clip}$
+
+3. **图元装配与裁剪**：
+   - Sutherland-Hodgman算法
+   - 齐次裁剪空间：$-w \leq x,y,z \leq w$
+   - 背面剔除：$(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0) \cdot \mathbf{view} < 0$
+
+4. **光栅化**：
+   - 扫描线算法：增量式边缘计算
+   - 重心坐标：$\lambda_i = \frac{A_i}{A_{total}}$
+   - 深度插值：$z = \lambda_0 z_0 + \lambda_1 z_1 + \lambda_2 z_2$
+
+5. **片段处理**：
+   - Early-Z测试：$z_{frag} < z_{buffer}$
+   - 着色计算：BRDF评估
+   - Alpha混合：$\mathbf{c}_{out} = \alpha_{src}\mathbf{c}_{src} + (1-\alpha_{src})\mathbf{c}_{dst}$
+
 **管线的数学表示**
 
 图形管线可以表示为一系列函数的复合：
@@ -128,6 +206,32 @@ $$S = \frac{1}{(1-p) + \frac{p}{n}}$$
 - **可微渲染**：将渲染过程设计为可微函数，支持基于梯度的优化
 - **实时光线追踪**：硬件加速使得实时光线追踪成为可能
 - **虚拟现实与增强现实**：对延迟和分辨率提出更高要求
+
+**新兴技术的深度分析**
+
+1. **神经场景表示**：
+   - NeRF类方法：连续体素表示
+   - 3D Gaussian Splatting：离散高斯表示
+   - Hash编码：$\gamma(p) = [\sin(2^0\pi p), \cos(2^0\pi p), ..., \sin(2^L\pi p), \cos(2^L\pi p)]$
+   - 优势：压缩率高，新视角合成质量好
+
+2. **混合渲染管线**：
+   - 光栅化主路径 + 光线追踪辅助
+   - 降噪器：$\mathcal{D}: I_{noisy} \rightarrow I_{clean}$
+   - 重要性采样：$p(\omega) \propto L_i(\omega)f_r(\omega)|\cos\theta|$
+   - 自适应采样：基于方差估计动态分配样本
+
+3. **实时全局光照近似**：
+   - Voxel Cone Tracing：体素化场景锥形采样
+   - Radiance Probes：稀疏辐照度采样
+   - Screen Space GI：屏幕空间光线步进
+   - 混合方案：远场用探针，近场用屏幕空间
+
+4. **AI驱动的内容生成**：
+   - 程序化纹理：$T = G_\theta(z, \mathbf{uv})$
+   - 风格迁移：$I_{styled} = \arg\min_I \mathcal{L}_{content}(I, I_c) + \alpha\mathcal{L}_{style}(I, I_s)$
+   - 超分辨率：端到端学习上采样
+   - 时序稳定性：循环一致性约束
 
 **神经渲染的数学框架**
 
@@ -174,6 +278,26 @@ $$\mathbf{u} + \mathbf{v} = (u_1 + v_1, u_2 + v_2, ..., u_n + v_n)^T$$
 $$k\mathbf{v} = (kv_1, kv_2, ..., kv_n)^T$$
 
 这些运算满足向量空间的八条公理，使$\mathbb{R}^n$成为一个线性空间。
+
+**向量空间的公理系统**
+
+向量空间$(V, +, \cdot)$必须满足：
+1. **加法封闭性**：$\forall \mathbf{u}, \mathbf{v} \in V: \mathbf{u} + \mathbf{v} \in V$
+2. **加法交换律**：$\mathbf{u} + \mathbf{v} = \mathbf{v} + \mathbf{u}$
+3. **加法结合律**：$(\mathbf{u} + \mathbf{v}) + \mathbf{w} = \mathbf{u} + (\mathbf{v} + \mathbf{w})$
+4. **零向量存在**：$\exists \mathbf{0} \in V: \mathbf{v} + \mathbf{0} = \mathbf{v}$
+5. **加法逆元**：$\forall \mathbf{v} \in V, \exists -\mathbf{v}: \mathbf{v} + (-\mathbf{v}) = \mathbf{0}$
+6. **标量乘法封闭**：$\forall k \in \mathbb{R}, \mathbf{v} \in V: k\mathbf{v} \in V$
+7. **标量分配律**：$k(\mathbf{u} + \mathbf{v}) = k\mathbf{u} + k\mathbf{v}$
+8. **向量分配律**：$(k + l)\mathbf{v} = k\mathbf{v} + l\mathbf{v}$
+
+**仿射空间与向量空间的区别**
+
+图形学中常混淆点和向量：
+- **点**：位置，属于仿射空间$\mathcal{A}$
+- **向量**：位移，属于向量空间$V$
+- **关系**：$\mathbf{p} - \mathbf{q} = \mathbf{v}$（两点之差是向量）
+- **仿射组合**：$\mathbf{p} = \sum_i \lambda_i \mathbf{p}_i$，其中$\sum_i \lambda_i = 1$
 
 **内积（点积）**：
 $$\mathbf{u} \cdot \mathbf{v} = \sum_{i=1}^{n} u_i v_i = |\mathbf{u}||\mathbf{v}|\cos\theta$$
