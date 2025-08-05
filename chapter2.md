@@ -19,6 +19,15 @@
 齐次坐标的关键性质：
 - $(x, y, z, w)$ 和 $(kx, ky, kz, kw)$ 表示同一个点（$k \neq 0$）
 - 当 $w \neq 0$ 时，齐次坐标 $(x, y, z, w)$ 对应的笛卡尔坐标为 $(x/w, y/w, z/w)$
+- 当 $w = 0$ 时，表示无穷远处的方向（向量）
+
+**齐次坐标的几何意义**：
+齐次坐标本质上是将 $n$ 维空间嵌入到 $n+1$ 维投影空间中。对于二维情况，可以想象所有点 $(x, y, 1)$ 位于 $w=1$ 的平面上，而通过原点的射线上的所有点表示同一个二维点。
+
+**为什么区分点和向量**：
+- 点的平移有意义：$(x, y, 1) + (t_x, t_y, 0) = (x+t_x, y+t_y, 1)$
+- 向量的平移无意义：$(x, y, 0) + (t_x, t_y, 0) = (x, y, 0)$（向量不受平移影响）
+- 两点之差是向量：$(x_1, y_1, 1) - (x_2, y_2, 1) = (x_1-x_2, y_1-y_2, 0)$
 
 ### 2.1.2 基本二维变换
 
@@ -30,6 +39,8 @@ $$\mathbf{T}(t_x, t_y) = \begin{bmatrix}
 0 & 0 & 1
 \end{bmatrix}$$
 
+平移是唯一不能用 $2 \times 2$ 矩阵表示的仿射变换，这正是引入齐次坐标的主要动机。平移变换的逆变换是反向平移：$\mathbf{T}^{-1}(t_x, t_y) = \mathbf{T}(-t_x, -t_y)$。
+
 **旋转变换（Rotation）**
 
 绕原点逆时针旋转 $\theta$ 角度：
@@ -40,6 +51,15 @@ $$\mathbf{R}(\theta) = \begin{bmatrix}
 0 & 0 & 1
 \end{bmatrix}$$
 
+旋转矩阵的推导：考虑基向量 $(1,0)$ 和 $(0,1)$ 的旋转结果：
+- $(1,0) \rightarrow (\cos\theta, \sin\theta)$
+- $(0,1) \rightarrow (-\sin\theta, \cos\theta)$
+
+重要性质：
+- 行列式 $\det(\mathbf{R}) = 1$（保持面积）
+- 正交矩阵：$\mathbf{R}^T\mathbf{R} = \mathbf{I}$
+- 旋转的复合：$\mathbf{R}(\alpha)\mathbf{R}(\beta) = \mathbf{R}(\alpha + \beta)$
+
 **缩放变换（Scaling）**
 
 $$\mathbf{S}(s_x, s_y) = \begin{bmatrix}
@@ -47,6 +67,13 @@ s_x & 0 & 0 \\
 0 & s_y & 0 \\
 0 & 0 & 1
 \end{bmatrix}$$
+
+缩放类型：
+- 均匀缩放：$s_x = s_y$（保持形状）
+- 非均匀缩放：$s_x \neq s_y$（改变长宽比）
+- 反射：$s_x < 0$ 或 $s_y < 0$（镜像变换）
+
+面积变化：缩放后的面积是原面积的 $|s_x \cdot s_y|$ 倍。
 
 **错切变换（Shearing）**
 
@@ -61,6 +88,28 @@ s & 1 & 0 \\
 0 & 0 & 1
 \end{bmatrix}$$
 
+错切变换的几何意义：
+- $\mathbf{H}_x(s)$：保持 $y$ 坐标不变，$x$ 坐标增加 $sy$
+- $\mathbf{H}_y(s)$：保持 $x$ 坐标不变，$y$ 坐标增加 $sx$
+- 保持面积不变：$\det(\mathbf{H}) = 1$
+- 平行线保持平行，但角度改变
+
+**反射变换（Reflection）**
+
+关于 $x$ 轴反射：
+$$\mathbf{F}_x = \begin{bmatrix}
+1 & 0 & 0 \\
+0 & -1 & 0 \\
+0 & 0 & 1
+\end{bmatrix}$$
+
+关于任意直线 $ax + by + c = 0$ 的反射：
+$$\mathbf{F} = \mathbf{I} - \frac{2}{a^2 + b^2}\begin{bmatrix}
+a^2 & ab & ac \\
+ab & b^2 & bc \\
+0 & 0 & 0
+\end{bmatrix}$$
+
 ### 2.1.3 基本三维变换
 
 **三维平移**
@@ -72,6 +121,8 @@ $$\mathbf{T}(t_x, t_y, t_z) = \begin{bmatrix}
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
+三维平移的特性与二维类似，只影响点而不影响向量。常用于物体定位和相机移动。
+
 **三维缩放**
 
 $$\mathbf{S}(s_x, s_y, s_z) = \begin{bmatrix}
@@ -81,9 +132,14 @@ s_x & 0 & 0 & 0 \\
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
+体积变化：缩放后的体积是原体积的 $|s_x \cdot s_y \cdot s_z|$ 倍。
+特殊情况：
+- 体素化：$s_x = s_y = s_z < 1$（细节层次 LOD）
+- 各向异性缩放：用于模拟挤压、拉伸效果
+
 **三维旋转**
 
-绕 x 轴旋转：
+绕 x 轴旋转（俯仰 Pitch）：
 $$\mathbf{R}_x(\theta) = \begin{bmatrix}
 1 & 0 & 0 & 0 \\
 0 & \cos\theta & -\sin\theta & 0 \\
@@ -91,7 +147,7 @@ $$\mathbf{R}_x(\theta) = \begin{bmatrix}
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
-绕 y 轴旋转：
+绕 y 轴旋转（偏航 Yaw）：
 $$\mathbf{R}_y(\theta) = \begin{bmatrix}
 \cos\theta & 0 & \sin\theta & 0 \\
 0 & 1 & 0 & 0 \\
@@ -99,7 +155,7 @@ $$\mathbf{R}_y(\theta) = \begin{bmatrix}
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
-绕 z 轴旋转：
+绕 z 轴旋转（滚转 Roll）：
 $$\mathbf{R}_z(\theta) = \begin{bmatrix}
 \cos\theta & -\sin\theta & 0 & 0 \\
 \sin\theta & \cos\theta & 0 & 0 \\
@@ -107,13 +163,24 @@ $$\mathbf{R}_z(\theta) = \begin{bmatrix}
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
+**记忆技巧**：
+- $\mathbf{R}_x$：$x$ 坐标不变，在 $yz$ 平面旋转
+- $\mathbf{R}_y$：$y$ 坐标不变，在 $xz$ 平面旋转（注意负号位置）
+- $\mathbf{R}_z$：$z$ 坐标不变，在 $xy$ 平面旋转
+
+**欧拉角表示**：
+任意三维旋转可分解为三个基本旋转的组合：
+$$\mathbf{R}(\phi, \theta, \psi) = \mathbf{R}_z(\psi)\mathbf{R}_y(\theta)\mathbf{R}_x(\phi)$$
+
+但存在万向锁问题：当 $\theta = \pm 90°$ 时，第一次和第三次旋转轴重合，失去一个自由度。
+
 ### 2.1.4 任意轴旋转（Rodrigues' Rotation Formula）
 
 绕任意单位向量 $\mathbf{n} = (n_x, n_y, n_z)$ 旋转 $\theta$ 角度：
 
 $$\mathbf{R}(\mathbf{n}, \theta) = \cos\theta \mathbf{I} + (1-\cos\theta)\mathbf{n}\mathbf{n}^T + \sin\theta \mathbf{N}$$
 
-其中 $\mathbf{N}$ 是 $\mathbf{n}$ 的反对称矩阵：
+其中 $\mathbf{N}$ 是 $\mathbf{n}$ 的反对称矩阵（叉积矩阵）：
 
 $$\mathbf{N} = \begin{bmatrix}
 0 & -n_z & n_y \\
@@ -121,37 +188,171 @@ n_z & 0 & -n_x \\
 -n_y & n_x & 0
 \end{bmatrix}$$
 
+**几何推导**：
+对于向量 $\mathbf{v}$，将其分解为平行和垂直于旋转轴的分量：
+- $\mathbf{v}_\parallel = (\mathbf{n} \cdot \mathbf{v})\mathbf{n}$（投影）
+- $\mathbf{v}_\perp = \mathbf{v} - \mathbf{v}_\parallel$
+
+旋转后：
+- $\mathbf{v}'_\parallel = \mathbf{v}_\parallel$（不变）
+- $\mathbf{v}'_\perp = \cos\theta \mathbf{v}_\perp + \sin\theta (\mathbf{n} \times \mathbf{v}_\perp)$
+
+**矩阵形式展开**：
+$$\mathbf{R}(\mathbf{n}, \theta) = \begin{bmatrix}
+c + n_x^2(1-c) & n_xn_y(1-c) - n_zs & n_xn_z(1-c) + n_ys \\
+n_yn_x(1-c) + n_zs & c + n_y^2(1-c) & n_yn_z(1-c) - n_xs \\
+n_zn_x(1-c) - n_ys & n_zn_y(1-c) + n_xs & c + n_z^2(1-c)
+\end{bmatrix}$$
+
+其中 $c = \cos\theta$，$s = \sin\theta$。
+
+**与四元数的联系**：
+四元数 $q = \cos(\theta/2) + \sin(\theta/2)(n_xi + n_yj + n_zk)$ 对应同样的旋转。
+
+**计算优化**：
+- 预计算 $\cos\theta$、$\sin\theta$、$(1-\cos\theta)$
+- 利用对称性减少乘法次数
+- 小角度近似：$\cos\theta \approx 1$，$\sin\theta \approx \theta$
+
 ### 2.1.5 变换的分解与组合
 
-任何仿射变换都可以分解为：平移 × 旋转 × 缩放 × 错切
+**仿射变换的一般形式**：
+$$\mathbf{A} = \begin{bmatrix}
+\mathbf{M}_{3\times3} & \mathbf{t} \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
 
-对于刚体变换（保持形状和大小）：
-$$\mathbf{M} = \mathbf{T} \cdot \mathbf{R}$$
+其中 $\mathbf{M}_{3\times3}$ 可分解为：
+$$\mathbf{M} = \mathbf{R} \cdot \mathbf{S} \cdot \mathbf{H}$$
 
-变换的组合遵循矩阵乘法规则，注意顺序很重要：
-$$\mathbf{M}_{\text{combined}} = \mathbf{M}_n \cdot \mathbf{M}_{n-1} \cdot ... \cdot \mathbf{M}_2 \cdot \mathbf{M}_1$$
+**变换的分类**：
+1. **刚体变换（Rigid Transform）**：保持距离和角度
+   - 组成：旋转 + 平移
+   - 性质：$\mathbf{M} = \mathbf{T} \cdot \mathbf{R}$
+   - 自由度：6（3个平移 + 3个旋转）
+
+2. **相似变换（Similarity Transform）**：保持角度和形状比例
+   - 组成：均匀缩放 + 旋转 + 平移
+   - 性质：$\mathbf{M} = \mathbf{T} \cdot \mathbf{R} \cdot \mathbf{S}(s)$
+   - 自由度：7
+
+3. **仿射变换（Affine Transform）**：保持平行性
+   - 组成：缩放 + 错切 + 旋转 + 平移
+   - 性质：直线映射为直线，平行线保持平行
+   - 自由度：12
+
+4. **投影变换（Projective Transform）**：保持直线性
+   - 最一般的线性变换
+   - 自由度：15（$4\times4$ 矩阵减去齐次缩放）
+
+**变换顺序的重要性**：
+
+先平移后旋转：
+$$\mathbf{M}_1 = \mathbf{R} \cdot \mathbf{T} = \begin{bmatrix}
+\mathbf{R}_{3\times3} & \mathbf{R}_{3\times3}\mathbf{t} \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
+
+先旋转后平移：
+$$\mathbf{M}_2 = \mathbf{T} \cdot \mathbf{R} = \begin{bmatrix}
+\mathbf{R}_{3\times3} & \mathbf{t} \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
+
+两者结果完全不同！
+
+**绕任意点旋转**：
+绕点 $\mathbf{c}$ 旋转 $\theta$ 角度：
+$$\mathbf{M} = \mathbf{T}(\mathbf{c}) \cdot \mathbf{R}(\theta) \cdot \mathbf{T}(-\mathbf{c})$$
+
+这是变换组合的经典应用：先平移到原点，旋转，再平移回去。
+
+**变换的插值**：
+线性插值两个变换时，不能直接插值矩阵元素：
+- 平移：可以线性插值
+- 旋转：使用四元数球面插值（SLERP）
+- 缩放：使用对数空间插值
 
 ## 2.2 模型、视图、投影变换
 
 ### 2.2.1 坐标系统与变换管线
 
 图形渲染管线中的坐标系统：
-1. **模型空间（Model Space）**：物体的局部坐标系
-2. **世界空间（World Space）**：场景的全局坐标系
-3. **视图空间（View/Camera Space）**：以相机为原点的坐标系
-4. **裁剪空间（Clip Space）**：投影后的齐次坐标系
-5. **NDC空间（Normalized Device Coordinates）**：归一化的设备坐标
-6. **屏幕空间（Screen Space）**：最终的像素坐标
+
+1. **模型空间（Model Space）**
+   - 定义：物体的局部坐标系，通常以物体中心或关键点为原点
+   - 用途：建模、动画骨骼绑定
+   - 特点：每个物体有独立的模型空间
+
+2. **世界空间（World Space）**
+   - 定义：场景的全局坐标系，所有物体的统一参考系
+   - 用途：物体定位、光照计算、物理模拟
+   - 坐标系选择：通常 Y-up（OpenGL）或 Z-up（某些CAD系统）
+
+3. **视图空间（View/Camera Space）**
+   - 定义：以相机为原点，-Z 为视线方向的坐标系
+   - 用途：视锥体裁剪、深度排序
+   - 约定：右手系（OpenGL）或左手系（DirectX）
+
+4. **裁剪空间（Clip Space）**
+   - 定义：投影变换后的齐次坐标系
+   - 范围：未进行透视除法，$w$ 分量包含深度信息
+   - 用途：视锥体裁剪、透视插值
+
+5. **NDC空间（Normalized Device Coordinates）**
+   - 定义：透视除法后的归一化坐标
+   - 范围：$[-1,1]^3$（OpenGL）或 $[-1,1]^2 \times [0,1]$（DirectX）
+   - 特点：与设备无关的标准化坐标
+
+6. **屏幕空间（Screen Space）**
+   - 定义：最终的像素坐标
+   - 范围：$[0,W] \times [0,H] \times [0,1]$
+   - 用途：光栅化、片元着色
+
+**完整的变换管线**：
+$$\text{顶点} \xrightarrow{\mathbf{M}} \text{世界} \xrightarrow{\mathbf{V}} \text{视图} \xrightarrow{\mathbf{P}} \text{裁剪} \xrightarrow{\text{÷w}} \text{NDC} \xrightarrow{\mathbf{VP}} \text{屏幕}$$
+
+**坐标系的手性（Handedness）**：
+- 右手系：拇指=X，食指=Y，中指=Z（OpenGL默认）
+- 左手系：Z轴方向相反（DirectX默认）
+- 转换：通过缩放 $\mathbf{S}(1,1,-1)$ 实现
 
 ### 2.2.2 模型变换（Model Transform）
 
 模型变换将物体从模型空间变换到世界空间：
 $$\mathbf{M}_{\text{model}} = \mathbf{T}_{\text{world}} \cdot \mathbf{R}_{\text{world}} \cdot \mathbf{S}_{\text{local}}$$
 
-实践中常用的优化：
-- 预计算静态物体的模型矩阵
-- 使用实例化（Instancing）减少重复计算
-- 层次化场景图进行变换继承
+**模型变换的组成**：
+1. **局部缩放**：调整物体大小
+2. **局部旋转**：设置物体朝向
+3. **世界平移**：放置物体位置
+
+**层次化变换（Hierarchical Transforms）**：
+场景图中的父子关系：
+$$\mathbf{M}_{\text{child}} = \mathbf{M}_{\text{parent}} \cdot \mathbf{M}_{\text{local}}$$
+
+例如，机械臂的变换链：
+- 基座 → 上臂 → 前臂 → 手掌 → 手指
+
+**实例化渲染（Instanced Rendering）**：
+对于大量相同模型（如森林中的树木）：
+```
+基础模型矩阵 + 每实例变换数据 = 最终变换
+```
+
+优化技巧：
+- GPU实例化：使用实例缓冲区存储每个实例的变换
+- LOD（细节层次）：根据距离选择不同精度的模型
+- 视锥体剔除：只变换可见物体
+
+**骨骼动画的模型变换**：
+顶点最终位置由多个骨骼影响：
+$$\mathbf{v}' = \sum_{i} w_i \mathbf{M}_{\text{bone},i} \mathbf{M}_{\text{bind},i}^{-1} \mathbf{v}$$
+
+其中：
+- $w_i$：骨骼权重
+- $\mathbf{M}_{\text{bone},i}$：骨骼当前变换
+- $\mathbf{M}_{\text{bind},i}^{-1}$：绑定姿态的逆变换
 
 ### 2.2.3 视图变换（View Transform）
 
