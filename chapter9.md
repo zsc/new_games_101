@@ -20,18 +20,32 @@
 
 **辐射度（Radiance）**：$L = \frac{d^2\Phi}{dA \cos\theta d\omega}$，单位面积、单位立体角的辐射通量，单位：$\text{W/(m}^2\cdot\text{sr)}$
 
+**辐射强度（Radiant Intensity）**：$I = \frac{d\Phi}{d\omega}$，单位立体角的辐射通量，单位：$\text{W/sr}$
+
+**关键洞察**：辐射度$L$是唯一在真空中沿直线传播保持不变的量，这使其成为光线追踪的理想物理量。
+
 BRDF的正式定义：
 
 $$f_r(\omega_i, \omega_o) = \frac{dL_o(\omega_o)}{dE_i(\omega_i)} = \frac{dL_o(\omega_o)}{L_i(\omega_i)\cos\theta_i d\omega_i}$$
 
 其中：
-- $\omega_i$：入射方向
-- $\omega_o$：出射方向  
+- $\omega_i$：入射方向（指向表面外）
+- $\omega_o$：出射方向（指向表面外）
 - $L_i$：入射辐射度
 - $L_o$：出射辐射度
 - $\theta_i$：入射角（与法线夹角）
 
+**等价定义**：从散射截面角度
+$$f_r(\omega_i, \omega_o) = \frac{1}{\cos\theta_i} \frac{d\sigma_s(\omega_i \to \omega_o)}{d\omega_o}$$
+
+其中$d\sigma_s$是微分散射截面。
+
 **物理直觉**：BRDF描述了一个微分光束如何被表面"重新分配"到各个出射方向。它本质上是一个概率密度函数的光学类比，但带有$\cos\theta_i$项的几何因子。
+
+**与概率的类比**：如果定义散射概率密度$p(\omega_o | \omega_i)$，则：
+$$f_r(\omega_i, \omega_o) = \rho(\omega_i) \frac{p(\omega_o | \omega_i)}{\cos\theta_o}$$
+
+其中$\rho(\omega_i)$是方向反照率。
 
 **单位分析**：BRDF的单位是$\text{sr}^{-1}$（球面度的倒数），这可以从定义式推导：
 $$[f_r] = \frac{[\text{W/(m}^2\cdot\text{sr)}]}{[\text{W/(m}^2\cdot\text{sr)}] \cdot 1 \cdot [\text{sr}]} = [\text{sr}^{-1}]$$
@@ -40,6 +54,22 @@ $$[f_r] = \frac{[\text{W/(m}^2\cdot\text{sr)}]}{[\text{W/(m}^2\cdot\text{sr)}] \
 $$L_o(\omega_o) = \int_{\Omega} f_r(\omega_i, \omega_o) L_i(\omega_i) \cos\theta_i d\omega_i$$
 
 这是渲染方程的核心组成部分，也是所有基于物理的渲染算法的基础。
+
+**局部坐标系定义**：
+- **切空间（Tangent Space）**：以表面点为原点，法线$\mathbf{n}$为z轴，切向量$\mathbf{t}$为x轴，副切向量$\mathbf{b} = \mathbf{n} \times \mathbf{t}$为y轴
+- **球坐标表示**：$\omega = (\sin\theta\cos\phi, \sin\theta\sin\phi, \cos\theta)$
+- **立体角微元**：$d\omega = \sin\theta d\theta d\phi$
+
+**BRDF的可视化**：
+1. **切片图**：固定$\omega_i$，绘制$f_r(\omega_i, \omega_o)$随$\omega_o$的变化
+2. **极坐标图**：在切平面上显示BRDF值的等高线
+3. **球面图**：在单位球上用颜色编码BRDF值
+4. **矩阵图**：将4D函数离散化为2D矩阵的集合
+
+**测量vs解析模型**：
+- **测量BRDF**：通过实验设备获得，准确但数据量大
+- **解析BRDF**：基于物理原理的数学模型，紧凑但可能不够准确
+- **混合方法**：用解析模型拟合测量数据，平衡准确性和效率
 
 ### 9.1.2 BRDF的数学性质
 
@@ -50,17 +80,35 @@ $$f_r(\omega_i, \omega_o) \geq 0$$
 
 物理意义：能量不能为负，表面不能"吸收"后发出负光。
 
+**数学后果**：BRDF定义了半球上的一个正测度，可以用测度论工具分析。
+
 **2. 互易性（Helmholtz Reciprocity）**：
 $$f_r(\omega_i, \omega_o) = f_r(\omega_o, \omega_i)$$
 
 这一性质源于光路可逆原理，在实际渲染中可用于优化计算。互易性的深层含义来自于时间反演对称性和洛伦兹互易定理。
 
+**证明思路**：
+1. 麦克斯韦方程组在时间反演下的对称性
+2. 边界条件的时间反演不变性
+3. 格林函数的对称性：$G(\mathbf{r}_1, \mathbf{r}_2) = G(\mathbf{r}_2, \mathbf{r}_1)$
+4. 宏观BRDF继承微观电磁场的对称性
+
 **实际应用**：在双向路径追踪中，互易性允许我们交换光线方向而不改变贡献，这对于连接光路至关重要。
+
+**破坏互易性的情况**：
+- 磁光材料（法拉第效应）
+- 非线性光学材料
+- 荧光材料（波长改变）
 
 **3. 能量守恒（Energy Conservation）**：
 $$\int_{\Omega} f_r(\omega_i, \omega_o) \cos\theta_o d\omega_o \leq 1$$
 
 对于任意入射方向，反射的总能量不能超过入射能量。
+
+**严格形式**（考虑透射）：
+$$\int_{\Omega^+} f_r(\omega_i, \omega_o) \cos\theta_o d\omega_o + \int_{\Omega^-} f_t(\omega_i, \omega_o) \cos\theta_o d\omega_o + \alpha(\omega_i) = 1$$
+
+其中$\alpha(\omega_i)$是吸收率，$\Omega^+$和$\Omega^-$分别是上下半球。
 
 **方向反照率（Directional Albedo）**：
 $$\rho(\omega_i) = \int_{\Omega} f_r(\omega_i, \omega_o) \cos\theta_o d\omega_o$$
@@ -70,12 +118,52 @@ $$\rho(\omega_i) = \int_{\Omega} f_r(\omega_i, \omega_o) \cos\theta_o d\omega_o$
 **半球反照率（Hemispherical Albedo）**：
 $$\rho_{hh} = \frac{1}{\pi} \int_{\Omega_i} \int_{\Omega_o} f_r(\omega_i, \omega_o) \cos\theta_i \cos\theta_o d\omega_i d\omega_o$$
 
+**白炉测试（White Furnace Test）**：
+在均匀照明环境中，表面反射的总能量应等于入射能量乘以反照率：
+$$L_o = \rho_{hh} \cdot L_{\text{env}}$$
+
 **4. 线性性（Linearity）**：
 BRDF对入射光强度是线性的，这使得我们可以将复杂光照分解为简单光源的叠加。数学表述：
 $$L_o = \int f_r L_i \cos\theta_i d\omega_i = \int f_r (L_{i1} + L_{i2}) \cos\theta_i d\omega_i = L_{o1} + L_{o2}$$
 
+**叠加原理的应用**：
+- 多光源渲染：$L_o = \sum_k L_o^{(k)}$
+- 环境光分解：球谐函数、小波等
+- 光照烘焙：预计算静态光照
+
 **5. 平滑性与连续性**：
 物理BRDF通常是连续的（除了镜面反射的狄拉克δ函数），这保证了渲染结果的视觉连续性。
+
+**数学刻画**：
+- **Lipschitz连续性**：$|f_r(\omega_1) - f_r(\omega_2)| \leq L|\omega_1 - \omega_2|$
+- **可微性**：大多数位置可微，在掠射角可能有奇异性
+- **紧支撑性**：许多BRDF在远离镜面反射方向时快速衰减
+
+**6. 对称性（Symmetry）**：
+各向同性材质的BRDF具有旋转对称性：
+$$f_r(R\omega_i, R\omega_o) = f_r(\omega_i, \omega_o)$$
+
+对于任意绕法线的旋转$R$。
+
+**简化形式**：各向同性BRDF可表示为三个角度的函数：
+$$f_r(\omega_i, \omega_o) = f_r(\theta_i, \theta_o, \phi_o - \phi_i)$$
+
+**进一步简化**：许多模型只依赖于：
+- $\omega_i \cdot \omega_o$（点积）
+- $\omega_i \cdot \mathbf{n}$和$\omega_o \cdot \mathbf{n}$（与法线夹角）
+- $\omega_h \cdot \mathbf{n}$（半程向量与法线夹角）
+
+**7. 正定性（Positive Definiteness）**：
+BRDF定义的积分算子是正定的：
+$$\int_{\Omega_i} \int_{\Omega_o} g(\omega_i) f_r(\omega_i, \omega_o) g(\omega_o) \cos\theta_i \cos\theta_o d\omega_i d\omega_o \geq 0$$
+
+对于任意函数$g$。
+
+**8. 渐近行为（Asymptotic Behavior）**：
+掠射角处的行为对外观至关重要：
+- **掠射角变亮**：许多材质在$\theta \to 90°$时反射增强
+- **几何衰减**：$\cos\theta$因子导致有效反射减弱
+- **平衡效应**：实际观察到的亮度取决于两者的竞争
 
 ### 9.1.3 从BRDF到BSDF：透射与散射
 
@@ -85,35 +173,85 @@ $$f_s(\omega_i, \omega_o) = f_r(\omega_i, \omega_o) + f_t(\omega_i, \omega_o)$$
 
 其中$f_t$是双向透射分布函数（BTDF）。
 
-**注意**：这里$\omega_o$可能在表面的另一侧（透射情况），需要仔细定义坐标系。
+**坐标系约定**：
+- 法线$\mathbf{n}$始终指向"外侧"（折射率较小的一侧）
+- 入射和出射方向都指向表面外
+- 对于透射，$\omega_i \cdot \mathbf{n} > 0$而$\omega_o \cdot \mathbf{n} < 0$
+
+**广义散射方程**：
+$$L_o(\mathbf{x}, \omega_o) = \int_{\Omega^+} f_r(\omega_i, \omega_o) L_i(\omega_i) |\cos\theta_i| d\omega_i + \int_{\Omega^-} f_t(\omega_i, \omega_o) L_i(\omega_i) |\cos\theta_i| d\omega_i$$
+
+其中$\Omega^+$和$\Omega^-$分别表示上半球和下半球。
 
 对于透射，需要考虑折射定律（Snell's Law）：
 $$\eta_i \sin\theta_i = \eta_t \sin\theta_t$$
 
 其中$\eta_i$和$\eta_t$分别是入射和透射介质的折射率。
 
+**矢量形式的折射定律**：
+$$\eta_i (\omega_i - (\omega_i \cdot \mathbf{n})\mathbf{n}) = \eta_t (\omega_t - (\omega_t \cdot \mathbf{n})\mathbf{n})$$
+
+这表明切向分量按折射率比例缩放。
+
 **折射方向计算**：
 给定入射方向$\omega_i$和表面法线$\mathbf{n}$，折射方向$\omega_t$为：
 $$\omega_t = \frac{\eta_i}{\eta_t}\omega_i + \left(\frac{\eta_i}{\eta_t}\cos\theta_i - \sqrt{1 - \left(\frac{\eta_i}{\eta_t}\right)^2(1 - \cos^2\theta_i)}\right)\mathbf{n}$$
 
+**数值稳定性**：判别式$D = 1 - (\eta_i/\eta_t)^2(1 - \cos^2\theta_i)$
+- 若$D < 0$：发生全内反射
+- 若$D \geq 0$：正常折射
+
 **临界角与全内反射**：
-当光从光密介质射向光疏介质时，存在临界角：
+当光从光密介质射向光疏介质时（$\eta_i > \eta_t$），存在临界角：
 $$\theta_c = \arcsin\left(\frac{\eta_t}{\eta_i}\right)$$
 
 当$\theta_i > \theta_c$时，发生全内反射，此时BTDF为0，所有能量都被反射。
 
+**全内反射的应用**：
+- 光纤通信：利用全内反射传输信号
+- 钻石切割：精心设计的角度使光线在内部多次反射
+- 水下观察：从水下看天空的"圆窗"现象
+
 **BTDF的特殊性质**：
-1. **非对称性**：由于折射率不同，BTDF不满足简单的互易性，而是：
+1. **广义互易性**：由于折射率不同，BTDF不满足简单的互易性，而是：
    $$\eta_i^2 f_t(\omega_i, \omega_o) = \eta_t^2 f_t(\omega_o, \omega_i)$$
+   
+   **推导**：从辐射度传输的可逆性和立体角变换得出。
 
 2. **雅可比行列式**：从立体角到立体角的变换需要考虑折射导致的立体角压缩/扩展：
    $$\frac{d\omega_t}{d\omega_i} = \frac{\eta_t^2}{\eta_i^2} \frac{\cos\theta_t}{\cos\theta_i}$$
+   
+   **几何解释**：光束截面积的变化和传播方向的改变。
+
+3. **辐射度不变性破坏**：不同于反射，折射时辐射度会改变：
+   $$L_t = \frac{\eta_t^2}{\eta_i^2} L_i$$
+   
+   这是因为光速在不同介质中不同。
 
 **理想折射BTDF**：
 对于理想光滑表面：
-$$f_t(\omega_i, \omega_o) = \frac{\eta_t^2}{\eta_i^2} \frac{|n \cdot \omega_i|}{|n \cdot \omega_t|} (1 - F(\omega_i)) \delta(\omega_o - \omega_t)$$
+$$f_t(\omega_i, \omega_o) = \frac{(1 - F(\omega_i))}{\eta_t^2} \frac{|\mathbf{n} \cdot \omega_t|}{|\mathbf{n} \cdot \omega_i|} \delta(\omega_o - \omega_t)$$
 
 其中$F(\omega_i)$是菲涅尔反射率，$(1-F)$是透射率。
+
+**粗糙折射表面**：
+对于粗糙透明表面（如磨砂玻璃），可以使用微表面理论：
+$$f_t(\omega_i, \omega_o) = \frac{|\mathbf{n} \cdot \omega_i| |\mathbf{n} \cdot \omega_o|}{|\omega_i \cdot \mathbf{h}| |\omega_o \cdot \mathbf{h}|} \frac{\eta_o^2}{\eta_i^2} \frac{(1-F(\omega_i, \mathbf{h})) D(\mathbf{h}) G(\omega_i, \omega_o)}{|\mathbf{n} \cdot \omega_i| |\mathbf{n} \cdot \omega_o|}$$
+
+其中半程向量$\mathbf{h}$需要考虑折射：
+$$\mathbf{h} = -\frac{\eta_i \omega_i + \eta_o \omega_o}{|\eta_i \omega_i + \eta_o \omega_o|}$$
+
+**体积散射与BSSDF**：
+当散射发生在材质内部时，需要引入双向散射表面分布函数（BSSDF）：
+$$S(\mathbf{x}_i, \omega_i, \mathbf{x}_o, \omega_o)$$
+
+描述从位置$\mathbf{x}_i$入射的光如何在位置$\mathbf{x}_o$出射。
+
+**薄层近似**：
+对于薄层半透明材质，可以将BSSDF简化为修正的BSDF：
+$$f_s^{\text{thin}}(\omega_i, \omega_o) = f_s^{\text{surface}}(\omega_i, \omega_o) + T(\omega_i) \cdot f_s^{\text{volume}} \cdot T(\omega_o)$$
+
+其中$T$是透射函数，$f_s^{\text{volume}}$描述体积内的散射。
 
 ### 9.1.4 球谐函数与BRDF表示
 
@@ -123,86 +261,239 @@ $$Y_l^m(\theta, \phi) = \sqrt{\frac{2l+1}{4\pi}\frac{(l-|m|)!}{(l+|m|)!}} P_l^{|
 
 其中$P_l^m$是关联勒让德多项式。
 
-**前几阶球谐函数**：
-- $Y_0^0 = \frac{1}{2\sqrt{\pi}}$ （常数项）
-- $Y_1^{-1} = \frac{1}{2}\sqrt{\frac{3}{\pi}}\sin\theta e^{-i\phi}$
-- $Y_1^0 = \frac{1}{2}\sqrt{\frac{3}{\pi}}\cos\theta$
-- $Y_1^1 = -\frac{1}{2}\sqrt{\frac{3}{\pi}}\sin\theta e^{i\phi}$
+**实数球谐函数**：
+在图形学中通常使用实数形式：
+$$Y_{lm} = \begin{cases}
+\sqrt{2} \cdot \text{Re}(Y_l^{|m|}) & m > 0 \\
+Y_l^0 & m = 0 \\
+\sqrt{2} \cdot \text{Im}(Y_l^{|m|}) & m < 0
+\end{cases}$$
+
+**前几阶球谐函数**（实数形式）：
+- $Y_{00} = \frac{1}{2\sqrt{\pi}}$ （常数项）
+- $Y_{1,-1} = \sqrt{\frac{3}{4\pi}} y$ 
+- $Y_{10} = \sqrt{\frac{3}{4\pi}} z$
+- $Y_{11} = \sqrt{\frac{3}{4\pi}} x$
+- $Y_{2,-2} = \frac{1}{2}\sqrt{\frac{15}{\pi}} xy$
+- $Y_{2,-1} = \frac{1}{2}\sqrt{\frac{15}{\pi}} yz$
+- $Y_{20} = \frac{1}{4}\sqrt{\frac{5}{\pi}} (3z^2 - 1)$
+- $Y_{21} = \frac{1}{2}\sqrt{\frac{15}{\pi}} xz$
+- $Y_{22} = \frac{1}{4}\sqrt{\frac{15}{\pi}} (x^2 - y^2)$
+
+**正交性**：
+$$\int_{\mathcal{S}^2} Y_{lm}(\omega) Y_{l'm'}(\omega) d\omega = \delta_{ll'}\delta_{mm'}$$
 
 **BRDF的球谐展开**：
-由于BRDF是四维函数，需要更复杂的表示。一种方法是固定入射方向：
-$$f_r(\omega_i, \omega_o) = \sum_{l=0}^{\infty} \sum_{m=-l}^{l} a_{lm}(\omega_i) Y_l^m(\omega_o)$$
+由于BRDF是四维函数，需要更复杂的表示。
 
-**旋转不变性**：
-对于各向同性BRDF，可以利用旋转不变性简化为只依赖于$\omega_i \cdot \omega_o$的函数，使用Legendre多项式展开：
-$$f_r(\omega_i \cdot \omega_o) = \sum_{l=0}^{\infty} a_l P_l(\omega_i \cdot \omega_o)$$
+**方法一：切片投影**
+固定入射方向$\omega_i$，将BRDF投影到球谐基：
+$$f_r(\omega_i, \omega_o) = \sum_{l=0}^{\infty} \sum_{m=-l}^{l} a_{lm}(\omega_i) Y_{lm}(\omega_o)$$
 
-**Zonal Harmonics**：
-当BRDF具有旋转对称性时，可以使用Zonal Harmonics（$m=0$的球谐函数）：
-$$f_r(\theta) = \sum_{l=0}^{\infty} a_l \sqrt{\frac{2l+1}{4\pi}} P_l(\cos\theta)$$
+其中系数：
+$$a_{lm}(\omega_i) = \int_{\mathcal{S}^2} f_r(\omega_i, \omega_o) Y_{lm}(\omega_o) d\omega_o$$
 
-实践中通常截断到较低阶（如$l \leq 4$），这对于漫反射和低频光照效果良好。
+**方法二：双球谐展开**
+使用球面上的张量积：
+$$f_r(\omega_i, \omega_o) = \sum_{l_1,m_1} \sum_{l_2,m_2} c_{l_1m_1,l_2m_2} Y_{l_1m_1}(\omega_i) Y_{l_2m_2}(\omega_o)$$
 
-**优势与局限**：
-- 优势：紧凑表示、快速评估、易于旋转和卷积
-- 局限：难以表示高频特征（如锐利高光）、负值问题（需要额外处理）
+存储需求：$(l_{max}+1)^4$个系数。
 
-**应用场景**：
-- 预计算辐射传输（Precomputed Radiance Transfer, PRT）
-- 环境光照的快速近似
-- 实时全局光照中的间接光近似
+**方法三：旋转不变分解**
+对于各向同性BRDF，利用Clebsch-Gordan系数：
+$$f_r(\omega_i, \omega_o) = \sum_{l=0}^{\infty} a_l \sum_{m=-l}^{l} Y_{lm}(\omega_i) Y_{lm}^*(\omega_o)$$
+
+这利用了加法定理：
+$$P_l(\omega_i \cdot \omega_o) = \frac{4\pi}{2l+1} \sum_{m=-l}^{l} Y_{lm}(\omega_i) Y_{lm}^*(\omega_o)$$
+
+**Zonal Harmonics表示**：
+当BRDF只依赖于相对角度时：
+$$f_r(\cos\theta) = \sum_{l=0}^{\infty} \hat{f}_l P_l(\cos\theta)$$
+
+其中$\theta$是$\omega_i$和$\omega_o$之间的夹角，系数：
+$$\hat{f}_l = \frac{2l+1}{2} \int_{-1}^{1} f_r(x) P_l(x) dx$$
+
+**频率分析**：
+- **低频分量**（$l \leq 2$）：捕获整体形状和漫反射
+- **中频分量**（$2 < l \leq 8$）：软高光和光泽
+- **高频分量**（$l > 8$）：锐利高光和细节
+
+**截断误差分析**：
+截断到$l_{max}$阶的均方误差：
+$$\epsilon^2 = \sum_{l=l_{max}+1}^{\infty} \sum_{m=-l}^{l} |a_{lm}|^2$$
+
+对于带限函数，误差随$l_{max}$指数衰减。
+
+**旋转操作**：
+球谐函数在旋转下的变换：
+$$Y_{lm}(R\omega) = \sum_{m'=-l}^{l} D_{mm'}^l(R) Y_{lm'}(\omega)$$
+
+其中$D^l$是Wigner D-矩阵。
+
+**卷积定理**：
+球面卷积在球谐域变为乘法：
+$$(f * g)_{lm} = \sqrt{\frac{4\pi}{2l+1}} f_{l0} g_{lm}$$
+
+这使得环境光照的计算大大简化。
+
+**实际应用中的技巧**：
+
+1. **带宽限制**：
+   - Lambertian：3阶足够（9个系数）
+   - Phong光照：需要5-7阶
+   - 镜面反射：需要极高阶或其他表示
+
+2. **负值处理**：
+   - 使用平方球谐函数
+   - 添加常数偏移
+   - 局部支撑基函数
+
+3. **压缩存储**：
+   - 利用对称性减少系数
+   - 量化低重要性系数
+   - 稀疏表示高频分量
+
+**与其他基函数的比较**：
+- **Haar小波**：更好的局部支撑，适合高频
+- **球面高斯**：直观的lobe表示，易于重要性采样
+- **Von Mises-Fisher分布**：统计解释清晰
+
+**PRT中的应用**：
+传输算子$T$将入射光照$L_{in}$映射到出射辐射度：
+$$L_{out} = T \cdot L_{in}$$
+
+在球谐基下，$T$是一个矩阵，可预计算并实时应用。
 
 ### 9.1.5 BRDF的测量与拟合
 
 **测量设备**：测角光度计（Gonioreflectometer）通过机械臂控制光源和检测器位置，系统地测量不同角度组合下的反射率。
+
+**测量原理**：
+1. **绝对测量**：使用已知反射率的标准板校准
+2. **相对测量**：测量相对于参考材质的反射率
+3. **HDR捕获**：多次曝光覆盖大动态范围
+
+**典型测量装置**：
+- **3轴系统**：样品旋转 + 光源臂 + 检测器臂
+- **4轴系统**：增加样品倾斜，更好覆盖掠射角
+- **图像式**：使用曲面镜或多相机阵列加速测量
 
 **测量挑战**：
 - **高维度**：4D函数需要大量采样（典型需要$10^6$以上测量点）
 - **动态范围**：从漫反射到镜面反射跨越多个数量级
 - **掠射角**：接近90°时测量困难但视觉重要
 - **时间成本**：完整测量可能需要数小时到数天
+- **样品制备**：需要平坦、均匀、稳定的表面
+- **偏振效应**：某些材质需要考虑偏振
+
+**采样策略**：
+1. **均匀采样**：简单但低效
+2. **自适应采样**：在变化剧烈区域加密
+3. **重要性采样**：基于预期BRDF形状
+4. **压缩感知**：利用稀疏性减少采样
+
+**数据处理流程**：
+```
+原始测量 → 噪声过滤 → 坐标变换 → 插值/外推 → 验证
+```
+
+**坐标参数化**：
+1. **半角参数化**：$(\theta_h, \phi_h, \theta_d, \phi_d)$
+   - 优点：更好地捕获镜面峰
+   - 缺点：雅可比变换复杂
+
+2. **Rusinkiewicz参数化**：基于半程向量和差分角
+   - 更均匀的采样分布
+   - 自然的各向同性/各向异性分离
 
 **数据表示**：
-1. **表格形式**：直接存储测量数据，使用时插值
-   - 优点：保真度高
-   - 缺点：存储量大、不连续
 
-2. **解析模型拟合**：将测量数据拟合到参数化模型
-   - 优点：紧凑、可微、物理意义明确
-   - 缺点：可能丢失细节
+1. **表格形式**：直接存储测量数据
+   - 存储格式：通常90×90×180×4（角度×角度×角度×RGB）
+   - 插值方法：三线性、三次样条、RBF
+   - 压缩技术：PCA、小波、张量分解
 
-3. **基函数分解**：使用球谐函数、小波或其他基函数
-   - 优点：多分辨率、渐进传输
-   - 缺点：高频重建困难
+2. **解析模型拟合**：
+   - **单lobe模型**：Cook-Torrance、Ward、Lafortune
+   - **多lobe模型**：混合多个基本BRDF
+   - **数据驱动模型**：使用测量数据训练
+
+3. **基函数分解**：
+   - **球谐函数**：低频成分
+   - **小波基**：多分辨率表示
+   - **Zernike多项式**：圆域上的正交基
+   - **混合表示**：低频用SH，高频用其他
 
 **数据库与标准**：
-- MERL BRDF数据库：100种材质的密集测量
-- UTIA数据库：包含各向异性材质
-- Disney BRDF数据集：生产级材质参考
+- **MERL BRDF数据库**：100种材质，密集采样（90×90×180）
+- **UTIA数据库**：包含各向异性材质，稀疏采样
+- **RGL-EPFL**：高分辨率，包含偏振信息
+- **Disney BRDF数据集**：生产级材质参考
+- **BRDF数据交换格式**：OpenEXR扩展、ASTM标准
 
 **拟合方法**：
 
-**1. 最小二乘拟合**：
-$$\min_{\theta} \sum_{i} w_i |f_r^{\text{measured}}(\omega_{i,in}, \omega_{i,out}) - f_r^{\text{model}}(\omega_{i,in}, \omega_{i,out}; \theta)|^2$$
+**1. 非线性最小二乘**：
+$$\min_{\theta} \sum_{i} w_i \left(\log f_r^{\text{measured}}(\omega_{i}) - \log f_r^{\text{model}}(\omega_{i}; \theta)\right)^2$$
+
+使用对数空间减少动态范围影响。
+
+**优化算法**：
+- Levenberg-Marquardt：稳健但可能陷入局部极小
+- 全局优化：模拟退火、遗传算法
+- 多起点策略：从多个初值开始
 
 **2. 最大似然估计**：
-考虑测量噪声模型：
-$$\mathcal{L}(\theta) = \prod_i p(y_i | f_r(\omega_{i,in}, \omega_{i,out}; \theta))$$
+假设测量噪声模型（如高斯噪声）：
+$$p(y_i | \mu_i) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left(-\frac{(y_i - \mu_i)^2}{2\sigma^2}\right)$$
 
-**3. 贝叶斯方法**：
-加入先验知识：
-$$p(\theta | \mathcal{D}) \propto p(\mathcal{D} | \theta) p(\theta)$$
+对数似然：
+$$\log \mathcal{L} = -\frac{1}{2\sigma^2} \sum_i (y_i - f_r(\omega_i; \theta))^2 + \text{const}$$
 
-**拟合误差度量**：
-$$E = \int_{\Omega_i} \int_{\Omega_o} w(\omega_i, \omega_o) |f_r^{\text{measured}} - f_r^{\text{model}}|^2 d\omega_i d\omega_o$$
+**3. 贝叶斯推断**：
+引入参数先验$p(\theta)$：
+- 物理约束作为先验（如能量守恒）
+- 平滑性先验（如高斯过程）
+- 稀疏性先验（如Laplace分布）
 
-其中$w$是权重函数，通常强调掠射角等重要区域。
+后验采样方法：
+- MCMC（Markov Chain Monte Carlo）
+- 变分推断
+- 近似贝叶斯计算（ABC）
+
+**4. 机器学习方法**：
+- **神经网络**：直接学习测量到参数的映射
+- **高斯过程**：非参数化BRDF表示
+- **流形学习**：发现BRDF空间的低维结构
+
+**拟合质量评估**：
+
+**数值误差度量**：
+- **RMS误差**：$\sqrt{\frac{1}{N}\sum_i (f_r^{\text{measured}} - f_r^{\text{model}})^2}$
+- **相对误差**：$\frac{|f_r^{\text{measured}} - f_r^{\text{model}}|}{f_r^{\text{measured}} + \epsilon}$
+- **对数误差**：$|\log f_r^{\text{measured}} - \log f_r^{\text{model}}|$
 
 **感知误差度量**：
-考虑人眼感知特性：
-$$E_{\text{perceptual}} = \int \int w(\omega_i, \omega_o) \Delta E_{CIE}(L_o^{\text{measured}}, L_o^{\text{model}}) d\omega_i d\omega_o$$
+- **图像空间误差**：渲染参考图像比较
+- **感知度量**：SSIM、HDR-VDP
+- **关键特征保持**：高光形状、颜色偏移
 
-其中$\Delta E_{CIE}$是CIE色差公式。
+**验证方法**：
+1. **交叉验证**：留出测试集
+2. **白炉测试**：检查能量守恒
+3. **互易性测试**：验证物理正确性
+4. **外推测试**：未测量角度的预测
+
+**实时重建技术**：
+- **GPU加速插值**：利用纹理硬件
+- **预计算辐射度图**：不同光照下的外观
+- **神经网络推断**：实时评估学习的BRDF
+
+**未来方向**：
+- **光谱BRDF**：完整波长依赖性
+- **时变BRDF**：老化、温度效应
+- **空间变化BRDF**：SVBRDF测量
+- **偏振BRDF**：Mueller矩阵表示
 
 ## 9.2 高级材质模型
 
