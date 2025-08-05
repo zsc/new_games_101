@@ -52,14 +52,78 @@ $$\mathbf{G} = [\mathbf{p}_{i-1}, \mathbf{p}_i, \mathbf{p}_{i+1}, \mathbf{p}_{i+
 
 ### 11.1.4 动画压缩与优化
 
-实际应用中，动画数据可能非常庞大。常用的压缩技术包括：
+实际应用中，动画数据可能非常庞大。考虑一个30fps的动画，每秒需要存储30帧数据，一分钟的动画就需要1800帧。对于复杂的角色动画，每帧可能包含数百个骨骼的变换矩阵。
 
-1. **关键帧约简**：使用Douglas-Peucker算法移除冗余关键帧
-2. **曲线拟合**：用低阶多项式或样条拟合原始动画
-3. **主成分分析（PCA）**：对于多个相关的动画通道
+#### 关键帧约简
 
-误差度量通常使用：
-$$E = \sum_{t} \|\mathbf{p}_{original}(t) - \mathbf{p}_{compressed}(t)\|^2$$
+**Douglas-Peucker算法**用于移除冗余关键帧：
+
+1. 连接首尾关键帧形成直线
+2. 找到离直线最远的中间帧
+3. 如果距离超过阈值$\epsilon$，保留该帧并递归处理两段
+4. 否则移除所有中间帧
+
+时间复杂度：$O(n\log n)$（平均情况）
+
+#### 曲线拟合压缩
+
+使用**最小二乘法**拟合动画曲线：
+
+对于$n$次多项式$p(t) = \sum_{i=0}^n a_i t^i$，求解：
+$$\min_{\{a_i\}} \sum_{j} \|\mathbf{p}(t_j) - \mathbf{p}_{data}(t_j)\|^2$$
+
+这导致法方程：
+$$\mathbf{A}^T\mathbf{A}\mathbf{x} = \mathbf{A}^T\mathbf{b}$$
+
+其中$\mathbf{A}_{ji} = t_j^i$。
+
+#### 主成分分析（PCA）压缩
+
+对于$m$个相关的动画通道（如多个角色执行相似动作）：
+
+1. 构建数据矩阵$\mathbf{X} \in \mathbb{R}^{m \times n}$
+2. 计算协方差矩阵$\mathbf{C} = \frac{1}{n-1}\mathbf{X}\mathbf{X}^T$
+3. 特征值分解$\mathbf{C} = \mathbf{U}\mathbf{\Lambda}\mathbf{U}^T$
+4. 保留前$k$个主成分：$\mathbf{X}_{compressed} = \mathbf{U}_k^T\mathbf{X}$
+
+压缩率：$\frac{k(m+n)}{mn}$
+
+#### 误差度量与质量控制
+
+除了简单的L2误差，还应考虑：
+
+**感知误差**：
+$$E_{perceptual} = \sum_t w(t)\|\mathbf{p}_{original}(t) - \mathbf{p}_{compressed}(t)\|^2$$
+
+其中$w(t)$是基于运动速度的权重函数。
+
+**关节角度误差**（对于骨骼动画）：
+$$E_{angle} = \sum_{joint} \sum_t \|\boldsymbol{\theta}_{original}(t) - \boldsymbol{\theta}_{compressed}(t)\|^2$$
+
+### 11.1.5 程序化动画与噪声函数
+
+程序化动画通过数学函数生成动画，无需存储关键帧数据。
+
+#### Perlin噪声
+
+用于生成自然的随机运动：
+$$noise(\mathbf{x}) = \sum_{i} fade(f_i) \cdot lerp(w_i, grad_i \cdot \mathbf{x}_i, grad_{i+1} \cdot \mathbf{x}_{i+1})$$
+
+其中$fade(t) = 6t^5 - 15t^4 + 10t^3$保证C2连续性。
+
+#### 分形布朗运动（fBm）
+
+通过叠加不同频率的噪声：
+$$fBm(\mathbf{x}) = \sum_{i=0}^{n} \frac{noise(2^i \mathbf{x})}{2^{iH}}$$
+
+其中$H$是Hurst指数，控制粗糙度。
+
+#### 谐波叠加
+
+用于周期性运动（如呼吸、摆动）：
+$$\mathbf{p}(t) = \mathbf{p}_0 + \sum_{i=1}^n A_i \sin(\omega_i t + \phi_i)\mathbf{d}_i$$
+
+通过调整振幅$A_i$、频率$\omega_i$和相位$\phi_i$可以创建复杂的周期运动。
 
 ## 11.2 质点弹簧系统与运动学
 
@@ -116,21 +180,98 @@ $$\Delta\boldsymbol{\theta} = \mathbf{J}^+ (\mathbf{x}_{target} - \mathbf{x}_{cu
 
 ### 11.2.5 雅可比矩阵与奇异性
 
-雅可比矩阵定义为：
-$$\mathbf{J} = \frac{\partial \mathbf{x}}{\partial \boldsymbol{\theta}} = \begin{bmatrix}
-\frac{\partial x}{\partial \theta_1} & \cdots & \frac{\partial x}{\partial \theta_n} \\
-\frac{\partial y}{\partial \theta_1} & \cdots & \frac{\partial y}{\partial \theta_n} \\
-\frac{\partial z}{\partial \theta_1} & \cdots & \frac{\partial z}{\partial \theta_n}
-\end{bmatrix}$$
+#### 雅可比矩阵的几何意义
 
-当 $\det(\mathbf{J}\mathbf{J}^T) \approx 0$ 时，系统接近奇异配置。处理奇异性的方法：
+雅可比矩阵描述了关节空间速度到笛卡尔空间速度的线性映射：
+$$\dot{\mathbf{x}} = \mathbf{J}(\boldsymbol{\theta})\dot{\boldsymbol{\theta}}$$
+
+对于旋转关节$i$，其对末端执行器的贡献：
+$$\mathbf{J}_i = \begin{cases}
+[\mathbf{z}_i \times (\mathbf{p}_{end} - \mathbf{p}_i)]^T & \text{位置部分} \\
+\mathbf{z}_i^T & \text{方向部分}
+\end{cases}$$
+
+其中$\mathbf{z}_i$是关节$i$的旋转轴，$\mathbf{p}_i$是关节位置。
+
+#### 奇异性分析
+
+**奇异配置**发生在：
+1. **边界奇异性**：机械臂完全伸展或收缩
+2. **内部奇异性**：两个或多个关节轴对齐
+
+奇异性的数学特征：
+- $\det(\mathbf{J}\mathbf{J}^T) = 0$
+- 雅可比矩阵降秩
+- 某些方向上失去自由度
+
+**可操作性椭球**：
+$$\mathcal{E} = \{\mathbf{v} : \mathbf{v}^T(\mathbf{J}\mathbf{J}^T)^{-1}\mathbf{v} \leq 1\}$$
+
+椭球的主轴由$\mathbf{J}\mathbf{J}^T$的特征向量给出，轴长为特征值的平方根。
+
+#### 处理奇异性的高级方法
 
 1. **阻尼最小二乘（DLS）**：
 $$\Delta\boldsymbol{\theta} = \mathbf{J}^T(\mathbf{J}\mathbf{J}^T + \lambda^2\mathbf{I})^{-1}\Delta\mathbf{x}$$
 
-2. **奇异值分解（SVD）**：
-$$\mathbf{J} = \mathbf{U}\boldsymbol{\Sigma}\mathbf{V}^T$$
-$$\mathbf{J}^+ = \mathbf{V}\boldsymbol{\Sigma}^+\mathbf{U}^T$$
+自适应阻尼因子：
+$$\lambda = \begin{cases}
+0 & \text{if } \sigma_{min} \geq \epsilon \\
+\sqrt{\epsilon^2 - \sigma_{min}^2} & \text{otherwise}
+\end{cases}$$
+
+2. **奇异值分解（SVD）过滤**：
+$$\mathbf{J} = \mathbf{U}\boldsymbol{\Sigma}\mathbf{V}^T = \sum_{i=1}^r \sigma_i \mathbf{u}_i \mathbf{v}_i^T$$
+
+过滤伪逆：
+$$\mathbf{J}^+ = \sum_{i=1}^r \frac{1}{\sigma_i} \mathbf{v}_i \mathbf{u}_i^T, \quad \text{仅当} \sigma_i > \epsilon$$
+
+3. **梯度投影法**：
+
+在零空间中优化次要目标：
+$$\Delta\boldsymbol{\theta} = \mathbf{J}^+\Delta\mathbf{x} + (\mathbf{I} - \mathbf{J}^+\mathbf{J})\nabla h(\boldsymbol{\theta})$$
+
+其中$h(\boldsymbol{\theta})$是次要目标函数（如避免关节限位）。
+
+#### 任务优先级方法
+
+处理多个任务时，使用优先级：
+
+主任务：$\mathbf{J}_1\dot{\boldsymbol{\theta}} = \dot{\mathbf{x}}_1$
+
+次任务在主任务零空间中：
+$$\dot{\boldsymbol{\theta}} = \mathbf{J}_1^+\dot{\mathbf{x}}_1 + (\mathbf{I} - \mathbf{J}_1^+\mathbf{J}_1)\mathbf{J}_2^+\dot{\mathbf{x}}_2$$
+
+### 11.2.6 高级约束处理
+
+#### 位置基约束（PBD）
+
+直接在位置级别满足约束：
+
+1. 预测位置：$\mathbf{p}_i^* = \mathbf{x}_i + \Delta t \mathbf{v}_i$
+2. 求解约束：
+   $$\Delta\mathbf{p}_i = -\frac{C(\mathbf{p}^*)}{\sum_j w_j|\nabla_{\mathbf{p}_j}C|^2}w_i\nabla_{\mathbf{p}_i}C$$
+3. 更新位置：$\mathbf{p}_i = \mathbf{p}_i^* + \Delta\mathbf{p}_i$
+4. 更新速度：$\mathbf{v}_i = (\mathbf{p}_i - \mathbf{x}_i)/\Delta t$
+
+其中$w_i = 1/m_i$是逆质量。
+
+#### XPBD（扩展PBD）
+
+引入拉格朗日乘数使约束更物理：
+$$\Delta\lambda = \frac{-C - \tilde{\alpha}\lambda}{\sum_j w_j|\nabla_{\mathbf{p}_j}C|^2 + \tilde{\alpha}}$$
+
+其中$\tilde{\alpha} = \alpha/(\Delta t)^2$是时间步长相关的柔度。
+
+#### 分层求解器
+
+对于复杂系统，使用多级求解：
+
+1. **粗粒度**：解决全局约束（如整体形状保持）
+2. **中粒度**：解决局部约束（如局部碰撞）  
+3. **细粒度**：解决细节约束（如褶皱细节）
+
+每级使用不同的迭代次数和精度要求。
 
 ## 11.3 常微分方程求解
 
@@ -191,14 +332,89 @@ $$h_{new} = h \cdot \min\left(2, \max\left(0.5, 0.9\left(\frac{\epsilon_{tol}}{\
 
 ### 11.3.5 能量守恒与数值耗散
 
-理想的哈密顿系统应该保持总能量：
-$$H = T + V = \frac{1}{2}\mathbf{v}^T\mathbf{M}\mathbf{v} + V(\mathbf{x})$$
+#### 哈密顿系统与辛结构
 
-辛积分器（如Verlet方法）更好地保持能量：
+哈密顿系统的相空间演化保持辛结构：
+$$\frac{d}{dt}\begin{bmatrix} \mathbf{q} \\ \mathbf{p} \end{bmatrix} = \begin{bmatrix} \mathbf{0} & \mathbf{I} \\ -\mathbf{I} & \mathbf{0} \end{bmatrix} \begin{bmatrix} \nabla_\mathbf{q} H \\ \nabla_\mathbf{p} H \end{bmatrix}$$
+
+其中$H(\mathbf{q}, \mathbf{p})$是哈密顿量。
+
+**Liouville定理**：相空间体积在哈密顿流下保持不变。
+
+#### 辛积分器
+
+**Störmer-Verlet方法**：
 $$\mathbf{x}_{n+1} = 2\mathbf{x}_n - \mathbf{x}_{n-1} + h^2\mathbf{M}^{-1}\mathbf{f}_n$$
 
-速度通过有限差分计算：
-$$\mathbf{v}_n = \frac{\mathbf{x}_{n+1} - \mathbf{x}_{n-1}}{2h}$$
+这是二阶精度的辛积分器。速度计算：
+$$\mathbf{v}_n = \frac{\mathbf{x}_{n+1} - \mathbf{x}_{n-1}}{2h} + O(h^2)$$
+
+**速度Verlet方法**（数值上更稳定）：
+$$\mathbf{x}_{n+1} = \mathbf{x}_n + h\mathbf{v}_n + \frac{h^2}{2}\mathbf{a}_n$$
+$$\mathbf{v}_{n+1} = \mathbf{v}_n + \frac{h}{2}(\mathbf{a}_n + \mathbf{a}_{n+1})$$
+
+#### 能量误差分析
+
+对于辛积分器，能量误差是有界的：
+$$|H(t) - H(0)| \leq Ch^p$$
+
+其中$p$是方法的阶数，$C$与时间$t$无关。
+
+非辛方法（如RK4）的能量误差可能线性增长：
+$$|H(t) - H(0)| \sim Cth^p$$
+
+#### 后向误差分析
+
+辛积分器精确求解一个扰动的哈密顿系统：
+$$\tilde{H} = H + h^2H_2 + h^4H_4 + \cdots$$
+
+这解释了为什么辛方法长期行为更好。
+
+#### 约束系统的能量守恒
+
+对于约束系统，使用**SHAKE算法**：
+
+1. 无约束更新：$\mathbf{r}^* = \mathbf{r}_n + h\mathbf{v}_n + \frac{h^2}{2m}\mathbf{f}_n$
+2. 求解约束：$g(\mathbf{r}_{n+1}) = 0$
+3. 约束力：$\mathbf{f}_c = \frac{m}{h^2}(\mathbf{r}_{n+1} - \mathbf{r}^*)$
+
+**RATTLE算法**同时约束位置和速度。
+
+### 11.3.6 高阶积分方法与分裂算法
+
+#### 高阶辛积分器
+
+**Forest-Ruth方法**（4阶）：
+$$\begin{align}
+\mathbf{x}_{1/2} &= \mathbf{x}_n + \theta h \mathbf{v}_n/2 \\
+\mathbf{v}_1 &= \mathbf{v}_n + \theta h \mathbf{a}(\mathbf{x}_{1/2}) \\
+\mathbf{x}_1 &= \mathbf{x}_{1/2} + (1-\theta)h\mathbf{v}_1/2 \\
+\mathbf{v}_{3/2} &= \mathbf{v}_1 + (1-2\theta)h\mathbf{a}(\mathbf{x}_1) \\
+\mathbf{x}_{3/2} &= \mathbf{x}_1 + (1-\theta)h\mathbf{v}_{3/2}/2 \\
+\mathbf{v}_2 &= \mathbf{v}_{3/2} + \theta h \mathbf{a}(\mathbf{x}_{3/2}) \\
+\mathbf{x}_{n+1} &= \mathbf{x}_{3/2} + \theta h \mathbf{v}_2/2
+\end{align}$$
+
+其中$\theta = 2^{1/3}/(2-2^{1/3})$。
+
+#### 算子分裂方法
+
+对于$\frac{d\mathbf{y}}{dt} = \mathbf{A}(\mathbf{y}) + \mathbf{B}(\mathbf{y})$：
+
+**Strang分裂**（二阶）：
+$$\mathbf{y}_{n+1} = e^{h\mathbf{B}/2} e^{h\mathbf{A}} e^{h\mathbf{B}/2} \mathbf{y}_n$$
+
+**Yoshida分裂**（4阶）：
+$$\mathbf{y}_{n+1} = e^{w_1h\mathbf{A}} e^{w_1h\mathbf{B}} e^{w_2h\mathbf{A}} e^{w_2h\mathbf{B}} e^{w_3h\mathbf{A}} e^{w_3h\mathbf{B}} e^{w_2h\mathbf{A}} e^{w_2h\mathbf{B}} e^{w_1h\mathbf{A}} e^{w_1h\mathbf{B}} \mathbf{y}_n$$
+
+其中权重经过精心选择以消除低阶误差项。
+
+#### 多时间尺度方法
+
+对于刚性系统，使用**IMEX方法**：
+$$\mathbf{y}_{n+1} = \mathbf{y}_n + h[\mathbf{f}_{explicit}(\mathbf{y}_n) + \mathbf{f}_{implicit}(\mathbf{y}_{n+1})]$$
+
+将快变（刚性）部分隐式处理，慢变部分显式处理。
 
 ## 11.4 刚体与流体模拟
 
