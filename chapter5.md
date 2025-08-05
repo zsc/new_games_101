@@ -28,21 +28,38 @@ $$P = u \cdot A + v \cdot B + w \cdot C$$
 - 当$u=1$时，P位于顶点A；当$u=0$时，P位于边BC上
 - 重心坐标在仿射变换下保持不变
 
+重心坐标的物理意义可以理解为质点系统：如果在三个顶点分别放置质量$u$、$v$、$w$的质点，则系统的质心恰好位于点P。这解释了"重心"这一名称的由来。
+
+#### 凸性条件
+
+点P在三角形内部的充要条件是：
+$$u \geq 0, \quad v \geq 0, \quad w \geq 0$$
+
+当某个坐标为0时，P位于对应顶点的对边上；当两个坐标为0时，P位于相应的顶点上。
+
 #### 计算方法
 
 **方法1：面积比**
 
 $$u = \frac{\text{Area}(PBC)}{\text{Area}(ABC)}, \quad v = \frac{\text{Area}(APC)}{\text{Area}(ABC)}, \quad w = \frac{\text{Area}(ABP)}{\text{Area}(ABC)}$$
 
+面积计算使用叉积：对于2D三角形ABC，其有向面积为：
+$$\text{Area}(ABC) = \frac{1}{2}(B_x - A_x)(C_y - A_y) - (C_x - A_x)(B_y - A_y)$$
+
 **方法2：叉积形式**
 
 对于2D情况：
 $$u = \frac{(B-P) \times (C-P)}{(B-A) \times (C-A)}$$
 
+这里的叉积理解为2D伪叉积：$(x_1, y_1) \times (x_2, y_2) = x_1y_2 - y_1x_2$
+
 对于3D情况，需要投影到合适的平面：
 $$u = \frac{|(B-P) \times (C-P) \cdot \mathbf{n}|}{|(B-A) \times (C-A) \cdot \mathbf{n}|}$$
 
-其中$\mathbf{n}$是三角形法向量。
+其中$\mathbf{n}$是三角形法向量。投影的选择原则：
+- 选择投影后三角形面积最大的平面
+- 通常选择法向量最大分量对应的坐标平面
+- 例如：若$|n_z|$最大，则投影到XY平面
 
 **方法3：直接求解线性系统**
 
@@ -56,8 +73,19 @@ $$u = \frac{\begin{vmatrix} p_x & b_x & c_x \\ p_y & b_y & c_y \\ 1 & 1 & 1 \end
 
 在实际实现中，需要考虑：
 1. **退化情况**：当三角形接近共线时，分母接近0
+   - 检测条件：$|\text{Area}(ABC)| < \epsilon$
+   - 处理方法：退化为线段或点的插值
+   - 阈值选择：通常$\epsilon = 10^{-6}$（相对于三角形包围盒）
+
 2. **精度问题**：使用double精度计算中间结果
+   - 累积误差控制：避免连续的浮点运算
+   - 中间结果规范化：防止数值溢出
+   - 关键运算（如除法）前检查分母
+
 3. **边界处理**：$u, v, w \in [0, 1]$的严格判断
+   - 使用容差：$-\epsilon \leq u, v, w \leq 1 + \epsilon$
+   - 边界夹紧：$u = \text{clamp}(u, 0, 1)$
+   - 重新归一化：确保$u + v + w = 1$
 
 #### 优化实现
 
@@ -65,7 +93,22 @@ $$u = \frac{\begin{vmatrix} p_x & b_x & c_x \\ p_y & b_y & c_y \\ 1 & 1 & 1 \end
 $$u(x+1, y) = u(x, y) + \Delta u_x$$
 $$u(x, y+1) = u(x, y) + \Delta u_y$$
 
-其中$\Delta u_x$和$\Delta u_y$是常数，可预计算。
+其中$\Delta u_x$和$\Delta u_y$是常数，可预计算：
+
+**边函数方法**：
+定义边函数$E_{AB}(x, y) = (y_A - y_B)x + (x_B - x_A)y + x_A y_B - x_B y_A$
+
+则：
+- $\Delta E_{AB,x} = y_A - y_B$（x方向增量）
+- $\Delta E_{AB,y} = x_B - x_A$（y方向增量）
+
+重心坐标通过边函数计算：
+$$u = \frac{E_{BC}(x, y)}{E_{BC}(x_A, y_A)}$$
+
+**并行化策略**：
+- SIMD处理：同时计算多个像素的重心坐标
+- 层次遍历：先判断像素块，再处理内部像素
+- 预计算边界：利用包围盒减少无效计算
 
 ### 5.1.2 透视正确插值
 
@@ -77,6 +120,15 @@ $$u(x, y+1) = u(x, y) + \Delta u_y$$
 1. 空间位置被非线性压缩
 2. 但屏幕空间的光栅化假设线性插值
 3. 导致属性插值出现扭曲
+
+**直观例子**：
+想象一条铁轨向远处延伸。铁轨枕木在世界空间中等距分布，但在屏幕空间中，远处的枕木间距明显变小。如果使用屏幕空间线性插值，会错误地认为远处枕木更密集。
+
+**数学表示**：
+设世界空间参数$t \in [0,1]$，屏幕空间参数$s \in [0,1]$，它们的关系为：
+$$s = \frac{t/z_0}{t/z_0 + (1-t)/z_1}$$
+
+这是一个有理函数，而非线性关系。
 
 #### 数学推导
 
@@ -97,24 +149,42 @@ $$u(x, y+1) = u(x, y) + \Delta u_y$$
 
 #### 实现细节
 
-**顶点着色器输出**：
-```glsl
-// 输出属性除以w
-out_texcoord = texcoord / gl_Position.w;
-out_inv_w = 1.0 / gl_Position.w;
-```
+**硬件透视校正流程**：
 
-**片元着色器恢复**：
+1. **顶点处理阶段**：
+   - 所有属性自动除以$w$（齐次坐标的第四分量）
+   - 额外输出$1/w$作为独立属性
+   - 硬件自动完成，无需手动干预
+
+2. **光栅化阶段**：
+   - 对$\phi/w$和$1/w$进行屏幕空间线性插值
+   - 使用重心坐标作为插值权重
+   - 硬件插值器并行处理多个属性
+
+3. **片元处理阶段**：
+   - 执行透视除法：$\phi = (\phi/w) / (1/w)$
+   - 现代GPU在片元着色器前自动完成
+   - 程序员看到的已是正确的属性值
+
+**特殊情况处理**：
 ```glsl
-// 硬件自动插值后恢复
-texcoord = in_texcoord / in_inv_w;
+// 需要屏幕空间导数的计算
+vec2 dx = dFdx(texcoord);  // 硬件自动处理透视校正
+vec2 dy = dFdy(texcoord);  // 用于MIP级别计算
 ```
 
 #### 性能优化
 
 1. **预计算优化**：在顶点着色器计算$1/z$，避免片元着色器除法
 2. **向量化**：同时处理多个属性的透视校正
+   - 打包相关属性到vec4
+   - 利用硬件的4-wide SIMD单元
+   - 减少插值器使用数量
+
 3. **精度控制**：关键计算使用highp精度
+   - 位置和深度：始终使用highp
+   - 纹理坐标：通常mediump足够
+   - 颜色值：可使用lowp（8位/通道）
 
 #### 特殊情况
 
@@ -125,8 +195,16 @@ noperspective out vec2 screen_coord;
 
 **常见错误案例**：
 - 法线插值：需要先归一化再插值
+  - 错误：直接插值未归一化的法线
+  - 正确：插值后重新归一化，或使用四元数插值
+  
 - 颜色插值：线性颜色空间vs sRGB空间
+  - 线性空间插值产生正确的中间色
+  - sRGB空间插值会偏暗
+  
 - 切线空间：需要保持正交性
+  - 使用Gram-Schmidt正交化
+  - 或传递完整的TBN矩阵
 
 ### 5.1.3 属性插值的硬件实现
 
@@ -293,6 +371,8 @@ $$E = \max_{\mathbf{p} \in T} |\phi_{linear}(\mathbf{p}) - \phi_{exact}(\mathbf{
 
 ## 5.2 高级纹理映射
 
+纹理映射是计算机图形学中增加表面细节的核心技术。本节深入探讨高级纹理技术，包括坐标生成、过滤算法、压缩格式等现代GPU的关键特性。
+
 ### 5.2.1 纹理坐标的生成与变换
 
 纹理坐标是将二维图像映射到三维几何体的桥梁。不同的生成方法适用于不同的几何形状和应用场景。
@@ -305,32 +385,57 @@ $$E = \max_{\mathbf{p} \in T} |\phi_{linear}(\mathbf{p}) - \phi_{exact}(\mathbf{
    - 保持局部角度，适合纹理绘制
    - 使用复变函数理论：$f: \mathbb{C} \to \mathbb{C}$
    - 满足Cauchy-Riemann方程：$\frac{\partial u}{\partial x} = \frac{\partial v}{\partial y}$, $\frac{\partial u}{\partial y} = -\frac{\partial v}{\partial x}$
+   - 优点：无角度扭曲，适合法线贴图
+   - 缺点：可能产生较大的面积扭曲
 
 2. **保面积映射（Area-Preserving）**：
    - 保持三角形面积比
    - 优化目标：$\min \sum_T \left(\frac{A_{3D}}{A_{2D}} - 1\right)^2$
+   - 雅可比行列式约束：$\det(\mathbf{J}) = 1$
+   - 应用：纹理密度均匀分布
 
 3. **LSCM（Least Squares Conformal Maps）**：
    - 最小二乘保角映射
    - 线性系统求解，适合大规模网格
+   - 能量函数：$E = \sum_T A_T \cdot ||\nabla u + i\nabla v||^2$
+   - 边界条件：固定边界或自由边界
+
+4. **ABF（Angle Based Flattening）**：
+   - 基于角度的展开方法
+   - 保持三角形内角和
+   - 非线性优化，质量更高
 
 #### 投影映射
 
 **平面投影**：
-```
-u = dot(position - origin, uAxis) / uScale
-v = dot(position - origin, vAxis) / vScale
-```
+$$u = \frac{(\mathbf{p} - \mathbf{o}) \cdot \mathbf{u}_{axis}}{scale_u}$$
+$$v = \frac{(\mathbf{p} - \mathbf{o}) \cdot \mathbf{v}_{axis}}{scale_v}$$
+
+应用场景：
+- 地形纹理（从上方投影）
+- 贴花系统（任意方向投影）
+- 阴影贴图（从光源投影）
 
 **圆柱投影**：
 $$u = \frac{1}{2\pi} \arctan2(y, x) + 0.5$$
 $$v = \frac{z - z_{min}}{z_{max} - z_{min}}$$
 
+接缝处理：
+- 在$u = 0$和$u = 1$处复制顶点
+- 或使用纹理的wrap模式
+
 **球面投影**：
 $$u = \frac{1}{2\pi} \arctan2(y, x) + 0.5$$
 $$v = \frac{1}{\pi} \arccos\left(\frac{z}{|\mathbf{r}|}\right)$$
 
-注意：在极点处存在奇异性，需要特殊处理。
+奇异点处理：
+- 北极：$v = 0$时，$u$不确定
+- 南极：$v = 1$时，$u$不确定
+- 解决方案：在极点处复制顶点，赋予不同的$u$值
+
+**立方体投影优化**：
+避免三角函数的快速方法：
+$$u = 0.5 + 0.5 \times \frac{-d_z}{|d_x|}$$（对于+X面）
 
 #### 环境映射
 
@@ -386,7 +491,7 @@ $$v' = \frac{du + ev + f}{gu + hv + 1}$$
 
 ### 5.2.2 MIP映射原理
 
-MIP（Multum In Parvo，“多在小中”）映射是解决纹理走样的核心技术。它通过预计算不同分辨率的纹理金字塔，在渲染时选择合适的级别。
+MIP（Multum In Parvo，"多在小中"）映射是解决纹理走样的核心技术。它通过预计算不同分辨率的纹理金字塔，在渲染时选择合适的级别。
 
 #### 走样问题分析
 
@@ -395,26 +500,43 @@ MIP（Multum In Parvo，“多在小中”）映射是解决纹理走样的核�
 - 产生摩尔纹、闪烁等artifacts
 - 根本原因：屏幕像素覆盖多个纹素
 
+**Nyquist-Shannon采样定理**：
+要完整重建信号，采样频率必须至少是信号最高频率的两倍：
+$$f_s \geq 2f_{max}$$
+
+在纹理映射中：
+- $f_s$：屏幕采样率（像素密度）
+- $f_{max}$：纹理中的最高频率成分
+
 **过采样（Oversampling）**：
 - 浪费带宽和计算资源
 - 可能导致纹理缓存效率低下
+- 但不会产生视觉artifacts
 
 #### MIP级别计算
 
 **屏幕空间导数**：
-使用雾可比矩阵计算纹理坐标的变化率：
+使用雅可比矩阵计算纹理坐标的变化率：
 
 $$\mathbf{J} = \begin{pmatrix} \frac{\partial u}{\partial x} & \frac{\partial u}{\partial y} \\ \frac{\partial v}{\partial x} & \frac{\partial v}{\partial y} \end{pmatrix}$$
 
 **像素覆盖区域估计**：
 1. **各向同性估计**（标准MIP）：
    $$\rho = \max\left(||\mathbf{J} \cdot (1, 0)^T||, ||\mathbf{J} \cdot (0, 1)^T||\right)$$
+   
+   展开形式：
+   $$\rho = \max\left(\sqrt{\left(\frac{\partial u}{\partial x}\right)^2 + \left(\frac{\partial v}{\partial x}\right)^2}, \sqrt{\left(\frac{\partial u}{\partial y}\right)^2 + \left(\frac{\partial v}{\partial y}\right)^2}\right)$$
 
 2. **完整LOD计算**：
    $$\text{LOD} = \log_2(\rho \cdot \text{textureSize})$$
+   
+   直观理解：如果一个屏幕像素覆盖了$2^n$个纹素，应该使用第$n$级MIP。
 
 3. **LOD偏移与约束**：
    $$\text{LOD}_{final} = \text{clamp}(\text{LOD} + \text{bias}, \text{minLOD}, \text{maxLOD})$$
+   
+   - bias：艺术家控制，负值更清晰，正值更模糊
+   - minLOD/maxLOD：限制MIP范围，控制内存使用
 
 #### MIP金字塔生成
 
