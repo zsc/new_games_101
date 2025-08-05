@@ -17,10 +17,29 @@ $$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$$
 **扩展表示**：为了数值稳定性，实际应用中常使用：
 $$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}, \quad t \in [t_{\min}, t_{\max}]$$
 
-其中 $t_{\min} > 0$ 避免自相交，$t_{\max}$ 限制光线长度。
+其中 $t_{\min} > 0$ 避免自相交，$t_{\max}$ 限制光线长度。典型值：$t_{\min} = 10^{-4}$ 到 $10^{-3}$，取决于场景规模。
 
 **光线微分**：用于抗锯齿和纹理过滤，追踪光线的微分信息：
 $$\frac{\partial \mathbf{r}}{\partial x} = \frac{\partial \mathbf{o}}{\partial x} + t\frac{\partial \mathbf{d}}{\partial x}$$
+
+这对于计算纹理footprint至关重要。考虑相邻像素的光线：
+$$\begin{aligned}
+\frac{\partial \mathbf{d}}{\partial x} &\approx \mathbf{d}_{i+1,j} - \mathbf{d}_{i,j} \\
+\frac{\partial \mathbf{d}}{\partial y} &\approx \mathbf{d}_{i,j+1} - \mathbf{d}_{i,j}
+\end{aligned}$$
+
+**光线锥（Ray Cone）表示**：
+为了更准确的LOD选择和过滤，可以将光线扩展为圆锥：
+$$r(t) = r_0 + t \cdot \tan(\theta)$$
+
+其中 $r_0$ 是像素footprint在近平面的半径，$\theta$ 是锥角，通常：
+$$\theta \approx \frac{1}{\text{image\_width}} \cdot \text{fov}$$
+
+**光线的齐次坐标表示**：
+在某些情况下（如投影变换），使用Plücker坐标更方便：
+$$\mathbf{L} = (\mathbf{d}, \mathbf{o} \times \mathbf{d})$$
+
+这种表示在处理光线-光线距离和相交测试时特别有用。
 
 ### 7.1.2 基本光线追踪算法
 
@@ -37,6 +56,16 @@ $$\frac{\partial \mathbf{r}}{\partial x} = \frac{\partial \mathbf{o}}{\partial x
    
    其中 $\xi_x, \xi_y \in [-0.5, 0.5]$ 是采样偏移。
 
+   **采样模式**：
+   - **规则采样**：$\xi_x = \frac{k_x + 0.5}{n_x} - 0.5$
+   - **随机采样**：$\xi_x \sim U(-0.5, 0.5)$
+   - **分层采样（Stratified）**：将像素分为 $n \times n$ 子格，每格内随机采样
+   - **低差异序列**：使用Halton或Sobol序列
+   
+   **重要性采样优化**：
+   根据前帧或预览pass的信息，在高频区域增加采样：
+   $$p(\xi) \propto \|\nabla I(x, y)\|^2 + \epsilon$$
+
 2. **光线-场景相交测试**
    对每条光线，找到最近的相交点：
    $$t_{\text{hit}} = \min_{k \in \text{objects}} t_k$$
@@ -52,8 +81,18 @@ $$\frac{\partial \mathbf{r}}{\partial x} = \frac{\partial \mathbf{o}}{\partial x
        vec2 uv;          // 纹理坐标
        Material* mat;     // 材质指针
        float pdf_area;    // 面积概率密度
+       vec3 dpdu, dpdv;   // 表面参数化导数
+       vec3 tangent;      // 切线向量
+       float curvature;   // 曲率信息
    }
    ```
+   
+   **浮点误差处理**：
+   相交点的精确计算考虑误差界：
+   $$\mathbf{p}_{\text{hit}} = \mathbf{o} + t_{\text{hit}}\mathbf{d} \pm \epsilon_{\text{hit}}$$
+   
+   其中 $\epsilon_{\text{hit}} = \gamma_3(|\mathbf{o}| + t_{\text{hit}}|\mathbf{d}|)$，
+   $\gamma_n = \frac{n\epsilon_{\text{machine}}}{1 - n\epsilon_{\text{machine}}}$
 
 3. **着色计算**
    在相交点处计算颜色，考虑：
@@ -61,6 +100,11 @@ $$\frac{\partial \mathbf{r}}{\partial x} = \frac{\partial \mathbf{o}}{\partial x
    - 反射（递归追踪反射光线）
    - 折射（对透明物体）
    - 环境光照（环境贴图采样）
+   
+   **光线相干性利用**：
+   - **光线包（Ray Packets）**：同时追踪多条相邻光线
+   - **光线排序**：按方向或起点聚类以改善缓存局部性
+   - **光线重排序缓冲**：延迟处理以批量化相似操作
 
 ### 7.1.3 递归光线追踪
 
@@ -75,9 +119,15 @@ $$L_o = L_e + k_d L_{\text{direct}} + k_s L_{\text{reflect}} + k_t L_{\text{refr
 - $L_{\text{direct}}$：直接光照（Lambert + Phong）
 - $L_{\text{reflect}}$：镜面反射贡献
 - $L_{\text{refract}}$：折射贡献
+- $k_d, k_s, k_t$：材质参数，满足能量守恒 $k_d + k_s + k_t \leq 1$
 
 **反射方向计算**：
 $$\mathbf{r}_{\text{reflect}} = \mathbf{d} - 2(\mathbf{d} \cdot \mathbf{n})\mathbf{n}$$
+
+**改进的反射模型**：
+考虑微表面理论，可以添加粗糙度扰动：
+$$\mathbf{r}'_{\text{reflect}} = \text{normalize}(\mathbf{r}_{\text{reflect}} + \alpha \mathbf{\xi})$$
+其中 $\mathbf{\xi}$ 是随机扰动向量，$\alpha$ 是粗糙度参数。
 
 **折射方向计算**（Snell定律）：
 $$\mathbf{r}_{\text{refract}} = \frac{\eta_i}{\eta_t}\mathbf{d} + \left(\frac{\eta_i}{\eta_t}(\mathbf{n} \cdot \mathbf{d}) - \sqrt{1 - \sin^2\theta_t}\right)\mathbf{n}$$
@@ -86,12 +136,28 @@ $$\mathbf{r}_{\text{refract}} = \frac{\eta_i}{\eta_t}\mathbf{d} + \left(\frac{\e
 
 **全内反射判断**：当 $\sin^2\theta_t > 1$ 时发生全内反射。
 
+**Fresnel方程**：
+计算反射和折射的能量分配：
+$$F_r = \frac{1}{2}\left[\left(\frac{\eta_i\cos\theta_i - \eta_t\cos\theta_t}{\eta_i\cos\theta_i + \eta_t\cos\theta_t}\right)^2 + \left(\frac{\eta_t\cos\theta_i - \eta_i\cos\theta_t}{\eta_t\cos\theta_i + \eta_i\cos\theta_t}\right)^2\right]$$
+
+Schlick近似（计算效率更高）：
+$$F_r \approx F_0 + (1 - F_0)(1 - \cos\theta_i)^5$$
+其中 $F_0 = \left(\frac{\eta_i - \eta_t}{\eta_i + \eta_t}\right)^2$
+
+**色散效果**：
+不同波长具有不同折射率：
+$$\eta(\lambda) = A + \frac{B}{\lambda^2} + \frac{C}{\lambda^4}$$ （Cauchy方程）
+
 **俄罗斯轮盘赌**终止策略：
 ```
 float p = max(color.r, color.g, color.b);
 if (random() > p) return black;
 return color / p;  // 能量补偿
 ```
+
+**改进的终止策略**：
+考虑路径贡献和计算成本的平衡：
+$$p_{\text{continue}} = \min\left(1, \frac{\text{throughput} \cdot \text{max\_radiance}}{\text{current\_radiance}}\right)$$
 
 ### 7.1.4 相机模型与光线生成
 
@@ -105,6 +171,11 @@ v &= \frac{2j - \text{height}}{\text{height}} \cdot \tan(\text{fov}/2) \\
 \mathbf{d} &= \text{normalize}(u\mathbf{right} + v\mathbf{up} - \mathbf{forward})
 \end{aligned}$$
 
+**改进的相机模型考虑**：
+- **传感器偏移**：模拟tilt-shift效果
+- **非方形像素**：像素宽高比校正
+- **畸变模型**：径向和切向畸变
+
 **薄透镜相机模型**（景深效果）：
 1. 计算焦平面上的目标点：
    $$\mathbf{p}_{\text{focus}} = \mathbf{o} + \frac{\text{focus\_distance}}{|\mathbf{d} \cdot \mathbf{forward}|} \mathbf{d}$$
@@ -112,10 +183,18 @@ v &= \frac{2j - \text{height}}{\text{height}} \cdot \tan(\text{fov}/2) \\
 2. 在透镜上采样：
    $$\mathbf{o}' = \mathbf{o} + r(\cos\theta \mathbf{right} + \sin\theta \mathbf{up})$$
    
-   其中 $r \leq \text{aperture}/2$
+   其中 $r \leq \text{aperture}/2$，采样分布可以是：
+   - **均匀圆盘**：$r = \sqrt{\xi_1} \cdot \text{aperture}/2$, $\theta = 2\pi\xi_2$
+   - **多边形光圈**：模拟真实光圈叶片
+   - **自定义形状**：实现散景（bokeh）效果
 
 3. 新的光线方向：
    $$\mathbf{d}' = \text{normalize}(\mathbf{p}_{\text{focus}} - \mathbf{o}')$$
+
+**景深的物理参数**：
+- 弥散圆直径：$c = \frac{A|S_2 - S_1|}{S_2}$
+- 景深范围：$\text{DOF} = \frac{2Nc(S - f)^2}{f^2 - N^2c^2}$
+  其中 $N$ 是光圈数，$S$ 是对焦距离，$f$ 是焦距
 
 **鱼眼相机**：
 $$\begin{aligned}
@@ -124,6 +203,23 @@ r &= \sqrt{u^2 + v^2} \\
 \phi &= \arctan2(v, u) \\
 \mathbf{d} &= \sin\theta\cos\phi \mathbf{right} + \sin\theta\sin\phi \mathbf{up} - \cos\theta \mathbf{forward}
 \end{aligned}$$
+
+**其他投影模型**：
+- **等距投影**：$\theta = r$
+- **等立体角投影**：$\theta = 2\sin^{-1}(r/2)$
+- **正交投影**：$\theta = \sin^{-1}(r)$
+- **立体投影**：$\theta = 2\tan^{-1}(r/2)$
+
+**全景相机**：
+- **等矩形投影**：$(u, v) \rightarrow (\theta, \phi)$ 直接映射
+- **立方体贴图**：6个透视投影相机
+- **双抛物面映射**：前后两个抛物面投影
+
+**运动模糊**：
+在快门时间内对相机位置和方向进行积分：
+$$\mathbf{o}(t) = \mathbf{o}_0 + t \cdot \mathbf{v}$$
+$$\mathbf{d}(t) = \mathbf{R}(t) \cdot \mathbf{d}_0$$
+其中 $t \in [0, \text{shutter\_time}]$
 
 ## 7.2 加速结构（BVH、KD-Tree）
 
@@ -136,10 +232,40 @@ r &= \sqrt{u^2 + v^2} \\
 - 理想加速结构：$O(\log N)$ 次节点访问 + $O(1)$ 次图元测试
 - 实际性能：取决于场景分布和构建质量
 
+**性能模型**：
+设光线追踪总时间 $T = T_{\text{build}} + R \cdot T_{\text{trace}}$，其中：
+- $T_{\text{build}}$：构建时间
+- $R$：光线数量
+- $T_{\text{trace}}$：单条光线追踪时间
+
+对于单条光线：
+$$T_{\text{trace}} = T_{\text{traverse}} + N_{\text{leaf}} \cdot T_{\text{intersect}}$$
+
+其中 $N_{\text{leaf}}$ 是访问的叶节点数。
+
+**空间连贯性原理**：
+- **光线连贯性**：相邻光线倾向于相交相似的物体集合
+- **几何连贯性**：空间相近的物体应该在加速结构中相近
+- **时间连贯性**：连续帧之间的相交模式相似
+
 **常见加速结构分类**：
 1. **空间分割**：KD-Tree、Octree、BSP Tree
+   - 优点：无重叠，内存效率高
+   - 缺点：物体可能跨越多个节点
+   
 2. **物体分割**：BVH、R-Tree
+   - 优点：每个物体只属于一个叶节点
+   - 缺点：包围盒可能重叠
+   
 3. **混合方法**：SBVH、Dual-Split BVH
+   - 结合空间和物体分割的优点
+   - 更复杂的构建算法
+
+**加速结构选择准则**：
+- **静态场景**：KD-Tree（遍历效率最高）
+- **动态场景**：BVH（易于更新）
+- **GPU实现**：BVH（更规则的内存访问）
+- **内存受限**：压缩BVH或隐式Grid
 
 ### 7.2.2 层次包围盒（BVH）
 
