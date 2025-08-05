@@ -13,6 +13,30 @@ $$f: \mathbb{R}^3 \times \mathcal{L} \times \mathcal{M} \rightarrow \mathbb{R}^2
 
 其中$\mathbb{R}^3$表示三维空间坐标，$\mathcal{L}$表示光照条件，$\mathcal{M}$表示材质属性，$\mathbb{R}^2$表示图像平面坐标，$\mathcal{C}$表示颜色空间。
 
+**渲染方程的统一框架**
+
+更严格地说，渲染的本质是求解渲染方程（Kajiya, 1986）：
+$$L_o(\mathbf{x}, \omega_o) = L_e(\mathbf{x}, \omega_o) + \int_{\Omega} f_r(\mathbf{x}, \omega_i, \omega_o) L_i(\mathbf{x}, \omega_i) (\omega_i \cdot \mathbf{n}) d\omega_i$$
+
+其中：
+- $L_o$：出射辐射度（radiance）
+- $L_e$：自发光辐射度
+- $f_r$：双向反射分布函数（BRDF）
+- $L_i$：入射辐射度
+- $\Omega$：半球积分域
+
+这个积分方程统一了局部光照和全局光照，是现代渲染算法的理论基础。
+
+**图形学的计算复杂度挑战**
+
+渲染的计算复杂度主要来自：
+1. **几何复杂度**：$O(n)$个多边形，每个需要投影和裁剪
+2. **着色复杂度**：$O(p)$个像素，每个需要光照计算
+3. **光照复杂度**：$O(l)$个光源，可能需要阴影计算
+4. **全局光照**：递归的光线传播，复杂度可达$O(n^2p)$
+
+因此，总复杂度在最坏情况下为$O(nlp)$，这解释了为什么需要各种加速算法。
+
 ### 1.1.2 实时渲染与离线渲染
 
 图形学应用可分为两大类：
@@ -27,6 +51,33 @@ $$f: \mathbb{R}^3 \times \mathcal{L} \times \mathcal{M} \rightarrow \mathbb{R}^2
 - 全局光照算法
 - 基于物理的渲染（PBR）
 
+**性能指标的数学分析**
+
+实时渲染的帧率要求可以表述为：
+$$t_{frame} = t_{CPU} + t_{GPU} \leq \frac{1}{FPS_{target}}$$
+
+其中：
+- $t_{CPU}$：CPU计算时间（场景管理、物理模拟）
+- $t_{GPU}$：GPU渲染时间（顶点处理、片段着色）
+- $FPS_{target}$：目标帧率（如60 FPS → 16.67ms）
+
+**算法复杂度对比**
+
+| 渲染方法 | 几何复杂度 | 像素复杂度 | 内存需求 | 典型应用 |
+|---------|-----------|-----------|----------|---------|
+| 光栅化 | $O(n\log n)$ | $O(p)$ | $O(p)$ (Z-buffer) | 游戏引擎 |
+| 光线追踪 | $O(p\log n)$ | $O(pd)$ | $O(n)$ (BVH) | 电影特效 |
+| 辐射度 | $O(n^2)$ | $O(p)$ | $O(n^2)$ | 建筑可视化 |
+
+这里$n$是场景中的图元数，$p$是像素数，$d$是递归深度。
+
+**实时与离线的界限模糊化**
+
+现代GPU的发展使得这两者的界限越来越模糊：
+- **混合渲染**：实时光线追踪用于反射和阴影，光栅化用于主要可见性
+- **时间积累**：利用多帧累积提高质量（如DLSS）
+- **预计算技术**：光照贴图、环境光遮蔽、辐照度探针
+
 ### 1.1.3 图形管线概述
 
 现代图形管线可以抽象为以下阶段：
@@ -38,6 +89,37 @@ $$f: \mathbb{R}^3 \times \mathcal{L} \times \mathcal{M} \rightarrow \mathbb{R}^2
 
 每个阶段都涉及特定的数学变换和算法优化，我们将在后续章节详细探讨。
 
+**管线的数学表示**
+
+图形管线可以表示为一系列函数的复合：
+$$\mathcal{P} = \mathcal{F} \circ \mathcal{R} \circ \mathcal{G} \circ \mathcal{A}$$
+
+其中：
+- $\mathcal{A}$：应用阶段，$\mathcal{A}: \mathcal{S} \rightarrow \mathcal{V}$（场景→顶点）
+- $\mathcal{G}$：几何阶段，$\mathcal{G}: \mathcal{V} \rightarrow \mathcal{T}$（顶点→变换后的图元）
+- $\mathcal{R}$：光栅化，$\mathcal{R}: \mathcal{T} \rightarrow \mathcal{F}$（图元→片段）
+- $\mathcal{F}$：片段阶段，$\mathcal{F}: \mathcal{F} \rightarrow \mathcal{I}$（片段→图像）
+
+**可编程管线的革命**
+
+现代GPU提供了可编程阶段：
+- **顶点着色器**：$\mathbf{v}_{clip} = \mathbf{M}_{proj} \cdot \mathbf{M}_{view} \cdot \mathbf{M}_{model} \cdot \mathbf{v}_{local}$
+- **几何着色器**：可以创建或销毁图元
+- **片段着色器**：计算最终颜色 $\mathbf{c} = f_{shader}(\mathbf{n}, \mathbf{l}, \mathbf{v}, \mathbf{material})$
+- **计算着色器**：通用并行计算
+
+**并行化的数学基础**
+
+GPU的高效来自于大规模并行：
+- **数据并行**：$\forall i \in [0, N): y_i = f(x_i)$
+- **SIMD执行**：相同指令作用于多个数据
+- **内存访问模式**：合并访问、纹理缓存
+
+并行效率可以用Amdahl定律估算：
+$$S = \frac{1}{(1-p) + \frac{p}{n}}$$
+
+其中$p$是可并行化部分的比例，$n$是处理器数量。
+
 ### 1.1.4 现代图形学的挑战与机遇
 
 随着AI技术的发展，图形学面临新的机遇：
@@ -46,6 +128,40 @@ $$f: \mathbb{R}^3 \times \mathcal{L} \times \mathcal{M} \rightarrow \mathbb{R}^2
 - **可微渲染**：将渲染过程设计为可微函数，支持基于梯度的优化
 - **实时光线追踪**：硬件加速使得实时光线追踪成为可能
 - **虚拟现实与增强现实**：对延迟和分辨率提出更高要求
+
+**神经渲染的数学框架**
+
+神经渲染将传统渲染函数$f$替换为神经网络$f_\theta$：
+$$\mathbf{I} = f_\theta(\mathbf{G}, \mathbf{V}, \mathbf{L})$$
+
+其中$\theta$是网络参数，通过最小化损失函数学习：
+$$\mathcal{L} = \mathbb{E}_{(\mathbf{I}_{gt}, \mathbf{x})} \left[ \|\mathbf{I}_{gt} - f_\theta(\mathbf{x})\|^2 + \lambda R(\theta) \right]$$
+
+典型应用包括：
+- **神经辐射场（NeRF）**：$F_\theta: (\mathbf{x}, \mathbf{d}) \rightarrow (\mathbf{c}, \sigma)$
+- **神经纹理**：学习的特征图代替传统纹理
+- **超分辨率**：$\mathbf{I}_{high} = G_\theta(\mathbf{I}_{low})$
+
+**可微渲染的梯度计算**
+
+可微渲染需要计算$\frac{\partial \mathbf{I}}{\partial \mathbf{p}}$，其中$\mathbf{p}$可以是几何、材质或光照参数。主要挑战包括：
+
+1. **可见性的不连续性**：使用边缘采样或软光栅化
+2. **蒙特卡洛积分的梯度**：
+   $$\nabla_\theta \mathbb{E}_{p_\theta}[f(x)] = \mathbb{E}_{p_\theta}[f(x) \nabla_\theta \log p_\theta(x)]$$
+3. **反向模式自动微分**：高效计算复杂管线的梯度
+
+**硬件加速的新时代**
+
+现代GPU引入了专用硬件：
+- **RT Core**：加速光线-三角形相交测试
+- **Tensor Core**：加速矩阵运算和AI推理
+- **可变速率着色（VRS）**：根据内容自适应调整着色率
+
+性能模型：
+$$T_{total} = T_{traverse} + T_{intersect} + T_{shade}$$
+
+其中硬件加速主要优化$T_{intersect}$，可达10-100倍加速。
 
 ## 1.2 向量与线性代数
 
@@ -57,6 +173,8 @@ $$f: \mathbb{R}^3 \times \mathcal{L} \times \mathcal{M} \rightarrow \mathbb{R}^2
 $$\mathbf{u} + \mathbf{v} = (u_1 + v_1, u_2 + v_2, ..., u_n + v_n)^T$$
 $$k\mathbf{v} = (kv_1, kv_2, ..., kv_n)^T$$
 
+这些运算满足向量空间的八条公理，使$\mathbb{R}^n$成为一个线性空间。
+
 **内积（点积）**：
 $$\mathbf{u} \cdot \mathbf{v} = \sum_{i=1}^{n} u_i v_i = |\mathbf{u}||\mathbf{v}|\cos\theta$$
 
@@ -64,6 +182,13 @@ $$\mathbf{u} \cdot \mathbf{v} = \sum_{i=1}^{n} u_i v_i = |\mathbf{u}||\mathbf{v}
 - 计算投影长度：$\text{proj}_{\mathbf{v}}\mathbf{u} = \frac{\mathbf{u} \cdot \mathbf{v}}{|\mathbf{v}|^2}\mathbf{v}$
 - 判断方向关系：$\mathbf{u} \cdot \mathbf{v} > 0$表示夹角小于90°
 - 计算功和能量：在物理模拟中广泛应用
+
+**内积的推广形式**
+
+更一般地，内积可以定义为：
+$$\langle \mathbf{u}, \mathbf{v} \rangle_{\mathbf{M}} = \mathbf{u}^T \mathbf{M} \mathbf{v}$$
+
+其中$\mathbf{M}$是正定矩阵。这在各向异性材质和椭球体距离计算中很有用。
 
 **外积（叉积）**：仅在三维空间定义
 $$\mathbf{u} \times \mathbf{v} = \begin{pmatrix}
@@ -77,10 +202,38 @@ u_1v_2 - u_2v_1
 - 方向遵循右手定则
 - 反交换律：$\mathbf{u} \times \mathbf{v} = -\mathbf{v} \times \mathbf{u}$
 
+**叉积的矩阵形式**
+
+叉积可以表示为反对称矩阵乘法：
+$$\mathbf{u} \times \mathbf{v} = [\mathbf{u}]_\times \mathbf{v}$$
+
+其中：
+$$[\mathbf{u}]_\times = \begin{pmatrix}
+0 & -u_3 & u_2 \\
+u_3 & 0 & -u_1 \\
+-u_2 & u_1 & 0
+\end{pmatrix}$$
+
+这个表示在刚体动力学和相机标定中非常有用。
+
+**三重积公式**
+
+标量三重积：
+$$(\mathbf{a} \times \mathbf{b}) \cdot \mathbf{c} = \det[\mathbf{a} | \mathbf{b} | \mathbf{c}]$$
+
+几何意义：三个向量张成的平行六面体的有向体积。
+
+向量三重积（BAC-CAB规则）：
+$$\mathbf{a} \times (\mathbf{b} \times \mathbf{c}) = \mathbf{b}(\mathbf{a} \cdot \mathbf{c}) - \mathbf{c}(\mathbf{a} \cdot \mathbf{b})$$
+
 ### 1.2.2 矩阵与线性变换
 
 线性变换$T: \mathbb{R}^n \rightarrow \mathbb{R}^m$可以用$m \times n$矩阵$\mathbf{A}$表示：
 $$T(\mathbf{v}) = \mathbf{A}\mathbf{v}$$
+
+线性变换必须满足：
+- 可加性：$T(\mathbf{u} + \mathbf{v}) = T(\mathbf{u}) + T(\mathbf{v})$
+- 齐次性：$T(k\mathbf{v}) = kT(\mathbf{v})$
 
 **基本变换矩阵**：
 
@@ -98,11 +251,37 @@ $$\mathbf{R}_z(\theta) = \begin{pmatrix}
 0 & 0 & 1
 \end{pmatrix}$$
 
+**任意轴旋转（Rodrigues公式）**
+
+绕单位轴$\mathbf{k}$旋转$\theta$角的旋转矩阵：
+$$\mathbf{R}(\mathbf{k}, \theta) = \mathbf{I} + \sin\theta[\mathbf{k}]_\times + (1-\cos\theta)[\mathbf{k}]_\times^2$$
+
+展开形式：
+$$\mathbf{R} = \cos\theta\mathbf{I} + (1-\cos\theta)\mathbf{k}\mathbf{k}^T + \sin\theta[\mathbf{k}]_\times$$
+
+这个公式在骨骼动画和物理模拟中广泛使用。
+
 **矩阵运算的几何意义**：
 - 矩阵乘法对应变换的复合
 - 逆矩阵对应逆变换
 - 行列式表示体积缩放因子
 - 特征值和特征向量揭示变换的不变方向
+
+**奇异值分解（SVD）的几何解释**
+
+任意矩阵$\mathbf{A}$可分解为：
+$$\mathbf{A} = \mathbf{U}\mathbf{\Sigma}\mathbf{V}^T$$
+
+几何意义：
+1. $\mathbf{V}^T$：第一次旋转（输入空间）
+2. $\mathbf{\Sigma}$：沿主轴缩放
+3. $\mathbf{U}$：第二次旋转（输出空间）
+
+在图形学中的应用：
+- 提取旋转和缩放分量
+- 矩阵近似和压缩
+- 最小二乘问题求解
+- 主成分分析（PCA）
 
 ### 1.2.3 齐次坐标与仿射变换
 
