@@ -18,6 +18,62 @@
 三角形的数学表示形式多样，可以用参数方程、隐式方程或重心坐标表示：
 $$\mathbf{p}(u,v) = (1-u-v)\mathbf{v}_0 + u\mathbf{v}_1 + v\mathbf{v}_2, \quad u,v \geq 0, u+v \leq 1$$
 
+#### 三角形的几何性质
+
+三角形具有许多重要的几何性质，这些性质是光栅化算法的理论基础：
+
+1. **单纯形性质**：三角形是二维空间中的单纯形（simplex），这意味着它是能够张成二维空间的最小凸集。
+
+2. **重心坐标的几何意义**：
+   - 重心坐标 $(\alpha, \beta, \gamma)$ 表示点到对边的有向距离比
+   - 物理意义：如果在三个顶点放置质量为 $(\alpha, \beta, \gamma)$ 的质点，则质心位于点 $\mathbf{p}$
+   - 面积比：$\alpha = \frac{\text{Area}(\mathbf{p}\mathbf{v}_1\mathbf{v}_2)}{\text{Area}(\mathbf{v}_0\mathbf{v}_1\mathbf{v}_2)}$
+
+3. **仿射不变性**：重心坐标在仿射变换下保持不变
+   $$T(\alpha\mathbf{v}_0 + \beta\mathbf{v}_1 + \gamma\mathbf{v}_2) = \alpha T(\mathbf{v}_0) + \beta T(\mathbf{v}_1) + \gamma T(\mathbf{v}_2)$$
+   
+   这个性质保证了我们可以在任意坐标系中进行插值计算。
+
+4. **欧拉公式的应用**：对于三角形网格，顶点数V、边数E、面数F满足：
+   $$V - E + F = 2 - 2g$$
+   其中g是亏格（genus）。对于简单连通网格，$g=0$，因此 $F \approx 2V$。
+
+#### 三角形与其他图元的比较
+
+**四边形**：
+- 优点：更少的图元数量，某些情况下更自然（如地形网格）
+- 缺点：可能非平面，需要分割成三角形，插值更复杂
+
+**多边形**：
+- 优点：更灵活的建模
+- 缺点：需要三角化，凹多边形处理复杂，硬件支持有限
+
+**曲面片（如Bézier）**：
+- 优点：更高的几何精度，更少的存储
+- 缺点：计算复杂，需要细分（tessellation）成三角形
+
+#### 三角形的拓扑表示
+
+在实际应用中，三角形通常组织成网格（mesh）结构：
+
+1. **独立三角形**：每个三角形存储三个顶点
+   - 优点：简单，无依赖
+   - 缺点：顶点重复，内存浪费
+
+2. **索引三角形列表**：顶点数组 + 索引数组
+   - 优点：共享顶点，节省内存
+   - 缺点：额外的间接访问
+
+3. **三角形条带（Triangle Strip）**：
+   - 表示：$v_0, v_1, v_2, v_3, ...$ 形成三角形 $(v_0,v_1,v_2), (v_1,v_2,v_3), ...$
+   - 优点：最少的索引数据
+   - 缺点：需要退化三角形连接不同条带
+
+4. **三角形扇（Triangle Fan）**：
+   - 表示：中心点 $v_0$ 与边界点 $v_1, v_2, ...$ 形成三角形
+   - 优点：适合圆形或扇形区域
+   - 缺点：应用场景有限
+
 ### 3.1.2 三角形的表示
 
 三角形可以通过三个顶点 $\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2$ 表示，每个顶点包含：
@@ -32,6 +88,96 @@ $$\mathbf{p}_{\text{screen}} = \begin{pmatrix} x_s \\ y_s \\ z_s \end{pmatrix} =
 三角形的隐式表示使用平面方程：
 $$\mathbf{n} \cdot (\mathbf{p} - \mathbf{v}_0) = 0$$
 其中法向量$\mathbf{n} = (\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)$决定了三角形的朝向。
+
+#### 坐标系变换链
+
+三角形顶点经历的完整变换链：
+
+1. **模型空间（Model Space）** → **世界空间（World Space）**
+   $$\mathbf{p}_{world} = \mathbf{M}_{model} \mathbf{p}_{model}$$
+
+2. **世界空间** → **观察空间（View Space）**
+   $$\mathbf{p}_{view} = \mathbf{V} \mathbf{p}_{world}$$
+
+3. **观察空间** → **裁剪空间（Clip Space）**
+   $$\mathbf{p}_{clip} = \mathbf{P} \mathbf{p}_{view}$$
+   此时坐标为齐次坐标 $(x_c, y_c, z_c, w_c)$
+
+4. **透视除法** → **NDC空间**
+   $$\mathbf{p}_{ndc} = \begin{pmatrix} x_c/w_c \\ y_c/w_c \\ z_c/w_c \end{pmatrix}$$
+
+5. **视口变换** → **屏幕空间**
+   $$x_s = (x_{ndc} + 1) \cdot \frac{width}{2} + x_{viewport}$$
+   $$y_s = (y_{ndc} + 1) \cdot \frac{height}{2} + y_{viewport}$$
+
+#### 三角形的数据结构
+
+高效的三角形表示需要考虑内存布局和缓存友好性：
+
+```
+struct Vertex {
+    float3 position;     // 12 bytes
+    float3 normal;       // 12 bytes
+    float2 texcoord;     // 8 bytes
+    float4 tangent;      // 16 bytes (含手性)
+    // 总计 48 bytes，对齐到 64 bytes
+};
+
+struct Triangle {
+    uint3 indices;       // 顶点索引
+    uint materialID;     // 材质索引
+    float area;          // 预计算的面积
+    float3 normal;       // 预计算的法线
+};
+```
+
+#### 退化三角形的处理
+
+退化三角形是指面积为零或接近零的三角形，可能由以下原因产生：
+
+1. **共线顶点**：三个顶点在一条直线上
+2. **重复顶点**：两个或更多顶点位置相同
+3. **数值精度**：浮点误差导致的近似共线
+
+检测方法：
+$$\text{area} = \frac{1}{2}||(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)|| < \epsilon$$
+
+处理策略：
+- **预处理剔除**：在网格处理阶段删除
+- **运行时跳过**：光栅化时检测并跳过
+- **顶点合并**：将距离过近的顶点合并
+
+#### 三角形的方向与缠绕顺序
+
+缠绕顺序（winding order）决定了三角形的正面：
+
+1. **逆时针（CCW）**：OpenGL默认
+   - 从观察者角度看，顶点按逆时针排列为正面
+   - 法线指向观察者
+
+2. **顺时针（CW）**：DirectX默认
+   - 从观察者角度看，顶点按顺时针排列为正面
+
+叉积与缠绕顺序的关系：
+$$\mathbf{n} = (\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)$$
+- CCW：法线指向外（正面）
+- CW：法线指向内（背面）
+
+#### 三角形的层次表示
+
+对于复杂模型，三角形常组织成层次结构：
+
+1. **BVH（Bounding Volume Hierarchy）**：
+   - 每个节点包含子三角形的包围盒
+   - 用于加速光线追踪和碰撞检测
+
+2. **LOD（Level of Detail）**：
+   - 不同距离使用不同精度的三角形网格
+   - 减少远处物体的渲染开销
+
+3. **空间划分**：
+   - Octree、KD-Tree等结构
+   - 加速空间查询和剔除
 
 ### 3.1.3 点在三角形内的判断
 
@@ -53,6 +199,80 @@ $$E_{01}(\mathbf{p}) = (x - x_0)(y_1 - y_0) - (y - y_0)(x_1 - x_0)$$
 2. **并行友好**：不同像素的计算完全独立
 3. **精确性**：使用整数运算可避免浮点误差
 
+#### 边函数的数学性质
+
+边函数具有以下重要性质：
+
+1. **线性性**：边函数是位置的线性函数
+   $$E(x+\Delta x, y+\Delta y) = E(x,y) + A\Delta x + B\Delta y$$
+   其中 $A = y_1 - y_0$, $B = x_0 - x_1$
+
+2. **符号几何意义**：
+   - $E > 0$：点在边的左侧（逆时针方向）
+   - $E < 0$：点在边的右侧
+   - $E = 0$：点在边上
+
+3. **与有向面积的关系**：
+   $$E_{01}(\mathbf{p}) = 2 \cdot \text{SignedArea}(\mathbf{v}_0, \mathbf{v}_1, \mathbf{p})$$
+
+4. **缩放不变性**：
+   $$E_{01}(s\mathbf{p}) = s^2 E_{01}(\mathbf{p})$$
+
+#### 边函数的向量形式
+
+使用向量表示可以更清晰地理解边函数：
+
+$$E_{01}(\mathbf{p}) = \det\begin{pmatrix} 
+\mathbf{p} - \mathbf{v}_0 & \mathbf{v}_1 - \mathbf{v}_0 
+\end{pmatrix} = (\mathbf{p} - \mathbf{v}_0) \times (\mathbf{v}_1 - \mathbf{v}_0)$$
+
+这表明边函数实际上是两个向量的叉积的z分量。
+
+#### 精确边界处理（Edge Rules）
+
+当像素中心恰好落在三角形边界上时，需要明确的规则避免：
+- 像素被多个三角形同时覆盖
+- 像素未被任何三角形覆盖
+
+**Top-Left规则**：
+```
+bool is_top_edge(v0, v1) {
+    return v0.y == v1.y && v0.x < v1.x;  // 水平且向右
+}
+
+bool is_left_edge(v0, v1) {
+    return v0.y < v1.y;  // 向上
+}
+
+// 边界测试
+if (E == 0) {
+    accept = is_top_edge(v0, v1) || is_left_edge(v0, v1);
+}
+```
+
+#### 定点数实现
+
+为了保证精确性，实际实现中使用定点数：
+
+```
+// 转换为定点数（16.8格式）
+int32_t to_fixed(float f) {
+    return (int32_t)(f * 256.0f + 0.5f);
+}
+
+// 定点数边函数
+int32_t edge_fixed(int32_t x, int32_t y, 
+                   int32_t x0, int32_t y0,
+                   int32_t x1, int32_t y1) {
+    return (x - x0) * (y1 - y0) - (y - y0) * (x1 - x0);
+}
+```
+
+优势：
+- 精确：无浮点舍入误差
+- 快速：整数运算
+- 一致：相邻三角形共享边产生相同结果
+
 #### 重心坐标（Barycentric Coordinates）
 
 重心坐标 $(\alpha, \beta, \gamma)$ 定义了点相对于三角形的位置：
@@ -70,12 +290,105 @@ $$\gamma = \frac{E_{01}(\mathbf{p})}{E_{01}(\mathbf{v}_2)}$$
 - **插值性质**：任何顶点属性都可以通过重心坐标线性插值
 - **归一化**：$\alpha + \beta + \gamma = 1$ 确保了插值的正确性
 
+#### 重心坐标的计算方法
+
+1. **面积比方法**：
+   $$\alpha = \frac{\text{Area}(\triangle \mathbf{p}\mathbf{v}_1\mathbf{v}_2)}{\text{Area}(\triangle \mathbf{v}_0\mathbf{v}_1\mathbf{v}_2)}$$
+   
+   使用叉积计算面积：
+   $$\text{Area} = \frac{1}{2}|(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)|$$
+
+2. **线性系统方法**：
+   解线性方程组：
+   $$\begin{pmatrix} x \\ y \\ 1 \end{pmatrix} = \begin{pmatrix} x_0 & x_1 & x_2 \\ y_0 & y_1 & y_2 \\ 1 & 1 & 1 \end{pmatrix} \begin{pmatrix} \alpha \\ \beta \\ \gamma \end{pmatrix}$$
+   
+   使用克拉默法则：
+   $$\alpha = \frac{\det\begin{pmatrix} x & x_1 & x_2 \\ y & y_1 & y_2 \\ 1 & 1 & 1 \end{pmatrix}}{\det\begin{pmatrix} x_0 & x_1 & x_2 \\ y_0 & y_1 & y_2 \\ 1 & 1 & 1 \end{pmatrix}}$$
+
+3. **边函数方法**（最常用）：
+   $$\alpha = \frac{E_{12}(\mathbf{p})}{2A}, \quad \beta = \frac{E_{20}(\mathbf{p})}{2A}, \quad \gamma = \frac{E_{01}(\mathbf{p})}{2A}$$
+   其中 $A$ 是三角形面积。
+
+#### 重心坐标的几何解释
+
+1. **质心解释**：如果在三个顶点分别放置质量为 $(\alpha, \beta, \gamma)$ 的质点，系统的质心就在点 $\mathbf{p}$。
+
+2. **垂直距离解释**：重心坐标与点到对边的垂直距离成比例。
+
+3. **参数化解释**：$(\alpha, \beta, \gamma)$ 提供了三角形内部的一种自然参数化。
+
+#### 重心坐标的特殊点
+
+- **重心**：$(\frac{1}{3}, \frac{1}{3}, \frac{1}{3})$ - 三条中线的交点
+- **外心**：到三个顶点距离相等的点
+- **内心**：$(\frac{a}{a+b+c}, \frac{b}{a+b+c}, \frac{c}{a+b+c})$ - 其中$a,b,c$是边长
+- **垂心**：三条高线的交点
+
+#### 重心坐标的数值稳定性
+
+当三角形接近退化时，重心坐标计算可能不稳定。稳健的实现需要：
+
+1. **条件数检查**：
+   $$\kappa = \frac{\max(|\mathbf{v}_0|, |\mathbf{v}_1|, |\mathbf{v}_2|) \cdot \max(|\mathbf{v}_1-\mathbf{v}_0|, |\mathbf{v}_2-\mathbf{v}_1|, |\mathbf{v}_0-\mathbf{v}_2|)}{2A}$$
+   
+   当 $\kappa$ 很大时，计算不稳定。
+
+2. **退化处理**：
+   ```
+   if (area < epsilon) {
+       // 退化为线段或点
+       // 使用投影到最长边的方法
+   }
+   ```
+
+3. **双精度计算**：对于大型场景，使用双精度避免精度损失。
+
 #### 其他判断方法
 
 **同侧法**：检查点是否与对面顶点在每条边的同一侧。
 
+对于每条边 $(\mathbf{v}_i, \mathbf{v}_j)$，检查：
+$$\text{sign}(E_{ij}(\mathbf{p})) = \text{sign}(E_{ij}(\mathbf{v}_k))$$
+其中 $\mathbf{v}_k$ 是第三个顶点。
+
 **面积法**：比较子三角形面积之和与原三角形面积：
 $$\text{Area}(PAB) + \text{Area}(PBC) + \text{Area}(PCA) = \text{Area}(ABC)$$
+
+由于浮点误差，实际判断时需要容差：
+$$|\sum \text{Area}_i - \text{Area}_{total}| < \epsilon$$
+
+**向量法**：使用向量叉积的方向一致性：
+```
+vec2 v0v1 = v1 - v0;
+vec2 v1v2 = v2 - v1;
+vec2 v2v0 = v0 - v2;
+
+vec2 v0p = p - v0;
+vec2 v1p = p - v1;
+vec2 v2p = p - v2;
+
+float cross0 = v0v1.x * v0p.y - v0v1.y * v0p.x;
+float cross1 = v1v2.x * v1p.y - v1v2.y * v1p.x;
+float cross2 = v2v0.x * v2p.y - v2v0.y * v2p.x;
+
+// 所有叉积同号则在内部
+return (cross0 >= 0 && cross1 >= 0 && cross2 >= 0) ||
+       (cross0 <= 0 && cross1 <= 0 && cross2 <= 0);
+```
+
+**角度法**：计算点对三角形三条边的张角之和：
+- 内部点：张角之和 = $2\pi$
+- 外部点：张角之和 < $2\pi$
+- 边界点：张角之和 = $\pi$
+
+#### 各种方法的比较
+
+| 方法 | 计算复杂度 | 精度 | 硬件适合性 | 备注 |
+|------|------------|------|--------------|------|
+| 边函数 | O(1) | 高 | 极好 | GPU标准方法 |
+| 重心坐标 | O(1) | 高 | 好 | 同时用于插值 |
+| 面积法 | O(1) | 中 | 中 | 浮点误差累积 |
+| 角度法 | O(1) | 低 | 差 | 需要反三角函数 |
 
 ### 3.1.4 光栅化算法
 
@@ -102,6 +415,42 @@ for y in [ymin, ymax]:
 - 时间复杂度：$O((x_{max}-x_{min})(y_{max}-y_{min}))$
 - 对于细长三角形效率低下（大量像素在三角形外）
 - 适合小三角形或接近正方形的三角形
+
+#### 包围盒优化
+
+1. **像素中心对齐**：
+   ```
+   // 考虑像素中心偏移
+   xmin = floor(min(x0, x1, x2) - 0.5)
+   xmax = ceil(max(x0, x1, x2) - 0.5)
+   ```
+
+2. **保守包围盒**：
+   为了处理浮点误差，稍微扩大包围盒：
+   ```
+   const float epsilon = 0.001f;
+   xmin = floor(min(x0, x1, x2) - epsilon);
+   xmax = ceil(max(x0, x1, x2) + epsilon);
+   ```
+
+3. **空包围盒检查**：
+   ```
+   if (xmin > xmax || ymin > ymax) {
+       return; // 退化三角形，跳过
+   }
+   ```
+
+#### 填充率分析
+
+定义填充率（fill rate）为：
+$$\text{Fill Rate} = \frac{\text{Triangle Area}}{\text{Bounding Box Area}}$$
+
+不同形状三角形的填充率：
+- 正三角形：约50%
+- 直角三角形：50%
+- 细长三角形：可能低至1%
+
+低填充率意味着大量无效测试，需要更精细的算法。
 
 #### 增量算法（Incremental Algorithm）
 
@@ -139,6 +488,60 @@ for y in [ymin, ymax]:
     w0_row += B01
     w1_row += B12
     w2_row += B20
+```
+
+#### 增量算法的性能分析
+
+相比朴素算法：
+- **乘法操作**：从每像素 6 次减少到 0 次
+- **加法操作**：每像素 9 次（三个边函数，每个 3 次）
+- **内存访问**：顺序访问，缓存友好
+
+#### 并行增量算法
+
+现代GPU使用2×2像素块（quad）为单位：
+
+```
+// 计算quad左上角的边函数值
+float3 w_base = compute_edge_functions(quad_x, quad_y);
+
+// 并行计算四个像素
+float3 w00 = w_base;
+float3 w10 = w_base + float3(A01, A12, A20);
+float3 w01 = w_base + float3(B01, B12, B20);
+float3 w11 = w_base + float3(A01+B01, A12+B12, A20+B20);
+
+// SIMD处理
+bool4 inside = (w00 >= 0) & (w10 >= 0) & (w01 >= 0) & (w11 >= 0);
+```
+
+#### 定点数增量算法
+
+为了保证精度，使用定点数运算：
+
+```
+// 16.16定点数格式
+typedef int32_t fixed16;
+
+// 转换为定点数
+fixed16 to_fixed16(float f) {
+    return (fixed16)(f * 65536.0f + 0.5f);
+}
+
+// 定点数增量
+fixed16 w0 = to_fixed16(E01(xmin, ymin));
+fixed16 A01_fixed = to_fixed16(y0 - y1);
+fixed16 B01_fixed = to_fixed16(x1 - x0);
+
+// 内循环
+for (int x = xmin; x <= xmax; x++) {
+    if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+        shade_pixel(x, y);
+    }
+    w0 += A01_fixed;
+    w1 += A12_fixed;
+    w2 += A20_fixed;
+}
 ```
 
 #### 分块光栅化（Tiled Rasterization）
@@ -182,12 +585,76 @@ for y in [ymin, ymax]:
 定点数转换：
 $$x_{fixed} = \lfloor x_{float} \times 2^{subpixel\_bits} + 0.5 \rfloor$$
 
+#### 定点数的数学基础
+
+定点数是一种用整数表示小数的方法。对于m.n格式：
+- m位表示整数部分
+- n位表示小数部分
+- 总位数 = m + n
+- 精度 = $2^{-n}$
+- 范围 = $[-2^{m-1}, 2^{m-1} - 2^{-n}]$
+
+定点数运算：
+```
+// 加法：直接相加
+fixed_c = fixed_a + fixed_b;
+
+// 乘法：需要右移
+fixed_c = (fixed_a * fixed_b) >> n;
+
+// 除法：需要左移
+fixed_c = (fixed_a << n) / fixed_b;
+```
+
+#### 为什么需要亚像素精度
+
+1. **消除裂缝**：
+   - 浮点误差可能导致相邻三角形之间出现缝隙
+   - 定点数保证共享边的计算结果完全一致
+
+2. **精确的边界处理**：
+   - 像素中心可能恰好落在三角形边上
+   - 需要一致的规则决定归属
+
+3. **反走样支持**：
+   - 计算部分覆盖的像素
+   - 需要亚像素级别的精度
+
 #### 裂缝问题的根源
 
 浮点运算的不精确性会导致：
 1. **T型接缝**：共享边的两个三角形在光栅化时产生缝隙
 2. **重复像素**：同一像素被多个三角形覆盖
 3. **丢失像素**：边界上的像素未被任何三角形覆盖
+
+#### 裂缝问题的具体例子
+
+考虑两个共享边的三角形：
+- 三角形A：$(0,0), (10,0), (5,10)$
+- 三角形B：$(10,0), (5,10), (10,10)$
+- 共享边：$(10,0) - (5,10)$
+
+如果使用浮点计算：
+```
+// 三角形A计算共享边函数
+E_A = (x - 10) * (10 - 0) - (y - 0) * (5 - 10)
+    = 10x - 100 + 5y
+
+// 三角形B计算同一条边（反向）
+E_B = (x - 5) * (0 - 10) - (y - 10) * (10 - 5)
+    = -10x + 50 - 5y + 50
+    = -10x - 5y + 100
+
+// 理论上：E_A + E_B = 0
+// 实际上：浮点误差可能导致 E_A + E_B ≠ 0
+```
+
+#### 裂缝的视觉影响
+
+裂缝在以下情况下尤为明显：
+1. **高对比度场景**：亮色背景上的暗色物体
+2. **运动场景**：裂缝会随着视角变化而闪烁
+3. **反走样后**：裂缝可能被放大
 
 #### 定点数运算规则
 
@@ -201,11 +668,101 @@ Top-left填充规则：
 - Top边：水平且位于三角形上方
 - Left边：非水平且位于三角形左侧
 
+#### Top-Left规则的实现
+
+```
+bool is_top_left_edge(vec2 v0, vec2 v1) {
+    vec2 edge = v1 - v0;
+    
+    // Top edge: horizontal and going right
+    if (edge.y == 0 && edge.x > 0) return true;
+    
+    // Left edge: going up
+    if (edge.y > 0) return true;
+    
+    return false;
+}
+
+// 在边函数测试中应用
+float bias = is_top_left_edge(v0, v1) ? 0 : -1;
+if (edge_function + bias >= 0) {
+    // 像素在三角形内
+}
+```
+
+#### 定点数的溢出处理
+
+定点数运算可能溢出，需要谨慎选择位宽：
+
+1. **边函数计算**：
+   - 输入：m.n格式的坐标
+   - 乘积：需要2m位
+   - 差值：需要2m+1位（考虑符号）
+
+2. **安全位宽选择**：
+   - 屏幕坐标：16.8（支持65536×65536）
+   - 边函数：32位有符号整数
+   - 插值参数：16.16（更高精度）
+
+#### 定点数与浮点数的混合使用
+
+在现代GPU中，通常混合使用：
+- **定点数**：用于光栅化阶段（保证精确性）
+- **浮点数**：用于着色计算（需要大范围）
+
+转换点：
+```
+// 光栅化后，转换回浮点
+float x_float = fixed_x / (float)(1 << FRAC_BITS);
+float y_float = fixed_y / (float)(1 << FRAC_BITS);
+
+// 进行着色计算
+color = shade_pixel(x_float, y_float, attributes);
+```
+
 #### 定点数的性能优势
 
 1. **确定性**：相同输入总是产生相同输出
 2. **并行性**：无需处理浮点异常
 3. **硬件效率**：整数运算单元更简单、更快
+
+#### 定点数硬件实现
+
+现代GPU中的定点数单元：
+
+1. **专用定点数ALU**：
+   - 定点乘法器
+   - 移位器（用于除法）
+   - 饱和算术（防止溢出）
+
+2. **流水线设计**：
+   ```
+   Stage 1: 坐标转换 (float -> fixed)
+   Stage 2: 边函数计算
+   Stage 3: 覆盖测试
+   Stage 4: 属性插值设置
+   ```
+
+3. **SIMD优化**：
+   - 4个像素同时处理
+   - 向量化的定点数运算
+
+#### 未来趋势
+
+随着浮点单元的进步，一些新技术正在出现：
+
+1. **混合精度模式**：
+   - 边界测试使用定点数
+   - 内部填充使用浮点数
+
+2. **可配置精度**：
+   - 根据场景需求调整
+   - VR需要更高精度
+   - 移动设备可以降低精度
+
+3. **AI辅助裂缝检测**：
+   - 机器学习检测潜在裂缝
+   - 自动修复算法
 
 ### 3.1.6 属性插值
 
