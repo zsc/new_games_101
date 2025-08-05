@@ -26,10 +26,20 @@ $$f_r(\omega_i, \omega_o) = \frac{dL_o(\omega_o)}{dE_i(\omega_i)} = \frac{dL_o(\
 
 其中：
 - $\omega_i$：入射方向
-- $\omega_o$：出射方向
+- $\omega_o$：出射方向  
 - $L_i$：入射辐射度
 - $L_o$：出射辐射度
 - $\theta_i$：入射角（与法线夹角）
+
+**物理直觉**：BRDF描述了一个微分光束如何被表面"重新分配"到各个出射方向。它本质上是一个概率密度函数的光学类比，但带有$\cos\theta_i$项的几何因子。
+
+**单位分析**：BRDF的单位是$\text{sr}^{-1}$（球面度的倒数），这可以从定义式推导：
+$$[f_r] = \frac{[\text{W/(m}^2\cdot\text{sr)}]}{[\text{W/(m}^2\cdot\text{sr)}] \cdot 1 \cdot [\text{sr}]} = [\text{sr}^{-1}]$$
+
+**反射方程**：给定入射光场，出射辐射度通过反射方程计算：
+$$L_o(\omega_o) = \int_{\Omega} f_r(\omega_i, \omega_o) L_i(\omega_i) \cos\theta_i d\omega_i$$
+
+这是渲染方程的核心组成部分，也是所有基于物理的渲染算法的基础。
 
 ### 9.1.2 BRDF的数学性质
 
@@ -38,18 +48,34 @@ BRDF必须满足以下物理约束：
 **1. 非负性（Non-negativity）**：
 $$f_r(\omega_i, \omega_o) \geq 0$$
 
+物理意义：能量不能为负，表面不能"吸收"后发出负光。
+
 **2. 互易性（Helmholtz Reciprocity）**：
 $$f_r(\omega_i, \omega_o) = f_r(\omega_o, \omega_i)$$
 
-这一性质源于光路可逆原理，在实际渲染中可用于优化计算。
+这一性质源于光路可逆原理，在实际渲染中可用于优化计算。互易性的深层含义来自于时间反演对称性和洛伦兹互易定理。
+
+**实际应用**：在双向路径追踪中，互易性允许我们交换光线方向而不改变贡献，这对于连接光路至关重要。
 
 **3. 能量守恒（Energy Conservation）**：
 $$\int_{\Omega} f_r(\omega_i, \omega_o) \cos\theta_o d\omega_o \leq 1$$
 
 对于任意入射方向，反射的总能量不能超过入射能量。
 
+**方向反照率（Directional Albedo）**：
+$$\rho(\omega_i) = \int_{\Omega} f_r(\omega_i, \omega_o) \cos\theta_o d\omega_o$$
+
+这表示从方向$\omega_i$入射的光被反射的总比例。
+
+**半球反照率（Hemispherical Albedo）**：
+$$\rho_{hh} = \frac{1}{\pi} \int_{\Omega_i} \int_{\Omega_o} f_r(\omega_i, \omega_o) \cos\theta_i \cos\theta_o d\omega_i d\omega_o$$
+
 **4. 线性性（Linearity）**：
-BRDF对入射光强度是线性的，这使得我们可以将复杂光照分解为简单光源的叠加。
+BRDF对入射光强度是线性的，这使得我们可以将复杂光照分解为简单光源的叠加。数学表述：
+$$L_o = \int f_r L_i \cos\theta_i d\omega_i = \int f_r (L_{i1} + L_{i2}) \cos\theta_i d\omega_i = L_{o1} + L_{o2}$$
+
+**5. 平滑性与连续性**：
+物理BRDF通常是连续的（除了镜面反射的狄拉克δ函数），这保证了渲染结果的视觉连续性。
 
 ### 9.1.3 从BRDF到BSDF：透射与散射
 
@@ -59,14 +85,35 @@ $$f_s(\omega_i, \omega_o) = f_r(\omega_i, \omega_o) + f_t(\omega_i, \omega_o)$$
 
 其中$f_t$是双向透射分布函数（BTDF）。
 
+**注意**：这里$\omega_o$可能在表面的另一侧（透射情况），需要仔细定义坐标系。
+
 对于透射，需要考虑折射定律（Snell's Law）：
 $$\eta_i \sin\theta_i = \eta_t \sin\theta_t$$
 
 其中$\eta_i$和$\eta_t$分别是入射和透射介质的折射率。
 
+**折射方向计算**：
+给定入射方向$\omega_i$和表面法线$\mathbf{n}$，折射方向$\omega_t$为：
+$$\omega_t = \frac{\eta_i}{\eta_t}\omega_i + \left(\frac{\eta_i}{\eta_t}\cos\theta_i - \sqrt{1 - \left(\frac{\eta_i}{\eta_t}\right)^2(1 - \cos^2\theta_i)}\right)\mathbf{n}$$
+
 **临界角与全内反射**：
 当光从光密介质射向光疏介质时，存在临界角：
 $$\theta_c = \arcsin\left(\frac{\eta_t}{\eta_i}\right)$$
+
+当$\theta_i > \theta_c$时，发生全内反射，此时BTDF为0，所有能量都被反射。
+
+**BTDF的特殊性质**：
+1. **非对称性**：由于折射率不同，BTDF不满足简单的互易性，而是：
+   $$\eta_i^2 f_t(\omega_i, \omega_o) = \eta_t^2 f_t(\omega_o, \omega_i)$$
+
+2. **雅可比行列式**：从立体角到立体角的变换需要考虑折射导致的立体角压缩/扩展：
+   $$\frac{d\omega_t}{d\omega_i} = \frac{\eta_t^2}{\eta_i^2} \frac{\cos\theta_t}{\cos\theta_i}$$
+
+**理想折射BTDF**：
+对于理想光滑表面：
+$$f_t(\omega_i, \omega_o) = \frac{\eta_t^2}{\eta_i^2} \frac{|n \cdot \omega_i|}{|n \cdot \omega_t|} (1 - F(\omega_i)) \delta(\omega_o - \omega_t)$$
+
+其中$F(\omega_i)$是菲涅尔反射率，$(1-F)$是透射率。
 
 ### 9.1.4 球谐函数与BRDF表示
 
@@ -76,30 +123,104 @@ $$Y_l^m(\theta, \phi) = \sqrt{\frac{2l+1}{4\pi}\frac{(l-|m|)!}{(l+|m|)!}} P_l^{|
 
 其中$P_l^m$是关联勒让德多项式。
 
-BRDF的球谐展开：
-$$f_r(\omega_i, \omega_o) = \sum_{l=0}^{\infty} \sum_{m=-l}^{l} a_{lm} Y_l^m(\omega_o)$$
+**前几阶球谐函数**：
+- $Y_0^0 = \frac{1}{2\sqrt{\pi}}$ （常数项）
+- $Y_1^{-1} = \frac{1}{2}\sqrt{\frac{3}{\pi}}\sin\theta e^{-i\phi}$
+- $Y_1^0 = \frac{1}{2}\sqrt{\frac{3}{\pi}}\cos\theta$
+- $Y_1^1 = -\frac{1}{2}\sqrt{\frac{3}{\pi}}\sin\theta e^{i\phi}$
+
+**BRDF的球谐展开**：
+由于BRDF是四维函数，需要更复杂的表示。一种方法是固定入射方向：
+$$f_r(\omega_i, \omega_o) = \sum_{l=0}^{\infty} \sum_{m=-l}^{l} a_{lm}(\omega_i) Y_l^m(\omega_o)$$
+
+**旋转不变性**：
+对于各向同性BRDF，可以利用旋转不变性简化为只依赖于$\omega_i \cdot \omega_o$的函数，使用Legendre多项式展开：
+$$f_r(\omega_i \cdot \omega_o) = \sum_{l=0}^{\infty} a_l P_l(\omega_i \cdot \omega_o)$$
+
+**Zonal Harmonics**：
+当BRDF具有旋转对称性时，可以使用Zonal Harmonics（$m=0$的球谐函数）：
+$$f_r(\theta) = \sum_{l=0}^{\infty} a_l \sqrt{\frac{2l+1}{4\pi}} P_l(\cos\theta)$$
 
 实践中通常截断到较低阶（如$l \leq 4$），这对于漫反射和低频光照效果良好。
+
+**优势与局限**：
+- 优势：紧凑表示、快速评估、易于旋转和卷积
+- 局限：难以表示高频特征（如锐利高光）、负值问题（需要额外处理）
+
+**应用场景**：
+- 预计算辐射传输（Precomputed Radiance Transfer, PRT）
+- 环境光照的快速近似
+- 实时全局光照中的间接光近似
 
 ### 9.1.5 BRDF的测量与拟合
 
 **测量设备**：测角光度计（Gonioreflectometer）通过机械臂控制光源和检测器位置，系统地测量不同角度组合下的反射率。
 
+**测量挑战**：
+- **高维度**：4D函数需要大量采样（典型需要$10^6$以上测量点）
+- **动态范围**：从漫反射到镜面反射跨越多个数量级
+- **掠射角**：接近90°时测量困难但视觉重要
+- **时间成本**：完整测量可能需要数小时到数天
+
 **数据表示**：
 1. **表格形式**：直接存储测量数据，使用时插值
+   - 优点：保真度高
+   - 缺点：存储量大、不连续
+
 2. **解析模型拟合**：将测量数据拟合到参数化模型
+   - 优点：紧凑、可微、物理意义明确
+   - 缺点：可能丢失细节
+
 3. **基函数分解**：使用球谐函数、小波或其他基函数
+   - 优点：多分辨率、渐进传输
+   - 缺点：高频重建困难
+
+**数据库与标准**：
+- MERL BRDF数据库：100种材质的密集测量
+- UTIA数据库：包含各向异性材质
+- Disney BRDF数据集：生产级材质参考
+
+**拟合方法**：
+
+**1. 最小二乘拟合**：
+$$\min_{\theta} \sum_{i} w_i |f_r^{\text{measured}}(\omega_{i,in}, \omega_{i,out}) - f_r^{\text{model}}(\omega_{i,in}, \omega_{i,out}; \theta)|^2$$
+
+**2. 最大似然估计**：
+考虑测量噪声模型：
+$$\mathcal{L}(\theta) = \prod_i p(y_i | f_r(\omega_{i,in}, \omega_{i,out}; \theta))$$
+
+**3. 贝叶斯方法**：
+加入先验知识：
+$$p(\theta | \mathcal{D}) \propto p(\mathcal{D} | \theta) p(\theta)$$
 
 **拟合误差度量**：
 $$E = \int_{\Omega_i} \int_{\Omega_o} w(\omega_i, \omega_o) |f_r^{\text{measured}} - f_r^{\text{model}}|^2 d\omega_i d\omega_o$$
 
 其中$w$是权重函数，通常强调掠射角等重要区域。
 
+**感知误差度量**：
+考虑人眼感知特性：
+$$E_{\text{perceptual}} = \int \int w(\omega_i, \omega_o) \Delta E_{CIE}(L_o^{\text{measured}}, L_o^{\text{model}}) d\omega_i d\omega_o$$
+
+其中$\Delta E_{CIE}$是CIE色差公式。
+
 ## 9.2 高级材质模型
 
 ### 9.2.1 微表面理论（Microfacet Theory）
 
 微表面理论将粗糙表面建模为大量微小镜面的统计分布。核心思想：宏观BRDF是微观几何的统计平均。
+
+**基本假设**：
+1. 表面由微小的理想镜面组成
+2. 微表面尺度远大于光波长（几何光学有效）
+3. 微表面尺度远小于像素（统计平均有意义）
+4. 每个微表面是完美镜面（菲涅尔反射）
+
+**微表面BRDF推导**：
+从微观到宏观的统计过程：
+1. 只有法线为$\omega_h$的微表面能将光从$\omega_i$反射到$\omega_o$
+2. 需要考虑微表面的可见性（遮蔽和阴影）
+3. 积分所有贡献的微表面
 
 **Cook-Torrance模型**：
 $$f_r(\omega_i, \omega_o) = \frac{D(\omega_h) G(\omega_i, \omega_o) F(\omega_i, \omega_h)}{4 \cos\theta_i \cos\theta_o}$$
@@ -110,36 +231,94 @@ $$f_r(\omega_i, \omega_o) = \frac{D(\omega_h) G(\omega_i, \omega_o) F(\omega_i, 
 - $F$：菲涅尔项（Fresnel Term）
 - $\omega_h$：半程向量（Half Vector），$\omega_h = \frac{\omega_i + \omega_o}{|\omega_i + \omega_o|}$
 
+**分母的物理意义**：
+$4 \cos\theta_i \cos\theta_o$项来自于：
+- 微表面积分到宏观表面积的雅可比变换
+- 将微分立体角转换为微分面积
+- 确保能量守恒
+
+**微表面模型的优势**：
+1. 物理基础扎实
+2. 参数直观（粗糙度、折射率）
+3. 能量守恒（正确实现时）
+4. 可扩展（各向异性、多次散射等）
+
 ### 9.2.2 法线分布函数（D项）
 
 法线分布函数$D(\omega_h)$描述了微表面法线的统计分布，必须满足归一化条件：
 $$\int_{\Omega} D(\omega_h) \cos\theta_h d\omega_h = 1$$
+
+这确保了微表面的投影面积等于宏观表面面积。
+
+**物理意义**：
+- $D(\omega_h)$表示法线为$\omega_h$的微表面的面积密度
+- $D(\omega_h) \cos\theta_h$是投影到宏观表面的面积密度
+- 积分为1保证了面积守恒
 
 **Beckmann分布**：
 $$D_{\text{Beckmann}}(\omega_h) = \frac{1}{\pi \alpha^2 \cos^4\theta_h} \exp\left(-\frac{\tan^2\theta_h}{\alpha^2}\right)$$
 
 其中$\alpha$是粗糙度参数。
 
+**特性**：
+- 基于高斯分布的斜率统计
+- 在$\alpha \to 0$时收敛到δ函数（完美镜面）
+- 计算成本相对较高（指数函数）
+
 **GGX/Trowbridge-Reitz分布**：
 $$D_{\text{GGX}}(\omega_h) = \frac{\alpha^2}{\pi ((\alpha^2 - 1)\cos^2\theta_h + 1)^2}$$
 
 GGX分布具有更长的尾部，能更好地模拟真实材质的高光。
 
+**GGX vs Beckmann**：
+- GGX有更长的尾部（重尾分布）
+- 更真实的高光形状
+- 更好的掠射角表现
+- 计算效率更高
+
 **各向异性扩展**：
 对于各向异性材质，使用两个粗糙度参数$\alpha_x$和$\alpha_y$：
 $$D_{\text{aniso}}(\omega_h) = \frac{1}{\pi \alpha_x \alpha_y} \frac{1}{(\frac{h_x^2}{\alpha_x^2} + \frac{h_y^2}{\alpha_y^2} + h_z^2)^2}$$
 
+其中$(h_x, h_y, h_z)$是半程向量在切空间的坐标。
+
+**其他分布**：
+1. **Phong分布**（已过时）：$D = \frac{n+2}{2\pi}\cos^n\theta_h$
+2. **Berry分布**：考虑自相关长度的物理模型
+3. **ABC分布**：统一框架，可调节分布形状
+
+**粗糙度参数映射**：
+实践中常用感知线性的粗糙度：
+$$\alpha = \text{roughness}^2$$
+
+这使得参数调节更直观。
+
 ### 9.2.3 几何遮蔽函数（G项）
 
 几何函数描述了微表面间的相互遮蔽和阴影效应。
+
+**物理意义**：
+- **遮蔽（Masking）**：入射光被其他微表面挡住
+- **阴影（Shadowing）**：出射光被其他微表面挡住
+- $G \in [0,1]$表示未被遮挡的比例
 
 **Smith模型**：
 $$G(\omega_i, \omega_o) = G_1(\omega_i) G_1(\omega_o)$$
 
 其中$G_1$是单向遮蔽函数。
 
+**假设**：
+- 遮蔽和阴影统计独立（近似）
+- 微表面高度与法线方向无关
+- 适用于各向同性粗糙表面
+
 **GGX的Smith-G1**：
 $$G_1(\omega) = \frac{2\cos\theta}{1 + \sqrt{1 + \alpha^2 \tan^2\theta}}$$
+
+**推导思路**：
+1. 假设微表面高度服从正态分布
+2. 使用射线与随机粗糙表面相交的统计理论
+3. 得出可见性的解析表达式
 
 **高度相关遮蔽（Height-Correlated Masking-Shadowing）**：
 考虑入射和出射方向的相关性：
@@ -147,6 +326,22 @@ $$G(\omega_i, \omega_o) = \frac{1}{1 + \Lambda(\omega_i) + \Lambda(\omega_o)}$$
 
 其中$\Lambda$是辅助函数：
 $$\Lambda(\omega) = \frac{-1 + \sqrt{1 + \alpha^2 \tan^2\theta}}{2}$$
+
+**相关性的重要性**：
+- 独立假设（分离式）在某些情况下过于保守
+- 高度相关模型更准确，特别是在掠射角
+- 计算成本相近
+
+**其他G函数**：
+1. **Cook-Torrance G**：$G = \min(1, \frac{2n \cdot h \cdot n \cdot v}{v \cdot h}, \frac{2n \cdot h \cdot n \cdot l}{v \cdot h})$
+2. **Kelemen G**：$G = \frac{n \cdot l \cdot n \cdot v}{v \cdot h}$（快速近似）
+3. **V-cavity模型**：基于V形凹槽的简化模型
+
+**实用近似**：
+Schlick-GGX近似（用于实时渲染）：
+$$G_{\text{Schlick}}(\omega) = \frac{\cos\theta}{\cos\theta(1-k) + k}$$
+
+其中$k = \frac{(\text{roughness}+1)^2}{8}$（直接光照）或$k = \frac{\text{roughness}^2}{2}$（IBL）。
 
 ### 9.2.4 菲涅尔反射（F项）与复杂IOR
 
