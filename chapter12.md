@@ -29,69 +29,148 @@
 在介绍MPM之前，我们需要深入理解连续介质力学的基本概念。考虑一个连续体 $\Omega$，其运动可以用映射 $\phi: \Omega_0 \times [0,T] \rightarrow \mathbb{R}^d$ 描述，其中 $\Omega_0$ 是初始（参考）构型，$d$ 是空间维度（通常为2或3）。
 
 **运动学描述**：
-- **拉格朗日描述**：跟踪材料点 $\mathbf{X} \in \Omega_0$ 的运动轨迹
-- **欧拉描述**：关注空间点 $\mathbf{x} \in \Omega_t$ 处的物理量变化
+- **拉格朗日描述**：跟踪材料点 $\mathbf{X} \in \Omega_0$ 的运动轨迹，适合追踪材料历史和内部变量演化
+- **欧拉描述**：关注空间点 $\mathbf{x} \in \Omega_t$ 处的物理量变化，适合流体力学和大变形问题
 - **映射关系**：$\mathbf{x} = \phi(\mathbf{X}, t)$
+- **速度场**：$\mathbf{v}(\mathbf{X}, t) = \frac{\partial \phi}{\partial t}(\mathbf{X}, t)$（拉格朗日）或 $\mathbf{v}(\mathbf{x}, t)$（欧拉）
 
 **变形梯度**定义为：
 $$\mathbf{F} = \frac{\partial \phi}{\partial \mathbf{X}} = \frac{\partial \mathbf{x}}{\partial \mathbf{X}}$$
 
-变形梯度 $\mathbf{F}$ 是一个二阶张量，包含了所有的局部变形信息。其行列式 $J = \det(\mathbf{F})$ 表示体积比：
-- $J > 0$：保持定向（物理上合理）
-- $J = 1$：体积守恒（不可压缩）
-- $J < 1$：压缩
-- $J > 1$：膨胀
+变形梯度 $\mathbf{F}$ 是一个二阶张量，包含了所有的局部变形信息。从几何角度看，$\mathbf{F}$ 将参考构型中的无穷小线元 $d\mathbf{X}$ 映射到当前构型中的 $d\mathbf{x} = \mathbf{F} d\mathbf{X}$。
+
+**变形梯度的性质**：
+- **可逆性**：物理上合理的变形要求 $\det(\mathbf{F}) > 0$（避免材料穿透自身）
+- **体积比**：$J = \det(\mathbf{F})$ 表示局部体积变化率
+  - $J > 0$：保持定向（物理上合理）
+  - $J = 1$：体积守恒（不可压缩）
+  - $J < 1$：压缩
+  - $J > 1$：膨胀
+- **恒等变形**：未变形状态对应 $\mathbf{F} = \mathbf{I}$
 
 **极分解定理**：
-任何变形梯度可以唯一分解为：
+任何可逆的变形梯度可以唯一分解为旋转和拉伸的组合：
 $$\mathbf{F} = \mathbf{R}\mathbf{U} = \mathbf{V}\mathbf{R}$$
-其中 $\mathbf{R}$ 是旋转张量（$\mathbf{R}^T\mathbf{R} = \mathbf{I}$，$\det(\mathbf{R}) = 1$），$\mathbf{U}$ 和 $\mathbf{V}$ 分别是右和左拉伸张量。
+其中：
+- $\mathbf{R}$ 是旋转张量（正交张量）：$\mathbf{R}^T\mathbf{R} = \mathbf{I}$，$\det(\mathbf{R}) = 1$
+- $\mathbf{U}$ 是右拉伸张量（对称正定）：描述旋转前的拉伸
+- $\mathbf{V}$ 是左拉伸张量（对称正定）：描述旋转后的拉伸
+
+计算极分解的算法通常使用SVD：$\mathbf{F} = \mathbf{U}_{\text{svd}} \boldsymbol{\Sigma} \mathbf{V}_{\text{svd}}^T$，则 $\mathbf{R} = \mathbf{U}_{\text{svd}} \mathbf{V}_{\text{svd}}^T$。
 
 **应变度量**：
-不同的应变张量适用于不同的变形程度：
+应变量化了变形中的拉伸部分，不同的应变张量适用于不同的变形程度和分析需求：
 
-1. **Green-Lagrange应变张量**（大变形）：
+1. **Green-Lagrange应变张量**（拉格朗日描述，大变形）：
    $$\mathbf{E} = \frac{1}{2}(\mathbf{F}^T\mathbf{F} - \mathbf{I}) = \frac{1}{2}(\mathbf{C} - \mathbf{I})$$
    其中 $\mathbf{C} = \mathbf{F}^T\mathbf{F}$ 是右Cauchy-Green变形张量。
+   - 物理意义：度量参考构型中线元长度的变化
+   - 特点：在刚体旋转下不变，适合大变形分析
 
-2. **Almansi-Euler应变张量**（空间描述）：
+2. **Almansi-Euler应变张量**（欧拉描述）：
    $$\mathbf{e} = \frac{1}{2}(\mathbf{I} - \mathbf{F}^{-T}\mathbf{F}^{-1}) = \frac{1}{2}(\mathbf{I} - \mathbf{B}^{-1})$$
    其中 $\mathbf{B} = \mathbf{F}\mathbf{F}^T$ 是左Cauchy-Green变形张量。
+   - 物理意义：度量当前构型中线元长度的变化
+   - 应用：适合更新拉格朗日格式
 
-3. **小应变张量**（线性化）：
-   $$\boldsymbol{\epsilon} = \frac{1}{2}(\nabla\mathbf{u} + \nabla\mathbf{u}^T) + \frac{1}{2}\nabla\mathbf{u}^T\nabla\mathbf{u}$$
-   当 $||\nabla\mathbf{u}|| \ll 1$ 时，忽略二次项：
-   $$\boldsymbol{\epsilon} \approx \frac{1}{2}(\nabla\mathbf{u} + \nabla\mathbf{u}^T)$$
+3. **小应变张量**（线性化，工程应变）：
+   位移场 $\mathbf{u} = \mathbf{x} - \mathbf{X}$，位移梯度 $\mathbf{H} = \nabla\mathbf{u} = \mathbf{F} - \mathbf{I}$
+   $$\boldsymbol{\epsilon} = \frac{1}{2}(\mathbf{H} + \mathbf{H}^T) = \frac{1}{2}(\nabla\mathbf{u} + \nabla\mathbf{u}^T)$$
+   - 假设：$||\mathbf{H}|| \ll 1$（小变形、小转动）
+   - 优点：线性理论，计算简单
+
+4. **对数应变**（Hencky应变）：
+   $$\mathbf{E}_{\ln} = \ln(\mathbf{V}) = \frac{1}{2}\ln(\mathbf{B})$$
+   - 特点：对于单轴拉伸给出真实应变
+   - 计算：需要矩阵对数，通常通过特征值分解
+
+**应变率和自旋张量**：
+速度梯度张量 $\mathbf{L} = \nabla\mathbf{v} = \dot{\mathbf{F}}\mathbf{F}^{-1}$ 可分解为：
+$$\mathbf{L} = \mathbf{D} + \mathbf{W}$$
+其中：
+- 变形率张量（对称）：$\mathbf{D} = \frac{1}{2}(\mathbf{L} + \mathbf{L}^T)$
+- 自旋张量（反对称）：$\mathbf{W} = \frac{1}{2}(\mathbf{L} - \mathbf{L}^T)$
 
 **应力度量**：
-1. **Cauchy应力张量** $\boldsymbol{\sigma}$：真实应力，定义在当前构型
-2. **第一Piola-Kirchhoff应力张量** $\mathbf{P}$：$\mathbf{P} = J\boldsymbol{\sigma}\mathbf{F}^{-T}$
-3. **第二Piola-Kirchhoff应力张量** $\mathbf{S}$：$\mathbf{S} = \mathbf{F}^{-1}\mathbf{P} = J\mathbf{F}^{-1}\boldsymbol{\sigma}\mathbf{F}^{-T}$
+应力描述内力的分布，不同的应力张量对应不同的参考构型：
+
+1. **Cauchy应力张量** $\boldsymbol{\sigma}$（真实应力）：
+   - 定义：当前构型中单位面积上的力
+   - 对称性：角动量守恒要求 $\boldsymbol{\sigma} = \boldsymbol{\sigma}^T$
+   - 牵引力：$\mathbf{t} = \boldsymbol{\sigma} \mathbf{n}$（$\mathbf{n}$ 是当前构型的外法向）
+
+2. **第一Piola-Kirchhoff应力张量** $\mathbf{P}$（名义应力）：
+   $$\mathbf{P} = J\boldsymbol{\sigma}\mathbf{F}^{-T}$$
+   - 定义：当前力对参考面积的比值
+   - 非对称：$\mathbf{P} \neq \mathbf{P}^T$（一般情况）
+   - 功共轭：$\mathbf{P} : \dot{\mathbf{F}} = J\boldsymbol{\sigma} : \mathbf{D}$
+
+3. **第二Piola-Kirchhoff应力张量** $\mathbf{S}$：
+   $$\mathbf{S} = \mathbf{F}^{-1}\mathbf{P} = J\mathbf{F}^{-1}\boldsymbol{\sigma}\mathbf{F}^{-T}$$
+   - 定义：完全参考构型的应力度量
+   - 对称性：$\mathbf{S} = \mathbf{S}^T$
+   - 功共轭：$\mathbf{S} : \dot{\mathbf{E}} = J\boldsymbol{\sigma} : \mathbf{D}$
+
+4. **Kirchhoff应力张量** $\boldsymbol{\tau}$：
+   $$\boldsymbol{\tau} = J\boldsymbol{\sigma}$$
+   - 应用：不可压缩材料（$J = 1$）时等于Cauchy应力
+   - 优点：在大变形问题中数值稳定性更好
 
 **守恒方程**：
-在连续介质力学中，基本守恒定律在物质描述下表示为：
+连续介质必须满足基本的物理守恒定律：
 
 1. **质量守恒**（连续性方程）：
-   - 拉格朗日形式：$\rho_0 = J\rho$
+   - 积分形式：$\frac{d}{dt}\int_{\Omega_t} \rho \, dv = 0$
+   - 拉格朗日形式：$\rho_0 = J\rho$（质量密度关系）
    - 欧拉形式：$\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho\mathbf{v}) = 0$
    - 物质导数形式：$\frac{D\rho}{Dt} + \rho\nabla \cdot \mathbf{v} = 0$
+   
+   对于不可压缩材料：$\nabla \cdot \mathbf{v} = 0$
 
-2. **动量守恒**：
+2. **动量守恒**（运动方程）：
+   - 积分形式：$\frac{d}{dt}\int_{\Omega_t} \rho\mathbf{v} \, dv = \int_{\Omega_t} \rho\mathbf{b} \, dv + \int_{\partial\Omega_t} \mathbf{t} \, da$
    - 拉格朗日形式：$\rho_0 \frac{\partial^2 \phi}{\partial t^2} = \nabla_0 \cdot \mathbf{P} + \rho_0\mathbf{b}$
-   - 欧拉形式：$\rho\frac{D\mathbf{v}}{Dt} = \nabla \cdot \boldsymbol{\sigma} + \rho\mathbf{b}$
+   - 欧拉形式（Cauchy运动方程）：$\rho\frac{D\mathbf{v}}{Dt} = \nabla \cdot \boldsymbol{\sigma} + \rho\mathbf{b}$
    
    其中物质导数：$\frac{D(\cdot)}{Dt} = \frac{\partial(\cdot)}{\partial t} + \mathbf{v} \cdot \nabla(\cdot)$
 
 3. **角动量守恒**：
-   导致应力张量的对称性：$\boldsymbol{\sigma} = \boldsymbol{\sigma}^T$
+   - 积分形式：$\frac{d}{dt}\int_{\Omega_t} \mathbf{x} \times \rho\mathbf{v} \, dv = \int_{\Omega_t} \mathbf{x} \times \rho\mathbf{b} \, dv + \int_{\partial\Omega_t} \mathbf{x} \times \mathbf{t} \, da$
+   - 局部结果：Cauchy应力张量的对称性 $\boldsymbol{\sigma} = \boldsymbol{\sigma}^T$
 
-4. **能量守恒**（第一定律）：
+4. **能量守恒**（热力学第一定律）：
    $$\rho\frac{De}{Dt} = \boldsymbol{\sigma} : \mathbf{D} - \nabla \cdot \mathbf{q} + \rho r$$
-   其中 $e$ 是比内能，$\mathbf{D} = \frac{1}{2}(\nabla\mathbf{v} + \nabla\mathbf{v}^T)$ 是变形率张量，$\mathbf{q}$ 是热流，$r$ 是热源。
+   其中：
+   - $e$：比内能
+   - $\boldsymbol{\sigma} : \mathbf{D}$：应力功率（机械功）
+   - $\mathbf{q}$：热流向量（Fourier定律：$\mathbf{q} = -k\nabla T$）
+   - $r$：体积热源
+   
+   总能量形式：$\rho\frac{D}{Dt}(e + \frac{1}{2}|\mathbf{v}|^2) = \nabla \cdot (\boldsymbol{\sigma} \cdot \mathbf{v}) - \nabla \cdot \mathbf{q} + \rho(\mathbf{b} \cdot \mathbf{v} + r)$
 
-**虚功原理**：
-弱形式的动量方程，对任意虚位移 $\delta\mathbf{u}$：
+5. **熵不等式**（热力学第二定律）：
+   $$\rho\frac{Ds}{Dt} + \nabla \cdot \left(\frac{\mathbf{q}}{T}\right) - \frac{\rho r}{T} \geq 0$$
+   其中 $s$ 是比熵，$T$ 是绝对温度。
+
+**边界条件和初始条件**：
+完整的边值问题需要指定：
+1. **边界条件**：
+   - Dirichlet（本质）：$\mathbf{u} = \overline{\mathbf{u}}$ 在 $\partial\Omega_u$ 上
+   - Neumann（自然）：$\mathbf{t} = \boldsymbol{\sigma} \cdot \mathbf{n} = \overline{\mathbf{t}}$ 在 $\partial\Omega_t$ 上
+   - Robin（混合）：$\alpha\mathbf{u} + \beta\mathbf{t} = \mathbf{g}$
+   
+2. **初始条件**：
+   - 位置：$\mathbf{x}(\mathbf{X}, 0) = \mathbf{x}_0(\mathbf{X})$
+   - 速度：$\mathbf{v}(\mathbf{X}, 0) = \mathbf{v}_0(\mathbf{X})$
+
+**虚功原理和弱形式**：
+强形式的平衡方程等价于虚功原理，对任意运动学可容许的虚位移 $\delta\mathbf{u}$（满足 $\delta\mathbf{u} = \mathbf{0}$ 在 $\partial\Omega_u$ 上）：
+$$\delta W = \delta W^{\text{int}} - \delta W^{\text{ext}} = 0$$
+
+展开为：
 $$\int_{\Omega} \rho \ddot{\mathbf{u}} \cdot \delta\mathbf{u} \, dV + \int_{\Omega} \boldsymbol{\sigma} : \delta\boldsymbol{\epsilon} \, dV = \int_{\Omega} \rho\mathbf{b} \cdot \delta\mathbf{u} \, dV + \int_{\partial\Omega_t} \mathbf{t} \cdot \delta\mathbf{u} \, dA$$
+
+这是有限元方法和MPM的理论基础，通过分部积分将二阶导数降为一阶，降低了对解的光滑性要求。
 
 ### 12.1.2 MPM的基本框架
 
@@ -101,232 +180,448 @@ MPM巧妙地结合了拉格朗日粒子法和欧拉网格法的优势。物质�
 1. **双重表示**：材料既由粒子表示（携带历史），又通过网格求解（高效计算）
 2. **信息流动**：粒子→网格（收集信息）→求解→网格→粒子（更新状态）
 3. **自动处理拓扑变化**：无需显式追踪界面或重新网格化
+4. **混合方法优势**：结合了拉格朗日方法的材料追踪能力和欧拉方法的计算效率
+
+**理论基础**：
+MPM可以看作是有限元方法的粒子化版本。考虑弱形式：
+$$\int_\Omega \rho \frac{D\mathbf{v}}{Dt} \cdot \delta\mathbf{v} \, dV + \int_\Omega \boldsymbol{\sigma} : \nabla\delta\mathbf{v} \, dV = \int_\Omega \rho\mathbf{b} \cdot \delta\mathbf{v} \, dV$$
+
+MPM使用粒子进行积分近似：
+$$\int_\Omega (\cdot) \, dV \approx \sum_p V_p (\cdot)_p$$
 
 **离散化策略**：
 将连续体 $\Omega$ 离散为 $N_p$ 个粒子，每个粒子 $p$ 代表一小块材料：
 - 初始体积：$V_p^0 = \int_{\Omega_p^0} dV$
 - 质量守恒：$m_p = \rho_p^0 V_p^0 = \text{const}$
 - 当前体积：$V_p = J_p V_p^0$
+- 密度更新：$\rho_p = m_p / V_p = \rho_p^0 / J_p$
+
+**粒子初始化**：
+粒子的初始分布影响数值精度：
+1. **规则分布**：在每个网格单元内均匀放置 $2^d$ 个粒子（$d$ 是维度）
+2. **随机扰动**：添加小的随机偏移避免人工各向异性
+3. **自适应分布**：根据应力梯度或变形程度调整粒子密度
 
 **基本变量**：
 1. **粒子变量**（拉格朗日）：
    - 位置：$\mathbf{x}_p \in \mathbb{R}^d$
    - 速度：$\mathbf{v}_p \in \mathbb{R}^d$
    - 质量：$m_p \in \mathbb{R}^+$（常数）
-   - 体积：$V_p \in \mathbb{R}^+$
-   - 变形梯度：$\mathbf{F}_p \in \mathbb{R}^{d \times d}$
+   - 初始体积：$V_p^0 \in \mathbb{R}^+$（常数）
+   - 当前体积：$V_p = J_p V_p^0$
+   - 变形梯度：$\mathbf{F}_p \in \mathbb{R}^{d \times d}$，$\det(\mathbf{F}_p) > 0$
    - 应力张量：$\boldsymbol{\sigma}_p \in \mathbb{R}^{d \times d}$
-   - 内部变量：塑性应变 $\boldsymbol{\epsilon}_p^p$、损伤变量 $d_p$ 等
+   - 内部变量：
+     - 塑性应变：$\boldsymbol{\epsilon}_p^p$
+     - 等效塑性应变：$\bar{\epsilon}_p^p$
+     - 损伤变量：$d_p \in [0,1]$
+     - 温度：$T_p$
+     - 相场变量：$\phi_p$（多相材料）
 
 2. **网格变量**（欧拉）：
+   - 节点位置：$\mathbf{x}_i \in \mathbb{R}^d$（固定）
    - 节点速度：$\mathbf{v}_i \in \mathbb{R}^d$
    - 节点质量：$m_i \in \mathbb{R}^+$
    - 节点动量：$\mathbf{p}_i = m_i \mathbf{v}_i$
-   - 节点力：$\mathbf{f}_i \in \mathbb{R}^d$
+   - 节点内力：$\mathbf{f}_i^{\text{int}} \in \mathbb{R}^d$
+   - 节点外力：$\mathbf{f}_i^{\text{ext}} \in \mathbb{R}^d$
 
-**MPM的计算循环**（单个时间步）：
+**MPM的计算循环**（单个时间步 $[t^n, t^{n+1}]$）：
 
 1. **粒子到网格的传输（P2G）**：
    
-   质量传输：
+   **质量传输**：
    $$m_i = \sum_p w_{ip} m_p$$
    
-   动量传输：
+   这确保了总质量守恒：$\sum_i m_i = \sum_p m_p$
+   
+   **动量传输**：
    $$\mathbf{p}_i = \sum_p w_{ip} m_p \mathbf{v}_p$$
    
    其中插值权重：$w_{ip} = N_i(\mathbf{x}_p)$，$N_i$ 是与节点 $i$ 关联的形函数。
    
-   速度计算：
-   $$\mathbf{v}_i = \frac{\mathbf{p}_i}{m_i} = \frac{\sum_p w_{ip} m_p \mathbf{v}_p}{\sum_p w_{ip} m_p}$$
+   **速度计算**：
+   $$\mathbf{v}_i = \begin{cases}
+   \frac{\mathbf{p}_i}{m_i} & \text{if } m_i > \epsilon_m \\
+   \mathbf{0} & \text{otherwise}
+   \end{cases}$$
+   
+   其中 $\epsilon_m$ 是防止除零的小量（如 $10^{-10}$）。
 
 2. **力的计算**：
    
-   内力（来自应力散度）：
+   **内力**（来自应力散度）：
    $$\mathbf{f}_i^{\text{int}} = -\sum_p V_p \boldsymbol{\sigma}_p \nabla w_{ip}$$
    
-   这是虚功原理的离散形式：
-   $$\delta W^{\text{int}} = -\int_\Omega \boldsymbol{\sigma} : \delta\boldsymbol{\epsilon} \, dV \approx -\sum_p V_p \boldsymbol{\sigma}_p : \sum_i \delta\mathbf{v}_i \otimes \nabla w_{ip}$$
+   这是虚功原理的离散形式。对于任意虚速度场 $\delta\mathbf{v} = \sum_i \delta\mathbf{v}_i N_i$：
+   $$\delta W^{\text{int}} = -\int_\Omega \boldsymbol{\sigma} : \nabla\delta\mathbf{v} \, dV \approx -\sum_p V_p \boldsymbol{\sigma}_p : \sum_i \delta\mathbf{v}_i \otimes \nabla w_{ip}$$
    
-   外力：
-   $$\mathbf{f}_i^{\text{ext}} = \sum_p w_{ip} m_p \mathbf{b}_p + \mathbf{f}_i^{\text{traction}}$$
+   整理得到节点力：
+   $$\mathbf{f}_i^{\text{int}} = -\frac{\partial W^{\text{int}}}{\partial \mathbf{v}_i}$$
    
-   其中 $\mathbf{b}_p$ 是体力（如重力），$\mathbf{f}_i^{\text{traction}}$ 是表面力。
+   **外力**：
+   - 体力贡献：$\mathbf{f}_i^{\text{body}} = \sum_p w_{ip} m_p \mathbf{b}_p$
+   - 表面力贡献：$\mathbf{f}_i^{\text{traction}} = \int_{\partial\Omega_t} N_i \mathbf{t} \, dA$
+   - 总外力：$\mathbf{f}_i^{\text{ext}} = \mathbf{f}_i^{\text{body}} + \mathbf{f}_i^{\text{traction}}$
+   
+   **阻尼力**（可选）：
+   $$\mathbf{f}_i^{\text{damp}} = -c_d m_i \mathbf{v}_i$$
+   其中 $c_d$ 是阻尼系数。
 
-3. **网格上的动量更新**（显式时间积分）：
+3. **网格上的动量更新**：
+   
+   **显式欧拉**（一阶精度）：
    $$\mathbf{v}_i^{n+1} = \mathbf{v}_i^n + \frac{\Delta t}{m_i} (\mathbf{f}_i^{\text{int}} + \mathbf{f}_i^{\text{ext}})$$
    
-   或写成动量形式：
+   **辛欧拉**（保持相空间体积）：
    $$\mathbf{p}_i^{n+1} = \mathbf{p}_i^n + \Delta t \mathbf{f}_i$$
+   $$\mathbf{v}_i^{n+1} = \mathbf{p}_i^{n+1} / m_i$$
+   
+   **速度Verlet**（二阶精度）：
+   $$\mathbf{v}_i^{n+1/2} = \mathbf{v}_i^n + \frac{\Delta t}{2m_i} \mathbf{f}_i^n$$
+   $$\mathbf{v}_i^{n+1} = \mathbf{v}_i^{n+1/2} + \frac{\Delta t}{2m_i} \mathbf{f}_i^{n+1}$$
 
 4. **边界条件处理**：
-   - **Dirichlet边界**：直接设置 $\mathbf{v}_i = \mathbf{v}_{\text{prescribed}}$
-   - **Neumann边界**：添加表面力到 $\mathbf{f}_i^{\text{ext}}$
-   - **摩擦接触**：投影速度到允许集合
+   
+   **Dirichlet边界**（位移/速度约束）：
+   - 固定边界：$\mathbf{v}_i = \mathbf{0}$
+   - 移动边界：$\mathbf{v}_i = \mathbf{v}_{\text{prescribed}}(t)$
+   - 滑移边界：$\mathbf{v}_i \cdot \mathbf{n} = 0$，$\mathbf{v}_i = \mathbf{v}_i - (\mathbf{v}_i \cdot \mathbf{n})\mathbf{n}$
+   
+   **Neumann边界**（力/应力约束）：
+   已包含在 $\mathbf{f}_i^{\text{traction}}$ 中
+   
+   **接触边界**（单侧约束）：
+   - 法向：$\mathbf{v}_n = \max(0, \mathbf{v}_i \cdot \mathbf{n})$
+   - 切向（库仑摩擦）：
+     $$\mathbf{v}_t = \begin{cases}
+     \mathbf{0} & \text{if } ||\mathbf{v}_t|| \leq \mu |\mathbf{v}_n| \\
+     (1-\mu|\mathbf{v}_n|/||\mathbf{v}_t||)\mathbf{v}_t & \text{otherwise}
+     \end{cases}$$
+     其中 $\mu$ 是摩擦系数。
 
 5. **网格到粒子的传输（G2P）**：
    
-   速度更新：
+   **PIC更新**（Particle-In-Cell，数值耗散大）：
    $$\mathbf{v}_p^{n+1} = \sum_i w_{ip} \mathbf{v}_i^{n+1}$$
    
-   位置更新：
+   **FLIP更新**（Fluid-Implicit-Particle，保持细节但有噪声）：
+   $$\mathbf{v}_p^{n+1} = \mathbf{v}_p^n + \sum_i w_{ip} (\mathbf{v}_i^{n+1} - \mathbf{v}_i^n)$$
+   
+   **PIC/FLIP混合**（平衡耗散和噪声）：
+   $$\mathbf{v}_p^{n+1} = (1-\alpha)\mathbf{v}_p^{\text{PIC}} + \alpha\mathbf{v}_p^{\text{FLIP}}$$
+   典型取 $\alpha \in [0.95, 0.99]$。
+   
+   **位置更新**：
    $$\mathbf{x}_p^{n+1} = \mathbf{x}_p^n + \Delta t \mathbf{v}_p^{n+1}$$
    
-   或使用FLIP混合：
-   $$\mathbf{v}_p^{n+1} = (1-\alpha)\sum_i w_{ip} \mathbf{v}_i^{n+1} + \alpha[\mathbf{v}_p^n + \sum_i w_{ip} (\mathbf{v}_i^{n+1} - \mathbf{v}_i^n)]$$
-   其中 $\alpha \in [0,1]$ 控制PIC（$\alpha=0$）和FLIP（$\alpha=1$）的混合比例。
+   或使用中点法提高精度：
+   $$\mathbf{x}_p^{n+1} = \mathbf{x}_p^n + \Delta t \sum_i w_{ip} \frac{\mathbf{v}_i^{n+1} + \mathbf{v}_i^n}{2}$$
 
 6. **变形梯度更新**：
    
-   速度梯度：
+   **速度梯度计算**：
    $$\mathbf{L}_p = \sum_i \mathbf{v}_i^{n+1} \otimes \nabla w_{ip}$$
    
-   变形梯度更新：
+   **一阶更新**（简单但可能引入误差）：
    $$\mathbf{F}_p^{n+1} = (\mathbf{I} + \Delta t \mathbf{L}_p) \mathbf{F}_p^n$$
    
-   或使用更精确的指数映射：
+   **指数映射**（保持正定性和体积）：
    $$\mathbf{F}_p^{n+1} = \exp(\Delta t \mathbf{L}_p) \mathbf{F}_p^n$$
+   
+   对于小时间步，使用Padé近似：
+   $$\exp(\mathbf{A}) \approx (\mathbf{I} - \frac{1}{2}\mathbf{A})^{-1}(\mathbf{I} + \frac{1}{2}\mathbf{A})$$
+   
+   **体积更新**：
+   $$J_p^{n+1} = \det(\mathbf{F}_p^{n+1})$$
+   $$V_p^{n+1} = J_p^{n+1} V_p^0$$
 
 7. **应力更新**：
+   
    根据本构模型计算新的应力：
-   $$\boldsymbol{\sigma}_p^{n+1} = \mathcal{C}(\mathbf{F}_p^{n+1}, \text{history}_p)$$
-   其中 $\mathcal{C}$ 是本构关系，history包含塑性变量等。
+   $$\boldsymbol{\sigma}_p^{n+1} = \mathcal{C}(\mathbf{F}_p^{n+1}, \{\text{history}_p\})$$
+   
+   其中 $\mathcal{C}$ 是本构关系，history包含：
+   - 塑性应变历史
+   - 损伤演化
+   - 温度历史
+   - 相变状态
+   
+   **返回映射算法**（塑性）：
+   1. 弹性预测：$\boldsymbol{\sigma}^{\text{trial}} = \mathcal{C}^{\text{elastic}}(\mathbf{F}^{n+1})$
+   2. 检查屈服：$f(\boldsymbol{\sigma}^{\text{trial}}) \leq 0$？
+   3. 塑性修正：如果 $f > 0$，投影回屈服面
 
-**算法特点**：
-1. **自动质量守恒**：粒子质量不变，自动满足质量守恒
-2. **动量守恒**：通过网格求解保证动量守恒
-3. **历史依赖**：粒子携带所有历史变量，适合路径依赖材料
-4. **大变形能力**：无网格畸变问题，可处理任意大变形
+**算法特点与优势**：
+1. **自动质量守恒**：粒子质量不变，总质量精确守恒
+2. **动量守恒**：通过网格求解，动量守恒到机器精度
+3. **历史依赖**：粒子携带所有历史变量，自然处理路径依赖材料
+4. **大变形能力**：无网格畸变，可处理任意大变形和拓扑变化
+5. **多物理耦合**：易于添加热传导、相变、化学反应等
+6. **并行友好**：P2G和G2P阶段高度并行
+
+**数值考虑**：
+1. **网格穿越误差**：粒子穿越网格单元时可能引入误差
+2. **数值断裂**：粒子分离可能导致非物理断裂
+3. **粒子聚集**：某些区域粒子过度聚集影响精度
+4. **边界处理**：需要特殊技术处理复杂边界
 
 ### 12.1.3 粒子-网格交互
 
-粒子与网格之间的信息传递是MPM的核心，形函数的选择直接影响数值精度、稳定性和计算效率。
+粒子与网格之间的信息传递是MPM的核心，形函数的选择直接影响数值精度、稳定性和计算效率。本节深入探讨形函数理论、实现细节和性能优化。
 
 **形函数的数学基础**：
-形函数 $N_i(\mathbf{x})$ 必须满足：
-1. **插值性**：$\sum_i N_i(\mathbf{x}) = 1$（分割单位性）
-2. **紧支性**：$N_i(\mathbf{x}) = 0$ 当 $\mathbf{x}$ 远离节点 $i$
-3. **非负性**：$N_i(\mathbf{x}) \geq 0$
-4. **光滑性**：至少 $C^0$ 连续，理想情况下 $C^1$ 或更高
+形函数 $N_i(\mathbf{x})$ 是定义在网格上的基函数，必须满足以下性质：
+1. **插值性**（分割单位性）：$\sum_i N_i(\mathbf{x}) = 1$ 对所有 $\mathbf{x} \in \Omega$
+2. **紧支性**：$N_i(\mathbf{x}) = 0$ 当 $||\mathbf{x} - \mathbf{x}_i|| > r_{\text{support}}$
+3. **非负性**：$N_i(\mathbf{x}) \geq 0$（保证物理意义）
+4. **光滑性**：至少 $C^0$ 连续，理想情况下 $C^{k-1}$（$k$ 阶精度需要）
+5. **局部性**：每个点最多被有限个形函数覆盖
+
+**理论基础**：
+从重构理论角度，任意函数 $f(\mathbf{x})$ 可以近似为：
+$$f(\mathbf{x}) \approx \sum_i f_i N_i(\mathbf{x})$$
+
+重构误差与形函数的逼近阶数相关：
+$$||f - f_h||_{L^2} = O(h^{k+1})$$
+其中 $k$ 是多项式精度阶数。
 
 **常用形函数族**：
 
-1. **线性形函数**（帐篷函数）：
+1. **线性形函数**（帐篷函数/三线性插值）：
    
-   一维情况：
+   一维基函数：
    $$N^1(\xi) = \begin{cases}
    1 - |\xi| & |\xi| < 1 \\
    0 & \text{otherwise}
    \end{cases}$$
    
-   多维张量积：
-   $$N(\boldsymbol{\xi}) = \prod_{d=1}^D N^1(\xi_d)$$
-   
-   梯度：
-   $$\frac{\partial N^1}{\partial \xi} = \begin{cases}
+   导数：
+   $$\frac{dN^1}{d\xi} = \begin{cases}
    -\text{sign}(\xi) & |\xi| < 1 \\
    0 & \text{otherwise}
    \end{cases}$$
    
+   多维张量积（分离变量）：
+   $$N(\boldsymbol{\xi}) = \prod_{d=1}^D N^1(\xi_d)$$
+   
+   梯度（链式法则）：
+   $$\nabla N = \frac{1}{h}\begin{bmatrix}
+   \frac{dN^1}{d\xi_1}(\xi_1) \prod_{d=2}^D N^1(\xi_d) \\
+   N^1(\xi_1) \frac{dN^1}{d\xi_2}(\xi_2) \prod_{d=3}^D N^1(\xi_d) \\
+   \vdots
+   \end{bmatrix}$$
+   
    特点：
-   - 计算简单，内存访问局部（2×2×2邻域）
-   - $C^0$ 连续，梯度不连续
-   - 可能导致"网格穿越噪声"
+   - 支撑域：$2^D$ 个节点（2×2×2 in 3D）
+   - 连续性：$C^0$（位置连续，速度不连续）
+   - 计算效率：最高（简单的加减乘除）
+   - 数值问题：网格穿越噪声、力的不连续性
 
 2. **二次B样条**：
    
-   一维形式：
+   一维基函数（中心化）：
    $$N^2(\xi) = \begin{cases}
    \frac{3}{4} - \xi^2 & |\xi| \leq \frac{1}{2} \\
    \frac{1}{2}(\frac{3}{2} - |\xi|)^2 & \frac{1}{2} < |\xi| \leq \frac{3}{2} \\
    0 & |\xi| > \frac{3}{2}
    \end{cases}$$
    
-   梯度：
-   $$\frac{\partial N^2}{\partial \xi} = \begin{cases}
+   导数：
+   $$\frac{dN^2}{d\xi} = \begin{cases}
    -2\xi & |\xi| \leq \frac{1}{2} \\
    -\text{sign}(\xi)(\frac{3}{2} - |\xi|) & \frac{1}{2} < |\xi| \leq \frac{3}{2} \\
    0 & |\xi| > \frac{3}{2}
    \end{cases}$$
    
    特点：
-   - $C^1$ 连续
-   - 3×3×3邻域
-   - 更光滑的力传递
+   - 支撑域：$3^D$ 个节点（3×3×3 in 3D）
+   - 连续性：$C^1$（速度连续）
+   - 精度：$O(h^3)$ 收敛率
+   - 应用：流体模拟首选（平滑性好）
 
 3. **三次B样条**：
    
-   一维形式：
-   $$N^3(\xi) = \begin{cases}
-   \frac{1}{2}|\xi|^3 - \xi^2 + \frac{2}{3} & |\xi| \leq 1 \\
-   -\frac{1}{6}|\xi|^3 + \xi^2 - 2|\xi| + \frac{4}{3} & 1 < |\xi| \leq 2 \\
+   一维基函数：
+   $$N^3(\xi) = \frac{1}{6}\begin{cases}
+   (2-|\xi|)^3 & 1 < |\xi| \leq 2 \\
+   4 - 6\xi^2 + 3|\xi|^3 & |\xi| \leq 1 \\
+   0 & |\xi| > 2
+   \end{cases}$$
+   
+   导数：
+   $$\frac{dN^3}{d\xi} = \frac{1}{6}\begin{cases}
+   -3\text{sign}(\xi)(2-|\xi|)^2 & 1 < |\xi| \leq 2 \\
+   -12\xi + 9\xi|\xi| & |\xi| \leq 1 \\
    0 & |\xi| > 2
    \end{cases}$$
    
    特点：
-   - $C^2$ 连续
-   - 4×4×4邻域
-   - 最光滑但计算量大
+   - 支撑域：$4^D$ 个节点（4×4×4 in 3D）
+   - 连续性：$C^2$（加速度连续）
+   - 精度：$O(h^4)$ 收敛率
+   - 代价：计算量大，内存带宽需求高
 
 4. **GIMP（Generalized Interpolation Material Point）形函数**：
    
-   考虑粒子的有限尺寸，形函数变为卷积：
+   核心思想：考虑粒子的有限尺寸，通过卷积获得形函数：
    $$S_{ip} = \int_{\Omega_p} N_i(\mathbf{x}) \chi_p(\mathbf{x}) d\mathbf{x}$$
    
-   其中 $\chi_p$ 是粒子的特征函数。对于矩形粒子：
-   $$S_{ip} = \prod_{d=1}^D S^1\left(\frac{x_{id} - x_{pd}}{h}, \frac{l_{pd}}{h}\right)$$
+   其中 $\chi_p$ 是粒子的特征函数（形状函数）。
    
-   其中 $l_{pd}$ 是粒子在 $d$ 方向的半宽度。
-
-**权重和梯度计算**：
-
-给定粒子位置 $\mathbf{x}_p$ 和网格节点位置 $\mathbf{x}_i$：
-
-1. **归一化坐标**：
-   $$\boldsymbol{\xi} = \frac{\mathbf{x}_p - \mathbf{x}_i}{h}$$
+   对于轴对齐矩形粒子，一维GIMP权重：
+   $$S^1_{ip}(\xi, l) = \begin{cases}
+   1 - \frac{(|\xi|-l)^2}{4l} & l < |\xi| < 1+l \\
+   1 - |\xi| & |\xi| < l \\
+   0 & |\xi| > 1+l
+   \end{cases}$$
    
-   其中 $h$ 是网格间距（假设均匀网格）。
-
-2. **权重**：
-   $$w_{ip} = N(\boldsymbol{\xi}) = \prod_{d=1}^D N(\xi_d)$$
-
-3. **梯度**：
-   $$\nabla w_{ip} = \frac{1}{h} \nabla_{\boldsymbol{\xi}} N(\boldsymbol{\xi})$$
+   其中 $l = l_p/h$ 是归一化粒子半宽度。
    
-   对于张量积形函数：
-   $$\frac{\partial w_{ip}}{\partial x_k} = \frac{1}{h} \frac{\partial N(\xi_k)}{\partial \xi_k} \prod_{d \neq k} N(\xi_d)$$
+   梯度（使用Leibniz积分法则）：
+   $$\nabla S_{ip} = \int_{\Omega_p} \nabla N_i(\mathbf{x}) \chi_p(\mathbf{x}) d\mathbf{x}$$
+   
+   优势：
+   - 减少粒子穿透
+   - 更好的动量传递
+   - 自适应分辨率
+   
+   变种：
+   - cpGIMP：收缩粒子域GIMP
+   - uGIMP：均匀GIMP（简化计算）
+
+**权重和梯度的高效计算**：
+
+给定粒子位置 $\mathbf{x}_p$ 和网格节点 $i$ 的位置 $\mathbf{x}_i$：
+
+1. **坐标变换**：
+   ```
+   基节点索引: base = floor(x_p / h)
+   局部坐标: ξ = (x_p - x_i) / h
+   相对索引: offset = i - base
+   ```
+
+2. **权重计算优化**：
+   - **查表法**：预计算 $N(\xi)$ 在细分网格上的值
+   - **分段多项式**：直接计算，利用分支预测
+   - **SIMD向量化**：同时计算多个维度
+
+3. **梯度计算技巧**：
+   $$\nabla w_{ip} = \frac{1}{h} \begin{bmatrix}
+   \frac{\partial N}{\partial \xi_1} \frac{N(\xi_2)N(\xi_3)}{N(\boldsymbol{\xi})} \\
+   \frac{\partial N}{\partial \xi_2} \frac{N(\xi_1)N(\xi_3)}{N(\boldsymbol{\xi})} \\
+   \frac{\partial N}{\partial \xi_3} \frac{N(\xi_1)N(\xi_2)}{N(\boldsymbol{\xi})}
+   \end{bmatrix} w_{ip}$$
+   
+   避免重复计算基函数值。
+
+**误差分析与收敛性**：
+
+1. **插值误差估计**：
+   对于 $k$ 阶精度的形函数：
+   $$||f - \Pi_h f||_{L^2(\Omega)} \leq C h^{k+1} ||f||_{H^{k+1}(\Omega)}$$
+   
+   其中 $\Pi_h$ 是插值算子。
+
+2. **积分精度**：
+   数值积分误差：
+   $$\left|\int_\Omega f dV - \sum_p V_p f_p\right| \leq C h^{k+1} ||f||_{W^{k+1,1}(\Omega)}$$
+
+3. **条件数分析**：
+   质量矩阵条件数：$\kappa(M) = O(1)$（对角占优）
+   刚度矩阵条件数：$\kappa(K) = O(h^{-2})$（与FEM相同）
+
+**数值稳定性考虑**：
+
+1. **质量聚集问题**：
+   当 $m_i = \sum_p w_{ip} m_p < \epsilon_m$ 时：
+   - 跳过该节点的力计算
+   - 或使用正则化：$\tilde{m}_i = \max(m_i, \epsilon_m)$
+
+2. **梯度爆炸预防**：
+   限制速度梯度：
+   $$||\mathbf{L}_p|| \leq L_{\max} = \frac{c_{\max}}{h}$$
+   
+   其中 $c_{\max}$ 是材料波速上界。
+
+3. **边界附近的处理**：
+   - 使用修正的形函数保证分割单位性
+   - 或采用虚拟节点技术
 
 **高效实现策略**：
 
-1. **预计算优化**：
-   - 存储基函数值表
-   - 使用查找表加速
-   - SIMD向量化
+1. **数据结构优化**：
+   ```
+   struct GridNode {
+       float mass;
+       vec3 momentum;
+       vec3 force;
+       // 填充到缓存行边界
+   };
+   
+   struct Particle {
+       vec3 position;
+       vec3 velocity;
+       mat3 F;  // 变形梯度
+       mat3 stress;
+       float volume;
+       // 按访问模式组织
+   };
+   ```
 
-2. **稀疏性利用**：
-   - 只遍历非零权重的节点
-   - 使用背景网格的空间哈希
-   - 粒子排序提高缓存局部性
+2. **并行化策略**：
+   - **P2G并行**：使用原子操作或图着色避免竞争
+   - **力计算**：完全并行（只读粒子数据）
+   - **G2P并行**：每个粒子独立更新
 
-3. **数值稳定性**：
-   - 避免除以极小的质量：$m_i < \epsilon \Rightarrow$ 跳过节点
-   - 梯度限制防止数值爆炸
-   - 使用双精度累加器
+3. **内存访问优化**：
+   - **粒子排序**：按空间位置排序（Z-order、Hilbert曲线）
+   - **缓存预取**：显式预取下一个粒子数据
+   - **AoS vs SoA**：根据访问模式选择
 
-**误差分析**：
+4. **计算优化**：
+   ```
+   // 避免重复计算
+   float wx = N1(xi.x);
+   float wy = N1(xi.y);
+   float wz = N1(xi.z);
+   float wip = wx * wy * wz;
+   
+   // 利用对称性
+   grad_wip.x = dN1(xi.x) * wy * wz / h;
+   ```
 
-插值误差满足：
-$$||\mathbf{u} - \mathbf{u}_h||_{L^2} \leq C h^{k+1} ||\mathbf{u}||_{H^{k+1}}$$
+**自适应形函数选择**：
 
-其中 $k$ 是形函数的多项式阶数。因此：
-- 线性：$O(h^2)$ 收敛
-- 二次B样条：$O(h^3)$ 收敛
-- 三次B样条：$O(h^4)$ 收敛
+根据局部物理状态动态选择形函数：
+1. **应变率准则**：
+   $$\text{order} = \begin{cases}
+   1 & ||\mathbf{D}|| > D_{\text{thresh}} \\
+   2 & \text{otherwise}
+   \end{cases}$$
 
-**形函数选择准则**：
-1. **光滑材料**：使用高阶B样条
-2. **碎裂/断裂**：线性函数足够
-3. **流体**：二次B样条平衡精度和效率
-4. **接触问题**：考虑GIMP减少穿透
+2. **材料类型准则**：
+   - 固体：二次B样条（平滑应力）
+   - 流体：三次B样条（高精度）
+   - 颗粒：线性（计算效率）
+
+3. **混合形函数**：
+   在过渡区域使用加权组合：
+   $$N^{\text{mix}} = \alpha N^{\text{low}} + (1-\alpha) N^{\text{high}}$$
+
+**形函数选择决策树**：
+```
+材料类型？
+├─ 弹性固体
+│  └─ 二次B样条（C¹连续性）
+├─ 流体
+│  ├─ 低雷诺数 → 三次B样条
+│  └─ 高雷诺数 → 二次B样条
+├─ 颗粒材料
+│  └─ 线性 + GIMP（防穿透）
+└─ 大变形塑性
+   └─ 自适应（应变率相关）
+```
 
 ### 12.1.4 时间积分方案
 
