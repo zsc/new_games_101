@@ -148,6 +148,13 @@
 - 计算公式：$\omega = \frac{A}{r^2}$（球面上面积$A$除以半径平方）
 - 平面角类比：2D中弧度 $\theta = \frac{s}{r}$，3D中立体角 $\omega = \frac{A}{r^2}$
 - 直观理解：圆锥角 $\omega = 2\pi(1 - \cos\theta)$，其中 $\theta$ 是半角
+- 单位立体角的物理尺度：1 sr ≈ 65.5°圆锥角，约占全球面的 $\frac{1}{4\pi} \approx 8\%$
+
+**立体角的拓扑结构**
+- 球面 $S^2$ 是二维流形，局部同胚于 $\mathbb{R}^2$
+- 参数化奇点：球坐标在极点处退化（$\sin\theta = 0$）
+- 替代参数化：立方体映射、八面体映射避免奇点
+- Gauss-Bonnet定理：$\int_{S^2} K \, dA = 4\pi$（$K=1/r^2$ 是高斯曲率）
 
 **立体角的微分形式**
 在球坐标系 $(\theta, \phi)$ 中：
@@ -159,12 +166,25 @@ $$d\omega = \sin\theta \, d\theta \, d\phi$$
 - 面积：$dA = r^2 \sin\theta \, d\theta \, d\phi$
 - 立体角：$d\omega = \frac{dA}{r^2} = \sin\theta \, d\theta \, d\phi$
 
+**度量张量视角**
+球面上的度量张量：
+$$g = \begin{pmatrix} 1 & 0 \\ 0 & \sin^2\theta \end{pmatrix}$$
+
+面积元素：$dA = \sqrt{\det(g)} \, d\theta \, d\phi = \sin\theta \, d\theta \, d\phi$
+
 **笛卡尔坐标表示**：
 对于方向向量 $\omega = (\omega_x, \omega_y, \omega_z)$：
 - $\omega_x = \sin\theta\cos\phi$
 - $\omega_y = \sin\theta\sin\phi$  
 - $\omega_z = \cos\theta$
 - 约束：$\omega_x^2 + \omega_y^2 + \omega_z^2 = 1$
+
+**坐标转换的数值稳定性**：
+- 避免 $\arccos$ 的数值误差：使用 $\theta = \text{atan2}(\sqrt{\omega_x^2 + \omega_y^2}, \omega_z)$
+- 处理 $\phi$ 的奇点：当 $\sin\theta \approx 0$ 时，$\phi$ 不确定
+- 四元数表示：避免万向锁问题，用于旋转插值
+- Rodrigues公式：旋转向量 $\mathbf{v}$ 绕轴 $\mathbf{k}$ 角度 $\theta$：
+  $$\mathbf{v}_{rot} = \mathbf{v}\cos\theta + (\mathbf{k} \times \mathbf{v})\sin\theta + \mathbf{k}(\mathbf{k} \cdot \mathbf{v})(1-\cos\theta)$$
 
 **半球积分**
 $$\int_{\Omega} d\omega = \int_0^{2\pi} \int_0^{\pi/2} \sin\theta \, d\theta \, d\phi = 2\pi \int_0^{\pi/2} \sin\theta \, d\theta = 2\pi[-\cos\theta]_0^{\pi/2} = 2\pi$$
@@ -173,6 +193,15 @@ $$\int_{\Omega} d\omega = \int_0^{2\pi} \int_0^{\pi/2} \sin\theta \, d\theta \, 
 - 全球：$\int_{4\pi} d\omega = 4\pi$
 - 圆锥：$\int_{\theta_0} d\omega = 2\pi(1 - \cos\theta_0)$
 - 小立体角近似：$\Delta\omega \approx \sin\theta \Delta\theta \Delta\phi$
+- 球冠（spherical cap）：高度 $h$ 的球冠立体角 $\omega = 2\pi h/r$
+- 椭圆锥：需要椭圆积分，无闭式解
+- 任意多边形：使用 Girard's theorem，$\omega = \sum_i \alpha_i - (n-2)\pi$
+
+**特殊函数与立体角**：
+- Legendre多项式展开：$f(\theta) = \sum_{l=0}^{\infty} a_l P_l(\cos\theta)$
+- 球谐函数：$Y_l^m(\theta, \phi)$ 构成 $L^2(S^2)$ 的正交基
+- Zonal harmonics：旋转对称函数 $f(\theta) = \sum_l a_l P_l(\cos\theta)$
+- 快速球谐变换：$O(N^2\log N)$ 算法
 
 **投影立体角（Projected Solid Angle）**
 $$d\omega^\perp = \cos\theta \, d\omega = \cos\theta \sin\theta \, d\theta \, d\phi$$
@@ -182,6 +211,16 @@ $$d\omega^\perp = \cos\theta \, d\omega = \cos\theta \sin\theta \, d\theta \, d\
 - Lambert余弦定律的体现
 - 垂直入射的贡献最大，掠射角贡献趋于零
 - 几何解释：在法线方向投影的立体角
+
+**投影立体角的不变量**：
+- 形状因子（Form Factor）的互易性：$F_{ij} A_i = F_{ji} A_j$
+- Nusselt类比：投影立体角 = 半球上的"有效面积"
+- 守恒定律：封闭系统中 $\sum_j F_{ij} = 1$
+
+**微分几何视角**：
+- 投影算子：$\mathcal{P}_\mathbf{n} = I - \mathbf{n}\mathbf{n}^T$
+- 立体角的外微分：$d\omega = \frac{\mathbf{r} \cdot d\mathbf{A}}{r^3}$
+- Stokes定理应用：$\oint_{\partial S} \mathbf{v} \cdot d\mathbf{l} = \int_S (\nabla \times \mathbf{v}) \cdot d\mathbf{A}$
 
 **应用场景**：
 - 辐照度计算：$E = \int_{\Omega} L \cos\theta \, d\omega = \int_{\Omega} L \, d\omega^\perp$
@@ -194,14 +233,26 @@ $$d\omega^\perp = \cos\theta \, d\omega = \cos\theta \sin\theta \, d\theta \, d\
    
    **推导过程**：
    $$\int_0^{\pi/2} \cos\theta \sin\theta \, d\theta = \int_0^{\pi/2} \frac{1}{2}\sin(2\theta) \, d\theta = \frac{1}{2}$$
+   
+   **几何意义**：半球在其底面的投影面积为 $\pi r^2$，除以 $r^2$ 得 $\pi$
+   
+   **变分原理**：最大化 $\int f(\theta) \cos\theta \, d\omega$ 的分布是 $\delta(\theta)$（法线方向）
 
 2. 余弦的$n$次方积分（用于BRDF分析）：
    $$\int_{\Omega} \cos^n\theta \, d\omega = \frac{2\pi}{n+1}$$
+   
+   **推导**：使用Beta函数
+   $$\int_0^{\pi/2} \cos^n\theta \sin\theta \, d\theta = \int_0^1 u^n \, du = \frac{1}{n+1}$$
    
    **特例**：
    - $n=0$: $2\pi$ （半球立体角）
    - $n=1$: $\pi$ （投影立体角）
    - $n=2$: $\frac{2\pi}{3}$ （Phong模型常用）
+   - $n \to \infty$: $0$ （完美镜面）
+   
+   **一般化**：
+   $$\int_{\Omega} \cos^m\theta \sin^n\theta \, d\omega = \frac{\pi B(\frac{m+1}{2}, \frac{n+1}{2})}{B(\frac{1}{2}, \frac{1}{2})}$$
+   其中 $B$ 是Beta函数
 
 3. 立体角与面积的转换：
    $$d\omega = \frac{\cos\theta' \, dA'}{||\mathbf{p} - \mathbf{p}'||^2}$$
@@ -209,19 +260,41 @@ $$d\omega^\perp = \cos\theta \, d\omega = \cos\theta \sin\theta \, d\theta \, d\
    
    **双向形式**：
    $$dA \, d\omega = \frac{\cos\theta \cos\theta' \, dA \, dA'}{||\mathbf{p} - \mathbf{p}'||^2}$$
+   
+   **几何因子的完整形式**：
+   $$G(\mathbf{p} \leftrightarrow \mathbf{p}') = \frac{\cos\theta \cos\theta'}{||\mathbf{p} - \mathbf{p}'||^2} V(\mathbf{p} \leftrightarrow \mathbf{p}')$$
+   
+   **退化情况处理**：
+   - $\theta' > \pi/2$：背向，$G = 0$
+   - $||\mathbf{p} - \mathbf{p}'|| \to 0$：需要正则化
+   - 共面情况：$\cos\theta = 0$ 或 $\cos\theta' = 0$
 
 **实际应用**
 - **辐照度计算**：$E = \int_{\Omega} L_i \cos\theta \, d\omega$
 - **环境贴图采样**：需要考虑 $\sin\theta$ 项进行重要性采样
   - 纬度-经度映射：$(u,v) \to (\theta,\phi) = (\pi v, 2\pi u)$
   - PDF转换：$p(\theta,\phi) = \frac{p(u,v)}{2\pi^2 \sin\theta}$
+  - 立方体贴图：避免极点奇异性，6个面均匀采样
+  - 八面体映射：更均匀的采样分布
 - **面光源采样**：从立体角域转换到面积域进行采样
   - 均匀采样面积：$p_A = 1/A_{light}$
   - 转换到立体角：$p_\omega = p_A \cdot \frac{r^2}{\cos\theta'}$
+  - 球面光源：直接在立体角域采样更高效
+  - 线性变换光源（Linearly Transformed Cosines）：解析积分
 - **半球均匀采样**：
   - 随机变量：$(\xi_1, \xi_2) \in [0,1]^2$
   - 转换：$\theta = \arccos(\xi_1)$, $\phi = 2\pi\xi_2$
   - PDF: $p(\omega) = 1/(2\pi)$
+- **余弦加权采样**：
+  - 转换：$\theta = \arcsin(\sqrt{\xi_1})$, $\phi = 2\pi\xi_2$
+  - PDF: $p(\omega) = \cos\theta/\pi$
+  - Malley's method：在单位圆盘采样后投影到半球
+
+**高级采样技术**：
+- **球面分层采样**：将球面划分为等面积区域
+- **螺旋采样**：Fibonacci螺旋提供准均匀分布
+- **球面Voronoi图**：最优传输理论应用
+- **蓝噪声采样**：改善视觉质量，减少聚集
 
 ### 8.1.4 BRDF与反射方程
 
@@ -234,41 +307,71 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
 - 入射辐照度引起的出射辐射度变化率
 - 单位：$1/sr$（因为 $[L]/[E] = [W/(m^2 \cdot sr)]/[W/m^2] = 1/sr$）
 - 描述了材质的反射特性，与几何形状无关
+- 局部线性假设：输出正比于输入（在线性光学范围内）
 
 **微观解释**：
 - BRDF描述大量微观交互的统计平均
 - 微表面模型提供物理基础
 - 波长依赖性：$f_r(\omega_i \to \omega_o, \lambda)$
+- 空间变化：Spatially Varying BRDF (SVBRDF): $f_r(\mathbf{x}, \omega_i \to \omega_o)$
+
+**散射理论视角**：
+- 光子与表面的散射截面：$\sigma(\omega_i \to \omega_o)$
+- BRDF与散射截面的关系：$f_r = \frac{\sigma}{\cos\theta_i}$
+- 量子力学解释：电子跃迁和光子重新发射
+
+**一般化到BSDF**：
+- BSDF = BRDF + BTDF（双向散射分布函数）
+- BSSRDF：次表面散射，$S(\mathbf{x}_i, \omega_i \to \mathbf{x}_o, \omega_o)$
+- 各向异性：$f_r(\theta_i, \phi_i \to \theta_o, \phi_o)$ 需要完整的4D函数
 
 **BRDF的基本性质**
 
 1. **非负性**：$f_r(\omega_i \to \omega_o) \geq 0$
    - 物理意义：能量不能为负
+   - 数学结果：正定算子
 
 2. **Helmholtz互易性（Reciprocity）**：
    $$f_r(\omega_i \to \omega_o) = f_r(\omega_o \to \omega_i)$$
    - 物理基础：时间反演对称性
    - 实际意义：光路可逆
    - 应用：双向路径追踪中路径权重计算
+   - 注意：磁光效应下不成立（非互易材料）
+   - 实验验证：使用测角光度计交换入射和观察方向
 
 3. **能量守恒（Energy Conservation）**：
-   $$\int_{\Omega^+} f_r(\omega_i \to \omega_o) \cos\theta_o \, d\omega_o \leq 1$$
+   $$\rho(\omega_i) = \int_{\Omega^+} f_r(\omega_i \to \omega_o) \cos\theta_o \, d\omega_o \leq 1$$
    - 反射的能量不能超过入射能量
    - 等号成立：完美反射（如理想镜面）
    - 小于1：部分能量被吸收
+   - 方向半球反射率：$\rho(\omega_i)$ 依赖于入射方向
+   - 半球-半球反射率：$\bar{\rho} = \frac{1}{\pi}\int_{\Omega^+} \rho(\omega_i) \cos\theta_i \, d\omega_i$
    
    **白炉测试**：
    在均匀入射照明下，出射辐射度应等于入射辐射度：
    $$L_o = \int_{\Omega^+} f_r \cdot L_i \cos\theta_i \, d\omega_i = L_i \int_{\Omega^+} f_r \cos\theta_i \, d\omega_i \leq L_i$$
+   
+   **广义互易性**：
+   $$\rho(\omega_o) = \int_{\Omega^+} f_r(\omega_i \to \omega_o) \cos\theta_i \, d\omega_i$$
+   由于Helmholtz互易性，$\rho(\omega_o) = \rho(\omega_i)$ 当交换角色
 
 4. **线性性**：
    - BRDF对入射光强度是线性的
    - 允许叠加原理的应用
    - 多光源：$L_o = \sum_k \int f_r L_{i,k} \cos\theta_i \, d\omega_i$
+   - 傅立叶分解：可以在频域分析BRDF
 
 5. **各向同性 vs 各向异性**：
    - 各向同性：BRDF不依赖于旋转角 $\phi$
+     - 简化：$f_r(\theta_i, \theta_o, |\phi_i - \phi_o|)$
+     - 参数化：3D函数而非4D
    - 各向异性：如拉丝金属、织物、木材纹理
+     - Ward模型：椭圆高斯分布
+     - 切线空间参数化：使用局部坐标系
+
+6. **正定性**：
+   - 作为算子，BRDF必须是正定的
+   - 保证积分方程的解存在且唯一
 
 **常见BRDF模型**
 
@@ -279,6 +382,8 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
    - 能量守恒验证：$\int_{\Omega} \frac{\rho}{\pi} \cos\theta \, d\omega = \rho$
    - 典型材质：石膏、粗糙纸张、未抛光的石头
    - 为什么除以$\pi$：保证 $\int \cos\theta \, d\omega = \pi$ 后总反射率为 $\rho$
+   - 物理基础：完全粗糙表面，微表面法线均匀分布
+   - 局限性：真实世界中没有完美的Lambertian表面
 
 2. **理想镜面反射**：
    $$f_r(\omega_i \to \omega_o) = \frac{\delta(\omega_i - R(\omega_o))}{\cos\theta_i}$$
@@ -286,6 +391,8 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
    - 使用Dirac delta函数表示
    - 积分后：$L_o(\omega_o) = L_i(R(\omega_o))$
    - 实际实现：显式跟踪镜面反射，而非采样
+   - Fresnel项：$F(\omega_i, \mathbf{n})$ 描述反射比例
+   - 完整形式：$f_r = \frac{F(\omega_i, \mathbf{n})\delta(\omega_i - R(\omega_o))}{\cos\theta_i}$
 
 3. **Phong模型**（经验模型）：
    $$f_r = \frac{k_d}{\pi} + k_s \frac{n+2}{2\pi} \cos^n\alpha$$
@@ -294,6 +401,12 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
    - 注意：不满足能量守恒
    - 修正的Phong：使用半向量 $\mathbf{h}$ 代替反射向量
    - 归一化因子 $\frac{n+2}{2\pi}$ 保证积分为1
+   
+   **Blinn-Phong模型**：
+   $$f_r = \frac{k_d}{\pi} + k_s \frac{n+8}{8\pi} (\mathbf{n} \cdot \mathbf{h})^n$$
+   - 半向量：$\mathbf{h} = \frac{\omega_i + \omega_o}{||\omega_i + \omega_o||}$
+   - 更物理正确，计算更高效
+   - 与微表面模型的联系：$D(\mathbf{h}) \propto (\mathbf{n} \cdot \mathbf{h})^n$
 
 4. **微表面模型（Microfacet）**：
    $$f_r = \frac{D(\mathbf{h}) G(\omega_i, \omega_o) F(\omega_i, \mathbf{h})}{4 \cos\theta_i \cos\theta_o}$$
@@ -302,10 +415,29 @@ $$f_r(\omega_i \to \omega_o) = \frac{dL_o(\omega_o)}{dE(\omega_i)} = \frac{dL_o(
    - $F$：Fresnel项
    - $\mathbf{h}$：半向量 $\mathbf{h} = \frac{\omega_i + \omega_o}{||\omega_i + \omega_o||}$
    
-   **常用分布**：
+   **法线分布函数$D$**：
    - GGX/Trowbridge-Reitz: $D(\mathbf{h}) = \frac{\alpha^2}{\pi((\mathbf{n} \cdot \mathbf{h})^2(\alpha^2 - 1) + 1)^2}$
+     - 长尾分布，更真实的高光
+     - 参数转换：$\alpha = \text{roughness}^2$
    - Beckmann: $D(\mathbf{h}) = \frac{1}{\pi\alpha^2\cos^4\theta_h} e^{-\frac{\tan^2\theta_h}{\alpha^2}}$
+     - 基于高斯统计
+     - 计算更复杂，但物理基础清晰
    - $\alpha$：粗糙度参数
+   
+   **几何遮蔽函数$G$**：
+   - Smith G函数：$G(\omega_i, \omega_o) = G_1(\omega_i) G_1(\omega_o)$
+   - $G_1$的GGX形式：$G_1(\omega) = \frac{2(\mathbf{n} \cdot \omega)}{(\mathbf{n} \cdot \omega) + \sqrt{\alpha^2 + (1-\alpha^2)(\mathbf{n} \cdot \omega)^2}}$
+   - 高度相关形式：考虑遮蔽-阴影相关性
+   
+   **Fresnel项$F$**：
+   - Schlick近似：$F(\omega, \mathbf{h}) = F_0 + (1-F_0)(1-\omega \cdot \mathbf{h})^5$
+   - $F_0$：垂直入射时的反射率
+   - 完整Fresnel方程：需要复折射率
+   
+   **为什么除以4**：
+   - 来自雅可比行列式的转换
+   - $\frac{\partial \omega_h}{\partial \omega_o} = \frac{1}{4(\omega_i \cdot \mathbf{h})}$
+   - 保证从半向量分布到BRDF的正确映射
 
 **反射方程（Reflection Equation）**
 $$L_o(\mathbf{p}, \omega_o) = L_e(\mathbf{p}, \omega_o) + \int_{\Omega^+} f_r(\mathbf{p}, \omega_i \to \omega_o) L_i(\mathbf{p}, \omega_i) \cos\theta_i \, d\omega_i$$
@@ -316,27 +448,58 @@ $$L_o(\mathbf{p}, \omega_o) = L_e(\mathbf{p}, \omega_o) + \int_{\Omega^+} f_r(\m
 - $\cos\theta_i$：Lambert余弦项，几何因子
 - 积分域 $\Omega^+$：上半球
 
+**分层材质模型**：
+- 漫反射层 + 镜面层：$f_r = f_{diffuse} + f_{specular}$
+- 能量分配：使用Fresnel项调节
+- Disney BRDF：基于艺术家友好的参数
+- 分层模型的互易性：每层单独满足
+
 **BRDF的测量与存储**
 - 测量设备：测角光度计（gonioreflectometer）
+  - 机械臂系统：精确控制入射和观察角度
+  - 图像基的测量：使用相机和球面光源
+  - 时间成本：完整测量一个材质需要数小时
 - 存储挑战：4D函数（2D入射 + 2D出射）
-- 压缩方法：球谐函数、小波、因子分解
-- 数据库：MERL BRDF数据库（100种材质）
+  - 离散化：$90 \times 90 \times 180 \times 360$ 网格
+  - 内存需求：每个材质约100MB
+- 压缩方法：
+  - 球谐函数：$f_r \approx \sum_{l,m} a_{lm} Y_l^m$
+  - 小波分解：多分辨率表示
+  - 因子分解：$f_r \approx \sum_k u_k(\omega_i) v_k(\omega_o)$
+  - 神经网络：学习压缩表示
+- 数据库：
+  - MERL BRDF：100种材质，各向同性
+  - UTIA BTF：包含空间变化
+  - RGL BRDF：包含各向异性材料
+
+**BRDF的未来研究方向**：
+- 波动光学BRDF：考虑干涉和衍射
+- 时变BRDF：模拟老化和风化
+- 参与介质BSSRDF：次表面散射
+- 量子光学效应：超表面和纳米材料
 
 ## 8.2 渲染方程
 
 ### 8.2.1 渲染方程的推导
 
-Kajiya在1986年提出的渲染方程统一了计算机图形学中的光照计算，是全局光照的数学基础。
+Kajiya在1986年提出的渲染方程统一了计算机图形学中的光照计算，是全局光照的数学基础。这个方程的美在于它用简洁的数学形式捕捉了光传输的复杂性。
 
 **从局部到全局的演进**
 
 1. **局部光照模型**（只考虑直接光照）：
    $$L_o = L_e + \sum_{\text{lights}} f_r \cdot L_{light} \cdot \cos\theta_i$$
+   
+   历史背景：
+   - 1967年 Phong模型
+   - 1975年 Blinn-Phong改进
+   - 足以处理实时渲染，但缺乏真实感
 
 2. **问题**：忽略了间接光照
    - 没有软阴影
    - 没有颜色渗透（color bleeding）
    - 没有镜面间接反射
+   - 没有焦散（caustics）
+   - 没有环境光遮蔽（ambient occlusion）
 
 3. **关键洞察**：入射辐射度来自其他表面的出射辐射度
    $$L_i(\mathbf{p}, \omega_i) = L_o(\mathbf{p}', -\omega_i)$$
@@ -345,6 +508,11 @@ Kajiya在1986年提出的渲染方程统一了计算机图形学中的光照计�
    - $\mathbf{p}'$ 是射线 $(\mathbf{p}, \omega_i)$ 的第一个交点
    - 射线追踪函数：$\mathbf{p}' = \text{raycast}(\mathbf{p}, \omega_i)$
    - 负号表示方向反转（从 $\mathbf{p}'$ 指向 $\mathbf{p}$）
+   
+   **光线传播的拓扑性质**：
+   - 光线是相空间中的流线
+   - 在非均匀介质中弯曲（海市蜃楼效应）
+   - 在引力场中弯曲（广义相对论）
 
 **完整的渲染方程**
 
@@ -356,10 +524,34 @@ $$L_o(\mathbf{p}, \omega_o) = L_e(\mathbf{p}, \omega_o) + \int_{\Omega^+} f_r(\m
 - 在不同位置和方向上相互耦合
 - 解析求解几乎不可能
 
+**数学性质**：
+- 这是Fredholm第二类积分方程
+- 解的存在性和唯一性由Banach不动点定理保证
+- 收敛条件：平均反射率 < 1
+
+**物理意义**：
+- 表达了光的多次反射
+- 统一了各种光照现象
+- 是能量守恒的数学体现
+
 **边界条件**
 1. **真空/环境**：$L_o = L_{env}(\omega_o)$
+   - 无限远处的环境光
+   - HDR环境贴图
+   - 天空模型（如Hosek-Wilkie）
+
 2. **光源表面**：$L_e > 0$
+   - 面光源：均匀或空间变化的发射
+   - 温度辐射：Planck定律
+   - IES光源数据
+
 3. **非发光表面**：$L_e = 0$
+   - 绝大多数物体属于此类
+   - 但可能有荧光效应
+
+4. **参与介质边界**：
+   - 需要考虑体积散射
+   - 辐射传输方程（RTE）
 
 **简化形式**
 
@@ -371,9 +563,14 @@ $$L = L_e + \mathcal{T}L$$
 
 这是Fredholm第二类积分方程的一个实例。
 
+**历史上的其他形式**：
+- **辐射度方程**（Radiosity）：漫反射表面的特例
+- **体积渲染方程**：包含参与介质
+- **波动方程**：考虑干涉和衍射
+
 ### 8.2.2 积分算子形式
 
-渲染方程可以使用算子理论进行分析，这提供了深入的数学洞察和求解方法。
+渲染方程可以使用算子理论进行分析，这提供了深入的数学洞察和求解方法。这种形式化不仅优雅，而且为数值方法提供了理论基础。
 
 **光传输算子的定义**
 
@@ -383,6 +580,12 @@ $$(\mathcal{K}L)(\mathbf{p}, \omega) = \int_{\Omega^+} f_r(\mathbf{p}, \omega_i 
 这是一个线性算子：
 - $\mathcal{K}(aL_1 + bL_2) = a\mathcal{K}L_1 + b\mathcal{K}L_2$
 - 作用于函数空间 $L^2(\mathcal{M} \times S^2)$
+- 是紧算子（compact operator）在适当条件下
+
+**函数空间的选择**：
+- $L^2$：平方可积，适合能量分析
+- $L^\infty$：有界函数，适合最大值分析
+- Sobolev空间：考虑光滑性
 
 **算子方程**
 
@@ -403,6 +606,16 @@ $$L = (I - \mathcal{K})^{-1}L_e = \sum_{n=0}^{\infty} \mathcal{K}^n L_e$$
 - 物理意义：平均反射率小于1
 - 保证能量最终衰减为零
 
+**收敛速度分析**：
+- 几何收敛：$||\mathcal{K}^n|| \leq \rho(\mathcal{K})^n$
+- 实际场景：$\rho(\mathcal{K}) \approx 0.5-0.8$
+- 3-5次迭代后误差 < 1%
+
+**谱分解**：
+- 特征函数：$\mathcal{K}\phi_i = \lambda_i \phi_i$
+- 展开：$L = \sum_i \frac{\langle L_e, \phi_i \rangle}{1-\lambda_i} \phi_i$
+- 主特征值决定收敛性
+
 **物理解释**
 
 每一项的含义：
@@ -416,6 +629,16 @@ $$L = (I - \mathcal{K})^{-1}L_e = \sum_{n=0}^{\infty} \mathcal{K}^n L_e$$
 - 随着反射次数增加，贡献逐渐减小
 - 大多数场景3-5次反射后可以忽略
 
+**不同场景的反射次数**：
+- 室外场景：2-3次通常足够
+- 室内场景：5-10次可能需要
+- 焦散效果：可能需要更多
+
+**能量分布统计**：
+- 直接光照：60-80%
+- 一次间接：15-30%
+- 高次间接：< 10%
+
 **算子的核函数表示**
 
 $\mathcal{K}$ 可以用核函数表示：
@@ -424,6 +647,16 @@ $$K(\mathbf{p} \to \mathbf{p}', \omega \to \omega') = f_r(\mathbf{p}, \omega' \t
 其中：
 - $G(\mathbf{p} \leftrightarrow \mathbf{p}')$：几何因子
 - $\delta$：Dirac delta函数，确保方向一致
+
+**核函数的性质**：
+- 对称性（由于互易性）：$K(\mathbf{p} \to \mathbf{p}', \omega \to \omega') = K(\mathbf{p}' \to \mathbf{p}, \omega' \to \omega)$
+- 正定性：$K \geq 0$
+- 可积性：$\int \int K < \infty$ 在适当条件下
+
+**离散化的核矩阵**：
+- 有限元方法：$K_{ij} = \langle \phi_i, \mathcal{K}\phi_j \rangle$
+- 矩阵大小：$N^2$，其中$N$是基函数个数
+- 稀疏性：利用可见性和距离衰减
 
 **迭代求解方法**
 
