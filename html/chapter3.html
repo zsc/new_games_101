@@ -1,0 +1,1609 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第3章：光栅化</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class=""><a href="./index.html">计算机图形学高级教程</a></li><li class=""><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class="active"><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class=""><a href="./chapter6.html">第6章：几何表示</a></li><li class=""><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class=""><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class=""><a href="./chapter12.html">第12章：物质点法</a></li><li class=""><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="3">第3章：光栅化</h1>
+<h2 id="_1">章节概述</h2>
+<p>光栅化是将连续的几何图元转换为离散像素的过程，是现代实时渲染的核心技术。本章深入探讨光栅化的数学原理、算法实现和硬件优化策略。我们将从三角形的离散化开始，逐步深入到深度测试、抗锯齿技术，最后探讨现代GPU的光栅化管线设计。通过本章学习，读者将掌握从几何到像素的完整转换过程，理解现代图形硬件的设计哲学，并能够分析和优化光栅化性能。</p>
+<h2 id="31">3.1 三角形的离散化</h2>
+<h3 id="311">3.1.1 为什么选择三角形</h3>
+<p>三角形是计算机图形学中最基本的图元，其优势包括：</p>
+<ul>
+<li><strong>平面性保证</strong>：三个不共线的点唯一确定一个平面，避免了非平面多边形的歧义性</li>
+<li><strong>凸性质</strong>：三角形必定是凸多边形，简化了内外判断和光栅化算法</li>
+<li><strong>插值简单</strong>：重心坐标提供了自然的线性插值框架，保证了C⁰连续性</li>
+<li><strong>硬件友好</strong>：固定的顶点数量便于并行处理和硬件优化</li>
+<li><strong>数学优雅</strong>：仿射不变性和投影不变性使得变换计算简洁高效</li>
+</ul>
+<p>三角形的数学表示形式多样，可以用参数方程、隐式方程或重心坐标表示：
+$$\mathbf{p}(u,v) = (1-u-v)\mathbf{v}_0 + u\mathbf{v}_1 + v\mathbf{v}_2, \quad u,v \geq 0, u+v \leq 1$$</p>
+<h4 id="_2">三角形的几何性质</h4>
+<p>三角形具有许多重要的几何性质，这些性质是光栅化算法的理论基础：</p>
+<ol>
+<li>
+<p><strong>单纯形性质</strong>：三角形是二维空间中的单纯形（simplex），这意味着它是能够张成二维空间的最小凸集。</p>
+</li>
+<li>
+<p><strong>重心坐标的几何意义</strong>：
+   - 重心坐标 $(\alpha, \beta, \gamma)$ 表示点到对边的有向距离比
+   - 物理意义：如果在三个顶点放置质量为 $(\alpha, \beta, \gamma)$ 的质点，则质心位于点 $\mathbf{p}$
+   - 面积比：$\alpha = \frac{\text{Area}(\mathbf{p}\mathbf{v}_1\mathbf{v}_2)}{\text{Area}(\mathbf{v}_0\mathbf{v}_1\mathbf{v}_2)}$</p>
+</li>
+<li>
+<p><strong>仿射不变性</strong>：重心坐标在仿射变换下保持不变
+$$T(\alpha\mathbf{v}_0 + \beta\mathbf{v}_1 + \gamma\mathbf{v}_2) = \alpha T(\mathbf{v}_0) + \beta T(\mathbf{v}_1) + \gamma T(\mathbf{v}_2)$$
+这个性质保证了我们可以在任意坐标系中进行插值计算。</p>
+</li>
+<li>
+<p><strong>欧拉公式的应用</strong>：对于三角形网格，顶点数V、边数E、面数F满足：
+$$V - E + F = 2 - 2g$$
+其中g是亏格（genus）。对于简单连通网格，$g=0$，因此 $F \approx 2V$。</p>
+</li>
+</ol>
+<h4 id="_3">三角形与其他图元的比较</h4>
+<p><strong>四边形</strong>：</p>
+<ul>
+<li>优点：更少的图元数量，某些情况下更自然（如地形网格）</li>
+<li>缺点：可能非平面，需要分割成三角形，插值更复杂</li>
+</ul>
+<p><strong>多边形</strong>：</p>
+<ul>
+<li>优点：更灵活的建模</li>
+<li>缺点：需要三角化，凹多边形处理复杂，硬件支持有限</li>
+</ul>
+<p><strong>曲面片（如Bézier）</strong>：</p>
+<ul>
+<li>优点：更高的几何精度，更少的存储</li>
+<li>缺点：计算复杂，需要细分（tessellation）成三角形</li>
+</ul>
+<h4 id="_4">三角形的拓扑表示</h4>
+<p>在实际应用中，三角形通常组织成网格（mesh）结构：</p>
+<ol>
+<li>
+<p><strong>独立三角形</strong>：每个三角形存储三个顶点
+   - 优点：简单，无依赖
+   - 缺点：顶点重复，内存浪费</p>
+</li>
+<li>
+<p><strong>索引三角形列表</strong>：顶点数组 + 索引数组
+   - 优点：共享顶点，节省内存
+   - 缺点：额外的间接访问</p>
+</li>
+<li>
+<p><strong>三角形条带（Triangle Strip）</strong>：
+   - 表示：$v_0, v_1, v_2, v_3, ...$ 形成三角形 $(v_0,v_1,v_2), (v_1,v_2,v_3), ...$
+   - 优点：最少的索引数据
+   - 缺点：需要退化三角形连接不同条带</p>
+</li>
+<li>
+<p><strong>三角形扇（Triangle Fan）</strong>：
+   - 表示：中心点 $v_0$ 与边界点 $v_1, v_2, ...$ 形成三角形
+   - 优点：适合圆形或扇形区域
+   - 缺点：应用场景有限</p>
+</li>
+</ol>
+<h3 id="312">3.1.2 三角形的表示</h3>
+<p>三角形可以通过三个顶点 $\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2$ 表示，每个顶点包含：</p>
+<ul>
+<li>位置：$\mathbf{p} = (x, y, z, w)^T$（齐次坐标）</li>
+<li>属性：颜色、法线、纹理坐标等</li>
+</ul>
+<p>在屏幕空间中，经过投影变换后的顶点坐标为：
+$$\mathbf{p}_{\text{screen}} = \begin{pmatrix} x_s \ y_s \ z_s \end{pmatrix} = \begin{pmatrix} \frac{x_{ndc} + 1}{2} \cdot \text{width} \ \frac{y_{ndc} + 1}{2} \cdot \text{height} \ z_{ndc} \end{pmatrix}$$
+其中NDC（Normalized Device Coordinates）坐标范围为$[-1, 1]^3$。需要注意的是，$z_s$通常会经过非线性变换以优化深度精度分布。</p>
+<p>三角形的隐式表示使用平面方程：
+$$\mathbf{n} \cdot (\mathbf{p} - \mathbf{v}_0) = 0$$
+其中法向量$\mathbf{n} = (\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)$决定了三角形的朝向。</p>
+<h4 id="_5">坐标系变换链</h4>
+<p>三角形顶点经历的完整变换链：</p>
+<ol>
+<li>
+<p><strong>模型空间（Model Space）</strong> → <strong>世界空间（World Space）</strong>
+$$\mathbf{p}_{world} = \mathbf{M}_{model} \mathbf{p}_{model}$$</p>
+</li>
+<li>
+<p><strong>世界空间</strong> → <strong>观察空间（View Space）</strong>
+$$\mathbf{p}_{view} = \mathbf{V} \mathbf{p}_{world}$$</p>
+</li>
+<li>
+<p><strong>观察空间</strong> → <strong>裁剪空间（Clip Space）</strong>
+$$\mathbf{p}_{clip} = \mathbf{P} \mathbf{p}_{view}$$
+此时坐标为齐次坐标 $(x_c, y_c, z_c, w_c)$</p>
+</li>
+<li>
+<p><strong>透视除法</strong> → <strong>NDC空间</strong>
+$$\mathbf{p}_{ndc} = \begin{pmatrix} x_c/w_c \ y_c/w_c \ z_c/w_c \end{pmatrix}$$</p>
+</li>
+<li>
+<p><strong>视口变换</strong> → <strong>屏幕空间</strong>
+$$x_s = (x_{ndc} + 1) \cdot \frac{width}{2} + x_{viewport}$$
+   $$y_s = (y_{ndc} + 1) \cdot \frac{height}{2} + y_{viewport}$$</p>
+</li>
+</ol>
+<h4 id="_6">三角形的数据结构</h4>
+<p>高效的三角形表示需要考虑内存布局和缓存友好性：</p>
+<pre class="codehilite"><code>struct Vertex {
+    float3 position;     // 12 bytes
+    float3 normal;       // 12 bytes
+    float2 texcoord;     // 8 bytes
+    float4 tangent;      // 16 bytes (含手性)
+    // 总计 48 bytes，对齐到 64 bytes
+};
+
+struct Triangle {
+    uint3 indices;       // 顶点索引
+    uint materialID;     // 材质索引
+    float area;          // 预计算的面积
+    float3 normal;       // 预计算的法线
+};
+</code></pre>
+
+<h4 id="_7">退化三角形的处理</h4>
+<p>退化三角形是指面积为零或接近零的三角形，可能由以下原因产生：</p>
+<ol>
+<li><strong>共线顶点</strong>：三个顶点在一条直线上</li>
+<li><strong>重复顶点</strong>：两个或更多顶点位置相同</li>
+<li><strong>数值精度</strong>：浮点误差导致的近似共线</li>
+</ol>
+<p>检测方法：
+$$\text{area} = \frac{1}{2}||(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)|| &lt; \epsilon$$
+处理策略：</p>
+<ul>
+<li><strong>预处理剔除</strong>：在网格处理阶段删除</li>
+<li><strong>运行时跳过</strong>：光栅化时检测并跳过</li>
+<li><strong>顶点合并</strong>：将距离过近的顶点合并</li>
+</ul>
+<h4 id="_8">三角形的方向与缠绕顺序</h4>
+<p>缠绕顺序（winding order）决定了三角形的正面：</p>
+<ol>
+<li>
+<p><strong>逆时针（CCW）</strong>：OpenGL默认
+   - 从观察者角度看，顶点按逆时针排列为正面
+   - 法线指向观察者</p>
+</li>
+<li>
+<p><strong>顺时针（CW）</strong>：DirectX默认
+   - 从观察者角度看，顶点按顺时针排列为正面</p>
+</li>
+</ol>
+<p>叉积与缠绕顺序的关系：
+$$\mathbf{n} = (\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)$$</p>
+<ul>
+<li>CCW：法线指向外（正面）</li>
+<li>CW：法线指向内（背面）</li>
+</ul>
+<h4 id="_9">三角形的层次表示</h4>
+<p>对于复杂模型，三角形常组织成层次结构：</p>
+<ol>
+<li>
+<p><strong>BVH（Bounding Volume Hierarchy）</strong>：
+   - 每个节点包含子三角形的包围盒
+   - 用于加速光线追踪和碰撞检测</p>
+</li>
+<li>
+<p><strong>LOD（Level of Detail）</strong>：
+   - 不同距离使用不同精度的三角形网格
+   - 减少远处物体的渲染开销</p>
+</li>
+<li>
+<p><strong>空间划分</strong>：
+   - Octree、KD-Tree等结构
+   - 加速空间查询和剔除</p>
+</li>
+</ol>
+<h3 id="313">3.1.3 点在三角形内的判断</h3>
+<h4 id="edge-function">叉积法（Edge Function）</h4>
+<p>对于屏幕空间中的点 $\mathbf{p} = (x, y)$，判断其是否在三角形内部最常用的方法是边函数（edge function）：
+$$E_{01}(\mathbf{p}) = (x - x_0)(y_1 - y_0) - (y - y_0)(x_1 - x_0)$$
+边函数的几何意义是有向面积的两倍，符号表示点在边的哪一侧。点 $\mathbf{p}$ 在三角形内部当且仅当：</p>
+<ul>
+<li>$E_{01}(\mathbf{p}) \geq 0$</li>
+<li>$E_{12}(\mathbf{p}) \geq 0$  </li>
+<li>$E_{20}(\mathbf{p}) \geq 0$</li>
+</ul>
+<p>（假设三角形顶点按逆时针顺序排列）</p>
+<p>边函数的优势在于：</p>
+<ol>
+<li><strong>增量计算</strong>：相邻像素的边函数值可通过简单加法获得</li>
+<li><strong>并行友好</strong>：不同像素的计算完全独立</li>
+<li><strong>精确性</strong>：使用整数运算可避免浮点误差</li>
+</ol>
+<h4 id="_10">边函数的数学性质</h4>
+<p>边函数具有以下重要性质：</p>
+<ol>
+<li>
+<p><strong>线性性</strong>：边函数是位置的线性函数
+$$E(x+\Delta x, y+\Delta y) = E(x,y) + A\Delta x + B\Delta y$$
+其中 $A = y_1 - y_0$, $B = x_0 - x_1$</p>
+</li>
+<li>
+<p><strong>符号几何意义</strong>：
+   - $E &gt; 0$：点在边的左侧（逆时针方向）
+   - $E &lt; 0$：点在边的右侧
+   - $E = 0$：点在边上</p>
+</li>
+<li>
+<p><strong>与有向面积的关系</strong>：
+$$E_{01}(\mathbf{p}) = 2 \cdot \text{SignedArea}(\mathbf{v}_0, \mathbf{v}_1, \mathbf{p})$$</p>
+</li>
+<li>
+<p><strong>缩放不变性</strong>：
+$$E_{01}(s\mathbf{p}) = s^2 E_{01}(\mathbf{p})$$</p>
+</li>
+</ol>
+<h4 id="_11">边函数的向量形式</h4>
+<p>使用向量表示可以更清晰地理解边函数：
+$$E_{01}(\mathbf{p}) = \det\begin{pmatrix} 
+\mathbf{p} - \mathbf{v}_0 &amp; \mathbf{v}_1 - \mathbf{v}_0 
+\end{pmatrix} = (\mathbf{p} - \mathbf{v}_0) \times (\mathbf{v}_1 - \mathbf{v}_0)$$
+这表明边函数实际上是两个向量的叉积的z分量。</p>
+<h4 id="edge-rules">精确边界处理（Edge Rules）</h4>
+<p>当像素中心恰好落在三角形边界上时，需要明确的规则避免：</p>
+<ul>
+<li>像素被多个三角形同时覆盖</li>
+<li>像素未被任何三角形覆盖</li>
+</ul>
+<p><strong>Top-Left规则</strong>：</p>
+<pre class="codehilite"><code>bool is_top_edge(v0, v1) {
+    return v0.y == v1.y &amp;&amp; v0.x &lt; v1.x;  // 水平且向右
+}
+
+bool is_left_edge(v0, v1) {
+    return v0.y &lt; v1.y;  // 向上
+}
+
+// 边界测试
+if (E == 0) {
+    accept = is_top_edge(v0, v1) || is_left_edge(v0, v1);
+}
+</code></pre>
+
+<h4 id="_12">定点数实现</h4>
+<p>为了保证精确性，实际实现中使用定点数：</p>
+<pre class="codehilite"><code>// 转换为定点数（16.8格式）
+int32_t to_fixed(float f) {
+    return (int32_t)(f * 256.0f + 0.5f);
+}
+
+// 定点数边函数
+int32_t edge_fixed(int32_t x, int32_t y, 
+                   int32_t x0, int32_t y0,
+                   int32_t x1, int32_t y1) {
+    return (x - x0) * (y1 - y0) - (y - y0) * (x1 - x0);
+}
+</code></pre>
+
+<p>优势：</p>
+<ul>
+<li>精确：无浮点舍入误差</li>
+<li>快速：整数运算</li>
+<li>一致：相邻三角形共享边产生相同结果</li>
+</ul>
+<h4 id="barycentric-coordinates">重心坐标（Barycentric Coordinates）</h4>
+<p>重心坐标 $(\alpha, \beta, \gamma)$ 定义了点相对于三角形的位置：
+$$\mathbf{p} = \alpha \mathbf{v}_0 + \beta \mathbf{v}_1 + \gamma \mathbf{v}_2$$
+其中 $\alpha + \beta + \gamma = 1$。计算公式为：
+$$\alpha = \frac{E_{12}(\mathbf{p})}{E_{12}(\mathbf{v}_0)}$$
+$$\beta = \frac{E_{20}(\mathbf{p})}{E_{20}(\mathbf{v}_1)}$$
+$$\gamma = \frac{E_{01}(\mathbf{p})}{E_{01}(\mathbf{v}_2)}$$
+点在三角形内部当且仅当 $\alpha, \beta, \gamma \geq 0$。</p>
+<p>重心坐标的性质：</p>
+<ul>
+<li><strong>仿射不变性</strong>：在仿射变换下保持不变</li>
+<li><strong>插值性质</strong>：任何顶点属性都可以通过重心坐标线性插值</li>
+<li><strong>归一化</strong>：$\alpha + \beta + \gamma = 1$ 确保了插值的正确性</li>
+</ul>
+<h4 id="_13">重心坐标的计算方法</h4>
+<ol>
+<li>
+<p><strong>面积比方法</strong>：
+$$\alpha = \frac{\text{Area}(\triangle \mathbf{p}\mathbf{v}_1\mathbf{v}_2)}{\text{Area}(\triangle \mathbf{v}_0\mathbf{v}_1\mathbf{v}_2)}$$
+使用叉积计算面积：
+$$\text{Area} = \frac{1}{2}|(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)|$$</p>
+</li>
+<li>
+<p><strong>线性系统方法</strong>：
+   解线性方程组：
+$$\begin{pmatrix} x \ y \ 1 \end{pmatrix} = \begin{pmatrix} x_0 &amp; x_1 &amp; x_2 \ y_0 &amp; y_1 &amp; y_2 \ 1 &amp; 1 &amp; 1 \end{pmatrix} \begin{pmatrix} \alpha \ \beta \ \gamma \end{pmatrix}$$
+使用克拉默法则：
+$$\alpha = \frac{\det\begin{pmatrix} x &amp; x_1 &amp; x_2 \ y &amp; y_1 &amp; y_2 \ 1 &amp; 1 &amp; 1 \end{pmatrix}}{\det\begin{pmatrix} x_0 &amp; x_1 &amp; x_2 \ y_0 &amp; y_1 &amp; y_2 \ 1 &amp; 1 &amp; 1 \end{pmatrix}}$$</p>
+</li>
+<li>
+<p><strong>边函数方法</strong>（最常用）：
+$$\alpha = \frac{E_{12}(\mathbf{p})}{2A}, \quad \beta = \frac{E_{20}(\mathbf{p})}{2A}, \quad \gamma = \frac{E_{01}(\mathbf{p})}{2A}$$
+其中 $A$ 是三角形面积。</p>
+</li>
+</ol>
+<h4 id="_14">重心坐标的几何解释</h4>
+<ol>
+<li>
+<p><strong>质心解释</strong>：如果在三个顶点分别放置质量为 $(\alpha, \beta, \gamma)$ 的质点，系统的质心就在点 $\mathbf{p}$。</p>
+</li>
+<li>
+<p><strong>垂直距离解释</strong>：重心坐标与点到对边的垂直距离成比例。</p>
+</li>
+<li>
+<p><strong>参数化解释</strong>：$(\alpha, \beta, \gamma)$ 提供了三角形内部的一种自然参数化。</p>
+</li>
+</ol>
+<h4 id="_15">重心坐标的特殊点</h4>
+<ul>
+<li><strong>重心</strong>：$(\frac{1}{3}, \frac{1}{3}, \frac{1}{3})$ - 三条中线的交点</li>
+<li><strong>外心</strong>：到三个顶点距离相等的点</li>
+<li><strong>内心</strong>：$(\frac{a}{a+b+c}, \frac{b}{a+b+c}, \frac{c}{a+b+c})$ - 其中$a,b,c$是边长</li>
+<li><strong>垂心</strong>：三条高线的交点</li>
+</ul>
+<h4 id="_16">重心坐标的数值稳定性</h4>
+<p>当三角形接近退化时，重心坐标计算可能不稳定。稳健的实现需要：</p>
+<ol>
+<li>
+<p><strong>条件数检查</strong>：
+$$\kappa = \frac{\max(|\mathbf{v}_0|, |\mathbf{v}_1|, |\mathbf{v}_2|) \cdot \max(|\mathbf{v}_1-\mathbf{v}_0|, |\mathbf{v}_2-\mathbf{v}_1|, |\mathbf{v}_0-\mathbf{v}_2|)}{2A}$$
+当 $\kappa$ 很大时，计算不稳定。</p>
+</li>
+<li>
+<p><strong>退化处理</strong>：
+   <code>if (area &lt; epsilon) {
+       // 退化为线段或点
+       // 使用投影到最长边的方法
+   }</code></p>
+</li>
+<li>
+<p><strong>双精度计算</strong>：对于大型场景，使用双精度避免精度损失。</p>
+</li>
+</ol>
+<h4 id="_17">其他判断方法</h4>
+<p><strong>同侧法</strong>：检查点是否与对面顶点在每条边的同一侧。</p>
+<p>对于每条边 $(\mathbf{v}_i, \mathbf{v}_j)$，检查：
+$$\text{sign}(E_{ij}(\mathbf{p})) = \text{sign}(E_{ij}(\mathbf{v}_k))$$
+其中 $\mathbf{v}_k$ 是第三个顶点。</p>
+<p><strong>面积法</strong>：比较子三角形面积之和与原三角形面积：
+$$\text{Area}(PAB) + \text{Area}(PBC) + \text{Area}(PCA) = \text{Area}(ABC)$$
+由于浮点误差，实际判断时需要容差：
+$$|\sum \text{Area}_i - \text{Area}_{total}| &lt; \epsilon$$
+<strong>向量法</strong>：使用向量叉积的方向一致性：</p>
+<pre class="codehilite"><code>vec2 v0v1 = v1 - v0;
+vec2 v1v2 = v2 - v1;
+vec2 v2v0 = v0 - v2;
+
+vec2 v0p = p - v0;
+vec2 v1p = p - v1;
+vec2 v2p = p - v2;
+
+float cross0 = v0v1.x * v0p.y - v0v1.y * v0p.x;
+float cross1 = v1v2.x * v1p.y - v1v2.y * v1p.x;
+float cross2 = v2v0.x * v2p.y - v2v0.y * v2p.x;
+
+// 所有叉积同号则在内部
+return (cross0 &gt;= 0 &amp;&amp; cross1 &gt;= 0 &amp;&amp; cross2 &gt;= 0) ||
+       (cross0 &lt;= 0 &amp;&amp; cross1 &lt;= 0 &amp;&amp; cross2 &lt;= 0);
+</code></pre>
+
+<p><strong>角度法</strong>：计算点对三角形三条边的张角之和：</p>
+<ul>
+<li>内部点：张角之和 = $2\pi$</li>
+<li>外部点：张角之和 &lt; $2\pi$</li>
+<li>边界点：张角之和 = $\pi$</li>
+</ul>
+<h4 id="_18">各种方法的比较</h4>
+<p>| 方法 | 计算复杂度 | 精度 | 硬件适合性 | 备注 |</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>计算复杂度</th>
+<th>精度</th>
+<th>硬件适合性</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>边函数</td>
+<td>O(1)</td>
+<td>高</td>
+<td>极好</td>
+<td>GPU标准方法</td>
+</tr>
+<tr>
+<td>重心坐标</td>
+<td>O(1)</td>
+<td>高</td>
+<td>好</td>
+<td>同时用于插值</td>
+</tr>
+<tr>
+<td>面积法</td>
+<td>O(1)</td>
+<td>中</td>
+<td>中</td>
+<td>浮点误差累积</td>
+</tr>
+<tr>
+<td>角度法</td>
+<td>O(1)</td>
+<td>低</td>
+<td>差</td>
+<td>需要反三角函数</td>
+</tr>
+</tbody>
+</table>
+<h3 id="314">3.1.4 光栅化算法</h3>
+<h4 id="bounding-box">包围盒算法（Bounding Box）</h4>
+<p>最简单的光栅化算法：</p>
+<ol>
+<li>计算三角形的轴对齐包围盒（AABB）</li>
+<li>遍历包围盒内的所有像素</li>
+<li>对每个像素进行内外测试</li>
+</ol>
+<pre class="codehilite"><code>xmin = floor(min(x0, x1, x2))
+xmax = ceil(max(x0, x1, x2))
+ymin = floor(min(y0, y1, y2))
+ymax = ceil(max(y0, y1, y2))
+
+for y in [ymin, ymax]:
+    for x in [xmin, xmax]:
+        if (x, y) inside triangle:
+            shade_pixel(x, y)
+</code></pre>
+
+<p>效率分析：</p>
+<ul>
+<li>时间复杂度：$O((x_{max}-x_{min})(y_{max}-y_{min}))$</li>
+<li>对于细长三角形效率低下（大量像素在三角形外）</li>
+<li>适合小三角形或接近正方形的三角形</li>
+</ul>
+<h4 id="_19">包围盒优化</h4>
+<ol>
+<li>
+<p><strong>像素中心对齐</strong>：
+   <code>// 考虑像素中心偏移
+   xmin = floor(min(x0, x1, x2) - 0.5)
+   xmax = ceil(max(x0, x1, x2) - 0.5)</code></p>
+</li>
+<li>
+<p><strong>保守包围盒</strong>：
+   为了处理浮点误差，稍微扩大包围盒：
+   <code>const float epsilon = 0.001f;
+   xmin = floor(min(x0, x1, x2) - epsilon);
+   xmax = ceil(max(x0, x1, x2) + epsilon);</code></p>
+</li>
+<li>
+<p><strong>空包围盒检查</strong>：
+   <code>if (xmin &gt; xmax || ymin &gt; ymax) {
+       return; // 退化三角形，跳过
+   }</code></p>
+</li>
+</ol>
+<h4 id="_20">填充率分析</h4>
+<p>定义填充率（fill rate）为：
+$$\text{Fill Rate} = \frac{\text{Triangle Area}}{\text{Bounding Box Area}}$$
+不同形状三角形的填充率：</p>
+<ul>
+<li>正三角形：约50%</li>
+<li>直角三角形：50%</li>
+<li>细长三角形：可能低至1%</li>
+</ul>
+<p>低填充率意味着大量无效测试，需要更精细的算法。</p>
+<h4 id="incremental-algorithm">增量算法（Incremental Algorithm）</h4>
+<p>边函数具有线性性质：
+$$E(x+1, y) = E(x, y) + (y_1 - y_0)$$
+$$E(x, y+1) = E(x, y) - (x_1 - x_0)$$
+利用这一性质可以避免重复计算：</p>
+<ol>
+<li>计算起始点的边函数值</li>
+<li>使用增量更新相邻像素的值</li>
+<li>减少乘法运算，提高效率</li>
+</ol>
+<p>增量算法的优化版本：</p>
+<pre class="codehilite"><code>// 预计算增量
+A01 = y0 - y1, B01 = x1 - x0
+A12 = y1 - y2, B12 = x2 - x1
+A20 = y2 - y0, B20 = x0 - x2
+
+// 起始点边函数值
+w0_row = E01(xmin, ymin)
+w1_row = E12(xmin, ymin)
+w2_row = E20(xmin, ymin)
+
+for y in [ymin, ymax]:
+    w0 = w0_row
+    w1 = w1_row
+    w2 = w2_row
+    for x in [xmin, xmax]:
+        if (w0 &gt;= 0 &amp;&amp; w1 &gt;= 0 &amp;&amp; w2 &gt;= 0):
+            shade_pixel(x, y)
+        w0 += A01
+        w1 += A12
+        w2 += A20
+    w0_row += B01
+    w1_row += B12
+    w2_row += B20
+</code></pre>
+
+<h4 id="_21">增量算法的性能分析</h4>
+<p>相比朴素算法：</p>
+<ul>
+<li><strong>乘法操作</strong>：从每像素 6 次减少到 0 次</li>
+<li><strong>加法操作</strong>：每像素 9 次（三个边函数，每个 3 次）</li>
+<li><strong>内存访问</strong>：顺序访问，缓存友好</li>
+</ul>
+<h4 id="_22">并行增量算法</h4>
+<p>现代GPU使用2×2像素块（quad）为单位：</p>
+<pre class="codehilite"><code>// 计算quad左上角的边函数值
+float3 w_base = compute_edge_functions(quad_x, quad_y);
+
+// 并行计算四个像素
+float3 w00 = w_base;
+float3 w10 = w_base + float3(A01, A12, A20);
+float3 w01 = w_base + float3(B01, B12, B20);
+float3 w11 = w_base + float3(A01+B01, A12+B12, A20+B20);
+
+// SIMD处理
+bool4 inside = (w00 &gt;= 0) &amp; (w10 &gt;= 0) &amp; (w01 &gt;= 0) &amp; (w11 &gt;= 0);
+</code></pre>
+
+<h4 id="_23">定点数增量算法</h4>
+<p>为了保证精度，使用定点数运算：</p>
+<pre class="codehilite"><code>// 16.16定点数格式
+typedef int32_t fixed16;
+
+// 转换为定点数
+fixed16 to_fixed16(float f) {
+    return (fixed16)(f * 65536.0f + 0.5f);
+}
+
+// 定点数增量
+fixed16 w0 = to_fixed16(E01(xmin, ymin));
+fixed16 A01_fixed = to_fixed16(y0 - y1);
+fixed16 B01_fixed = to_fixed16(x1 - x0);
+
+// 内循环
+for (int x = xmin; x &lt;= xmax; x++) {
+    if (w0 &gt;= 0 &amp;&amp; w1 &gt;= 0 &amp;&amp; w2 &gt;= 0) {
+        shade_pixel(x, y);
+    }
+    w0 += A01_fixed;
+    w1 += A12_fixed;
+    w2 += A20_fixed;
+}
+</code></pre>
+
+<h4 id="tiled-rasterization">分块光栅化（Tiled Rasterization）</h4>
+<p>现代GPU采用分块策略：</p>
+<ol>
+<li>将屏幕划分为固定大小的块（如8×8或16×16）</li>
+<li>首先进行块级别的粗测试</li>
+<li>只对可能相交的块进行像素级测试</li>
+</ol>
+<p>层次化测试策略：</p>
+<ul>
+<li><strong>粗粒度测试</strong>：使用块的四个角点快速排除完全在外的块</li>
+<li><strong>细粒度测试</strong>：对通过粗测试的块进行逐像素测试</li>
+<li><strong>早期退出</strong>：一旦确定块完全在内，跳过像素级测试</li>
+</ul>
+<h4 id="scanline-algorithm">扫描线算法（Scanline Algorithm）</h4>
+<p>经典的光栅化方法，特别适合软件实现：</p>
+<ol>
+<li>找出三角形与每条扫描线的交点</li>
+<li>对每条扫描线，填充交点之间的像素</li>
+<li>使用活动边表（AET）维护当前相交的边</li>
+</ol>
+<p>扫描线转换的优势：</p>
+<ul>
+<li>内存访问模式友好（行优先）</li>
+<li>易于实现反走样（通过子像素精度）</li>
+<li>适合并行化（不同扫描线独立）</li>
+</ul>
+<h4 id="pineda">Pineda算法</h4>
+<p>一种高效的并行光栅化算法：</p>
+<ol>
+<li>同时计算三个边函数</li>
+<li>使用边函数的符号判断像素位置</li>
+<li>支持任意遍历顺序（如Hilbert曲线）</li>
+</ol>
+<h3 id="315">3.1.5 亚像素精度与定点数</h3>
+<p>为避免浮点误差导致的裂缝，现代光栅化器使用定点数表示：</p>
+<ul>
+<li>典型精度：16.8或24.8格式（整数部分.小数部分位数）</li>
+<li>子像素精度：1/256像素（8位小数）或1/65536像素（16位小数）</li>
+<li>保证相邻三角形的边界精确对齐</li>
+</ul>
+<p>定点数转换：
+$$x_{fixed} = \lfloor x_{float} \times 2^{subpixel_bits} + 0.5 \rfloor$$</p>
+<h4 id="_24">定点数的数学基础</h4>
+<p>定点数是一种用整数表示小数的方法。对于m.n格式：</p>
+<ul>
+<li>m位表示整数部分</li>
+<li>n位表示小数部分</li>
+<li>总位数 = m + n</li>
+<li>精度 = $2^{-n}$</li>
+<li>范围 = $[-2^{m-1}, 2^{m-1} - 2^{-n}]$</li>
+</ul>
+<p>定点数运算：</p>
+<pre class="codehilite"><code>// 加法：直接相加
+fixed_c = fixed_a + fixed_b;
+
+// 乘法：需要右移
+fixed_c = (fixed_a * fixed_b) &gt;&gt; n;
+
+// 除法：需要左移
+fixed_c = (fixed_a &lt;&lt; n) / fixed_b;
+</code></pre>
+
+<h4 id="_25">为什么需要亚像素精度</h4>
+<ol>
+<li>
+<p><strong>消除裂缝</strong>：
+   - 浮点误差可能导致相邻三角形之间出现缝隙
+   - 定点数保证共享边的计算结果完全一致</p>
+</li>
+<li>
+<p><strong>精确的边界处理</strong>：
+   - 像素中心可能恰好落在三角形边上
+   - 需要一致的规则决定归属</p>
+</li>
+<li>
+<p><strong>反走样支持</strong>：
+   - 计算部分覆盖的像素
+   - 需要亚像素级别的精度</p>
+</li>
+</ol>
+<h4 id="_26">裂缝问题的根源</h4>
+<p>浮点运算的不精确性会导致：</p>
+<ol>
+<li><strong>T型接缝</strong>：共享边的两个三角形在光栅化时产生缝隙</li>
+<li><strong>重复像素</strong>：同一像素被多个三角形覆盖</li>
+<li><strong>丢失像素</strong>：边界上的像素未被任何三角形覆盖</li>
+</ol>
+<h4 id="_27">裂缝问题的具体例子</h4>
+<p>考虑两个共享边的三角形：</p>
+<ul>
+<li>三角形A：$(0,0), (10,0), (5,10)$</li>
+<li>三角形B：$(10,0), (5,10), (10,10)$</li>
+<li>共享边：$(10,0) - (5,10)$</li>
+</ul>
+<p>如果使用浮点计算：</p>
+<pre class="codehilite"><code>// 三角形A计算共享边函数
+E_A = (x - 10) * (10 - 0) - (y - 0) * (5 - 10)
+    = 10x - 100 + 5y
+
+// 三角形B计算同一条边（反向）
+E_B = (x - 5) * (0 - 10) - (y - 10) * (10 - 5)
+    = -10x + 50 - 5y + 50
+    = -10x - 5y + 100
+
+// 理论上：E_A + E_B = 0
+// 实际上：浮点误差可能导致 E_A + E_B ≠ 0
+</code></pre>
+
+<h4 id="_28">裂缝的视觉影响</h4>
+<p>裂缝在以下情况下尤为明显：</p>
+<ol>
+<li><strong>高对比度场景</strong>：亮色背景上的暗色物体</li>
+<li><strong>运动场景</strong>：裂缝会随着视角变化而闪烁</li>
+<li><strong>反走样后</strong>：裂缝可能被放大</li>
+</ol>
+<h4 id="_29">定点数运算规则</h4>
+<p>为保证水密性（watertight），必须遵循：</p>
+<ol>
+<li><strong>顶点捕捉</strong>：共享顶点必须捕捉到相同的定点坐标</li>
+<li><strong>填充规则</strong>：采用统一的边界归属规则（如top-left rule）</li>
+<li><strong>边函数一致性</strong>：共享边的边函数计算必须产生相同结果</li>
+</ol>
+<p>Top-left填充规则：</p>
+<ul>
+<li>像素中心恰好在边上时，只有当边是"top"或"left"边时才包含该像素</li>
+<li>Top边：水平且位于三角形上方</li>
+<li>Left边：非水平且位于三角形左侧</li>
+</ul>
+<h4 id="top-left">Top-Left规则的实现</h4>
+<pre class="codehilite"><code>bool is_top_left_edge(vec2 v0, vec2 v1) {
+    vec2 edge = v1 - v0;
+
+    // Top edge: horizontal and going right
+    if (edge.y == 0 &amp;&amp; edge.x &gt; 0) return true;
+
+    // Left edge: going up
+    if (edge.y &gt; 0) return true;
+
+    return false;
+}
+
+// 在边函数测试中应用
+float bias = is_top_left_edge(v0, v1) ? 0 : -1;
+if (edge_function + bias &gt;= 0) {
+    // 像素在三角形内
+}
+</code></pre>
+
+<h4 id="_30">定点数的溢出处理</h4>
+<p>定点数运算可能溢出，需要谨慎选择位宽：</p>
+<ol>
+<li>
+<p><strong>边函数计算</strong>：
+   - 输入：m.n格式的坐标
+   - 乘积：需要2m位
+   - 差值：需要2m+1位（考虑符号）</p>
+</li>
+<li>
+<p><strong>安全位宽选择</strong>：
+   - 屏幕坐标：16.8（支持65536×65536）
+   - 边函数：32位有符号整数
+   - 插值参数：16.16（更高精度）</p>
+</li>
+</ol>
+<h4 id="_31">定点数与浮点数的混合使用</h4>
+<p>在现代GPU中，通常混合使用：</p>
+<ul>
+<li><strong>定点数</strong>：用于光栅化阶段（保证精确性）</li>
+<li><strong>浮点数</strong>：用于着色计算（需要大范围）</li>
+</ul>
+<p>转换点：</p>
+<pre class="codehilite"><code>// 光栅化后，转换回浮点
+float x_float = fixed_x / (float)(1 &lt;&lt; FRAC_BITS);
+float y_float = fixed_y / (float)(1 &lt;&lt; FRAC_BITS);
+
+// 进行着色计算
+color = shade_pixel(x_float, y_float, attributes);
+</code></pre>
+
+<h4 id="_32">定点数的性能优势</h4>
+<ol>
+<li><strong>确定性</strong>：相同输入总是产生相同输出</li>
+<li><strong>并行性</strong>：无需处理浮点异常</li>
+<li><strong>硬件效率</strong>：整数运算单元更简单、更快</li>
+</ol>
+<h4 id="_33">定点数硬件实现</h4>
+<p>现代GPU中的定点数单元：</p>
+<ol>
+<li>
+<p><strong>专用定点数ALU</strong>：
+   - 定点乘法器
+   - 移位器（用于除法）
+   - 饱和算术（防止溢出）</p>
+</li>
+<li>
+<p><strong>流水线设计</strong>：
+   <code>Stage 1: 坐标转换 (float -&gt; fixed)
+   Stage 2: 边函数计算
+   Stage 3: 覆盖测试
+   Stage 4: 属性插值设置</code></p>
+</li>
+<li>
+<p><strong>SIMD优化</strong>：
+   - 4个像素同时处理
+   - 向量化的定点数运算</p>
+</li>
+</ol>
+<h4 id="_34">未来趋势</h4>
+<p>随着浮点单元的进步，一些新技术正在出现：</p>
+<ol>
+<li>
+<p><strong>混合精度模式</strong>：
+   - 边界测试使用定点数
+   - 内部填充使用浮点数</p>
+</li>
+<li>
+<p><strong>可配置精度</strong>：
+   - 根据场景需求调整
+   - VR需要更高精度
+   - 移动设备可以降低精度</p>
+</li>
+<li>
+<p><strong>AI辅助裂缝检测</strong>：
+   - 机器学习检测潜在裂缝
+   - 自动修复算法</p>
+</li>
+</ol>
+<h3 id="316">3.1.6 属性插值</h3>
+<p>对于三角形内部的点，所有顶点属性需要进行插值：</p>
+<h4 id="_35">透视正确插值</h4>
+<p>屏幕空间的线性插值不等于世界空间的线性插值。透视正确插值公式：
+$$\frac{1}{w} = \frac{\alpha}{w_0} + \frac{\beta}{w_1} + \frac{\gamma}{w_2}$$
+$$attribute = \frac{\frac{\alpha \cdot attr_0}{w_0} + \frac{\beta \cdot attr_1}{w_1} + \frac{\gamma \cdot attr_2}{w_2}}{\frac{1}{w}}$$
+其中 $w$ 是齐次坐标的第四分量。</p>
+<h4 id="_36">透视插值的必要性</h4>
+<p>考虑一条在3D空间中均匀分布的纹理坐标线，投影到屏幕后：</p>
+<ul>
+<li>近处的间隔在屏幕上显得大</li>
+<li>远处的间隔在屏幕上显得小</li>
+<li>直接的屏幕空间插值会导致纹理扭曲</li>
+</ul>
+<p>数学推导：
+设世界空间中的线性插值参数为 $t$，则：
+$$\mathbf{p}_{world} = (1-t)\mathbf{p}_0 + t\mathbf{p}_1$$
+投影后在屏幕空间：
+$$t_{screen} = \frac{t/w_1}{(1-t)/w_0 + t/w_1}$$
+这表明屏幕空间的参数与世界空间的参数呈非线性关系。</p>
+<h4 id="_37">插值优化</h4>
+<p>现代GPU采用的优化策略：</p>
+<ol>
+<li><strong>预计算倒数</strong>：顶点着色器输出 $1/w$ 而非 $w$</li>
+<li><strong>增量插值</strong>：利用重心坐标的线性性质</li>
+<li><strong>SIMD并行</strong>：同时插值多个属性</li>
+</ol>
+<p>插值器硬件设计：</p>
+<pre class="codehilite"><code>// 每个属性的插值
+for each attribute:
+    I = a0/w0 * α + a1/w1 * β + a2/w2 * γ
+    attribute = I * w
+</code></pre>
+
+<h4 id="_38">特殊属性的处理</h4>
+<ol>
+<li><strong>深度值</strong>：通常线性插值 $z/w$，因为深度缓冲存储的就是这个值</li>
+<li><strong>法线向量</strong>：插值后需要重新归一化</li>
+<li><strong>颜色</strong>：可以选择是否进行透视校正（Gouraud着色通常不需要）</li>
+</ol>
+<h2 id="32">3.2 深度测试与抗锯齿</h2>
+<h3 id="321-z-buffer">3.2.1 深度缓冲（Z-Buffer）</h3>
+<p>深度缓冲是解决可见性问题的标准方法：</p>
+<ul>
+<li>为每个像素存储当前最近的深度值</li>
+<li>新片段只有在更近时才会更新</li>
+<li>与绘制顺序无关（order-independent）</li>
+</ul>
+<p>深度测试算法：</p>
+<pre class="codehilite"><code>for each fragment at (x, y) with depth z:
+    if z &lt; depth_buffer[x][y]:
+        depth_buffer[x][y] = z
+        color_buffer[x][y] = fragment_color
+</code></pre>
+
+<h4 id="_39">深度值的表示</h4>
+<p>从眼空间到NDC空间的深度变换：
+$$z_{ndc} = \frac{f+n}{f-n} + \frac{2fn}{f-n} \cdot \frac{1}{z_{eye}}$$
+归一化到[0,1]的窗口空间深度：
+$$z_{window} = \frac{z_{ndc} + 1}{2}$$</p>
+<h4 id="_40">深度精度问题</h4>
+<p>透视投影导致深度精度分布极不均匀：</p>
+<ul>
+<li>近处精度高，远处精度低</li>
+<li>50%的精度集中在[n, 2n]范围内</li>
+<li>Z-fighting：深度值接近时的闪烁</li>
+</ul>
+<p>精度分析：
+$$\frac{dz_{window}}{dz_{eye}} = \frac{fn}{(f-n)z_{eye}^2}$$
+这表明精度随距离平方反比下降。</p>
+<h4 id="_41">深度精度优化方案</h4>
+<ol>
+<li><strong>对数深度缓冲</strong>：
+$$z_{log} = \frac{\log(z/n)}{\log(f/n)}$$</li>
+</ol>
+<ul>
+<li>优点：精度分布更均匀</li>
+<li>缺点：需要着色器计算，不兼容硬件深度测试</li>
+</ul>
+<ol start="2">
+<li>
+<p><strong>反向Z（Reversed-Z）</strong>：
+   - 使用 $1-z$ 作为深度值
+   - 配合浮点深度缓冲，利用浮点数在0附近的高精度
+   - DirectX 12和Vulkan的推荐做法</p>
+</li>
+<li>
+<p><strong>多级深度缓冲（Cascaded Depth）</strong>：
+   - 将场景分为多个深度范围
+   - 每个范围使用独立的深度缓冲
+   - 常用于大规模场景（如飞行模拟器）</p>
+</li>
+<li>
+<p><strong>W缓冲</strong>：
+   - 直接存储线性深度 $w = z_{eye}$
+   - 精度分布均匀但总体精度较低
+   - 早期硬件支持，现已少见</p>
+</li>
+</ol>
+<h3 id="322-early-z">3.2.2 早期深度测试（Early Z）</h3>
+<p>现代GPU在片段着色前进行深度测试：</p>
+<ul>
+<li>减少无用的片段着色计算</li>
+<li>要求深度写入是单调的</li>
+<li>某些操作会禁用Early Z</li>
+</ul>
+<h4 id="early-z">Early Z的工作原理</h4>
+<p>传统管线：光栅化 → 片段着色 → 深度测试
+Early Z管线：光栅化 → 深度测试 → 片段着色（仅通过的片段）</p>
+<p>启用条件：</p>
+<ol>
+<li>片段着色器不修改深度值</li>
+<li>不使用discard或clip</li>
+<li>不启用alpha test</li>
+<li>深度测试函数是单调的（如LESS、GREATER）</li>
+</ol>
+<h4 id="_42">性能影响</h4>
+<p>Early Z的效果取决于：</p>
+<ul>
+<li><strong>绘制顺序</strong>：前到后绘制可最大化Early Z效益</li>
+<li><strong>场景复杂度</strong>：overdraw越严重，Early Z收益越大</li>
+<li><strong>着色器复杂度</strong>：片段着色器越复杂，节省越多</li>
+</ul>
+<h3 id="323-hierarchical-z">3.2.3 层次深度缓冲（Hierarchical Z）</h3>
+<p>使用深度金字塔加速剔除：</p>
+<ul>
+<li>存储块级别的最大/最小深度</li>
+<li>快速剔除被遮挡的大块区域</li>
+<li>与分块光栅化配合使用</li>
+</ul>
+<h4 id="hi-z">Hi-Z的构建</h4>
+<p>自底向上构建深度金字塔：</p>
+<pre class="codehilite"><code>// 对于每个上层像素
+z_max = max(child[0], child[1], child[2], child[3])
+z_min = min(child[0], child[1], child[2], child[3])
+</code></pre>
+
+<h4 id="hi-z_1">Hi-Z测试流程</h4>
+<ol>
+<li>计算图元的保守深度范围[z_prim_min, z_prim_max]</li>
+<li>从粗到细进行层次测试：
+   - 如果 z_prim_min &gt; z_tile_max：图元被遮挡，剔除
+   - 如果 z_prim_max &lt; z_tile_min：图元在前，快速通过
+   - 否则：细分到下一层继续测试</li>
+</ol>
+<h4 id="z-cull-vs-z-pass">Z-Cull vs Z-Pass</h4>
+<ul>
+<li><strong>Z-Cull</strong>：Hi-Z测试失败，整块剔除</li>
+<li><strong>Z-Pass</strong>：Hi-Z测试通过，跳过像素级深度测试</li>
+<li>两者结合可显著减少深度缓冲带宽</li>
+</ul>
+<h3 id="324">3.2.4 抗锯齿基础理论</h3>
+<h4 id="_43">采样理论</h4>
+<p>根据奈奎斯特-香农采样定理，采样频率必须大于信号最高频率的两倍才能完美重建信号。图形学中的锯齿本质是采样不足导致的混叠（aliasing）。</p>
+<p>频域分析：</p>
+<ul>
+<li>原始信号：$f(x)$</li>
+<li>采样过程：$f_s(x) = f(x) \cdot \sum_{n} \delta(x - nT)$</li>
+<li>频谱混叠：当 $f_s &lt; 2f_{max}$ 时，高频成分折叠到低频</li>
+</ul>
+<p>图形学中的高频来源：</p>
+<ol>
+<li><strong>几何边界</strong>：阶跃函数包含无限高频</li>
+<li><strong>纹理细节</strong>：高频纹理模式</li>
+<li><strong>镜面高光</strong>：急剧变化的光照</li>
+<li><strong>几何细节</strong>：细小的几何特征</li>
+</ol>
+<h4 id="vs">预滤波vs后滤波</h4>
+<ol>
+<li>
+<p><strong>预滤波（Pre-filtering）</strong>：
+   - 在采样前去除高频成分
+   - 理论上正确但计算困难
+   - 需要解析计算覆盖面积</p>
+</li>
+<li>
+<p><strong>后滤波（Post-filtering）</strong>：
+   - 对采样结果进行重建
+   - 实际常用但理论不完美
+   - 包括各种图像空间技术</p>
+</li>
+</ol>
+<p>理想的抗锯齿是预滤波，但计算成本高。实践中常采用超采样近似预滤波。</p>
+<h4 id="_44">滤波核函数</h4>
+<p>常用的重建滤波器：</p>
+<ol>
+<li><strong>盒式滤波器（Box）</strong>：$w(x) = 1, |x| &lt; 0.5$</li>
+<li><strong>三角滤波器（Tent）</strong>：$w(x) = 1 - |x|, |x| &lt; 1$</li>
+<li><strong>高斯滤波器</strong>：$w(x) = e^{-x^2/2\sigma^2}$</li>
+<li><strong>Lanczos滤波器</strong>：$w(x) = \text{sinc}(x)\text{sinc}(x/a), |x| &lt; a$</li>
+</ol>
+<h3 id="325-ssaa">3.2.5 超采样抗锯齿（SSAA）</h3>
+<p>最直接的抗锯齿方法：</p>
+<ul>
+<li>以更高分辨率渲染</li>
+<li>对结果进行下采样</li>
+</ul>
+<p>计算成本：$O(n^2)$，其中 $n$ 是超采样倍数。</p>
+<h3 id="326-msaa">3.2.6 多重采样抗锯齿（MSAA）</h3>
+<p>MSAA优化了SSAA的性能：</p>
+<ol>
+<li>每个像素存储多个采样点</li>
+<li>片段着色只执行一次</li>
+<li>深度和覆盖测试对每个采样点独立进行</li>
+</ol>
+<p>采样模式：</p>
+<ul>
+<li>2×MSAA：旋转网格模式</li>
+<li>4×MSAA：旋转盒模式或Quincunx</li>
+<li>8×MSAA：优化的Poisson分布</li>
+</ul>
+<p>覆盖计算：</p>
+<pre class="codehilite"><code>coverage = 0
+for each sample in pixel:
+    if sample inside triangle:
+        coverage += 1/num_samples
+final_color = coverage * fragment_color + (1-coverage) * background
+</code></pre>
+
+<h3 id="327-csaa">3.2.7 覆盖采样抗锯齿（CSAA）</h3>
+<p>NVIDIA的优化技术：</p>
+<ul>
+<li>分离覆盖采样和颜色/深度采样</li>
+<li>16×覆盖配合4×颜色/深度</li>
+<li>减少内存带宽需求</li>
+</ul>
+<h3 id="328-taa">3.2.8 时间抗锯齿（TAA）</h3>
+<p>利用时间域的信息：</p>
+<ol>
+<li>每帧使用不同的采样偏移（jittering）</li>
+<li>将多帧结果进行时间积累</li>
+<li>使用运动向量处理动态场景</li>
+</ol>
+<p>时间积累公式：
+$$color_{new} = \alpha \cdot color_{current} + (1-\alpha) \cdot color_{history}$$
+其中 $\alpha$ 通常为 0.1-0.2。</p>
+<h3 id="329-mlaafxaasmaa">3.2.9 形态学抗锯齿（MLAA/FXAA/SMAA）</h3>
+<p>后处理抗锯齿技术：</p>
+<ol>
+<li><strong>边缘检测</strong>：识别几何边界</li>
+<li><strong>模式匹配</strong>：确定边缘形状</li>
+<li><strong>混合</strong>：根据模式进行像素混合</li>
+</ol>
+<p>FXAA的亮度边缘检测：
+$$edge = |L_N - L_S| + |L_E - L_W| &gt; threshold$$
+其中 $L$ 表示像素亮度。</p>
+<h2 id="33-gpu">3.3 现代GPU光栅化管线</h2>
+<h3 id="331-gpu">3.3.1 GPU架构概述</h3>
+<p>现代GPU采用大规模并行架构：</p>
+<ul>
+<li><strong>流多处理器（SM）</strong>：独立的计算单元</li>
+<li><strong>SIMT执行模型</strong>：单指令多线程</li>
+<li><strong>Warp/Wavefront</strong>：32/64线程的执行组</li>
+</ul>
+<h3 id="332-primitive-assembly">3.3.2 图元装配（Primitive Assembly）</h3>
+<p>将顶点组装成图元：</p>
+<ol>
+<li>索引缓冲读取</li>
+<li>图元拓扑解释（点、线、三角形）</li>
+<li>图元剔除（背面、视锥体外）</li>
+</ol>
+<p>背面剔除：
+$$\mathbf{n} \cdot \mathbf{v} = (v_1 - v_0) \times (v_2 - v_0) \cdot \mathbf{view} &gt; 0$$</p>
+<h3 id="333-primitive-distribution">3.3.3 图元分配（Primitive Distribution）</h3>
+<p>将图元分配到屏幕分块：</p>
+<ol>
+<li>计算图元的屏幕空间包围盒</li>
+<li>确定覆盖的分块列表</li>
+<li>将图元引用添加到分块队列</li>
+</ol>
+<p>分块大小权衡：</p>
+<ul>
+<li>小分块：更好的负载均衡，更多的管理开销</li>
+<li>大分块：更少的重复工作，可能的负载不均</li>
+</ul>
+<h3 id="334">3.3.4 片段生成与调度</h3>
+<p>每个分块独立处理：</p>
+<ol>
+<li>从队列读取图元</li>
+<li>生成片段（2×2像素块为单位）</li>
+<li>调度到着色单元</li>
+</ol>
+<p>2×2像素块（Quad）的重要性：</p>
+<ul>
+<li>计算屏幕空间导数（ddx、ddy）</li>
+<li>纹理LOD计算</li>
+<li>保证SIMD执行效率</li>
+</ul>
+<h3 id="335">3.3.5 深度缓冲压缩</h3>
+<p>减少带宽需求的关键技术：</p>
+<h4 id="_45">差分压缩</h4>
+<p>对于平面区域，存储基准值和差分：
+$$z_{compressed} = z_{base} + \Delta z_x \cdot x + \Delta z_y \cdot y$$</p>
+<h4 id="_46">深度范围压缩</h4>
+<p>存储块的最小/最大值和相对偏移：
+$$z_{normalized} = \frac{z - z_{min}}{z_{max} - z_{min}}$$</p>
+<h3 id="336-rop">3.3.6 渲染输出单元（ROP）</h3>
+<p>负责最终的像素操作：</p>
+<ol>
+<li>深度测试</li>
+<li>模板测试</li>
+<li>混合操作</li>
+<li>写入帧缓冲</li>
+</ol>
+<p>原子操作保证：</p>
+<ul>
+<li>同一像素的操作串行化</li>
+<li>不同像素可以并行</li>
+</ul>
+<h3 id="337">3.3.7 内存层次结构</h3>
+<p>优化的缓存设计：</p>
+<ol>
+<li><strong>L1缓存</strong>：纹理缓存、常量缓存</li>
+<li><strong>L2缓存</strong>：统一缓存，所有单元共享</li>
+<li><strong>帧缓冲缓存</strong>：专用于ROP操作</li>
+</ol>
+<p>带宽优化技术：</p>
+<ul>
+<li><strong>Delta色彩压缩</strong>：存储与参考值的差</li>
+<li><strong>快速清除</strong>：标记而非实际写入</li>
+<li><strong>事务消除</strong>：检测并跳过冗余写入</li>
+</ul>
+<h3 id="338">3.3.8 可编程管线扩展</h3>
+<h4 id="mesh-shader">网格着色器（Mesh Shader）</h4>
+<p>新一代几何管线：</p>
+<ul>
+<li>替代传统的顶点/几何着色器</li>
+<li>支持GPU生成几何体</li>
+<li>更灵活的图元剔除</li>
+</ul>
+<h4 id="vrs">可变率着色（VRS）</h4>
+<p>允许不同区域使用不同的着色率：</p>
+<ul>
+<li>1×1、1×2、2×2、4×4等</li>
+<li>基于内容的自适应</li>
+<li>注视点渲染优化</li>
+</ul>
+<h3 id="339">3.3.9 光线追踪硬件集成</h3>
+<p>现代GPU集成了光线追踪单元：</p>
+<ul>
+<li><strong>RT Core</strong>：硬件加速的BVH遍历</li>
+<li><strong>光栅化与光追混合</strong>：主要场景用光栅化，反射/阴影用光追</li>
+<li><strong>时间去噪</strong>：利用TAA框架降噪</li>
+</ul>
+<h2 id="_47">本章小结</h2>
+<p>光栅化是将连续几何转换为离散像素的核心过程。本章涵盖了：</p>
+<p><strong>关键概念：</strong></p>
+<ul>
+<li>三角形离散化的数学基础：边函数、重心坐标</li>
+<li>透视正确插值：$\frac{1}{w}$ 的线性插值</li>
+<li>深度缓冲与可见性：Z-Buffer算法及其优化</li>
+<li>抗锯齿理论：采样定理与各种AA技术</li>
+<li>GPU管线架构：从图元到像素的并行处理</li>
+</ul>
+<p><strong>重要公式：</strong></p>
+<ul>
+<li>边函数：$E(\mathbf{p}) = (\mathbf{p} - \mathbf{v}_0) \times (\mathbf{v}_1 - \mathbf{v}_0)$</li>
+<li>重心坐标：$\mathbf{p} = \alpha \mathbf{v}_0 + \beta \mathbf{v}_1 + \gamma \mathbf{v}_2$</li>
+<li>透视插值：$attr = \frac{\sum \frac{\alpha_i \cdot attr_i}{w_i}}{\sum \frac{\alpha_i}{w_i}}$</li>
+<li>深度映射：$z_{ndc} = \frac{f+n}{f-n} + \frac{2fn}{f-n} \cdot \frac{1}{z_{eye}}$</li>
+</ul>
+<p><strong>性能考虑：</strong></p>
+<ul>
+<li>分块光栅化减少overdraw</li>
+<li>Early-Z避免无用着色</li>
+<li>压缩技术降低带宽需求</li>
+<li>SIMT执行模型的并行效率</li>
+</ul>
+<h2 id="_48">练习题</h2>
+<h3 id="_49">基础题</h3>
+<p><strong>3.1 边函数计算</strong>
+给定三角形顶点 $\mathbf{v}_0 = (0, 0)$, $\mathbf{v}_1 = (4, 0)$, $\mathbf{v}_2 = (2, 3)$，计算点 $\mathbf{p} = (2, 1)$ 的三个边函数值，并判断该点是否在三角形内部。</p>
+<p><em>提示：注意顶点的顺序和边函数的符号。</em></p>
+<details>
+<summary>答案</summary>
+<p>计算三个边函数：</p>
+<ul>
+<li>$E_{01}(\mathbf{p}) = (2-0)(0-0) - (1-0)(4-0) = 0 - 4 = -4$</li>
+<li>$E_{12}(\mathbf{p}) = (2-4)(3-0) - (1-0)(2-4) = -6 - (-2) = -4$</li>
+<li>$E_{20}(\mathbf{p}) = (2-2)(0-3) - (1-3)(0-2) = 0 - 4 = -4$</li>
+</ul>
+<p>由于所有边函数值都为负，说明三角形顶点是顺时针排列。对于顺时针排列，点在内部的条件是所有边函数值都小于等于0，因此点 $(2,1)$ 在三角形内部。</p>
+<p>验证：可以计算重心坐标 $\alpha = \beta = \gamma = 1/3$，均为正值，确认点在内部。</p>
+</details>
+<p><strong>3.2 重心坐标插值</strong>
+三角形三个顶点的颜色分别为红色 $(1,0,0)$、绿色 $(0,1,0)$ 和蓝色 $(0,0,1)$。如果某点的重心坐标为 $(\alpha, \beta, \gamma) = (0.5, 0.3, 0.2)$，计算该点的插值颜色。</p>
+<p><em>提示：直接应用重心坐标的定义。</em></p>
+<details>
+<summary>答案</summary>
+<p>使用重心坐标进行线性插值：
+$$\mathbf{color} = \alpha \cdot \mathbf{c}_0 + \beta \cdot \mathbf{c}_1 + \gamma \cdot \mathbf{c}_2$$
+$$= 0.5 \cdot (1,0,0) + 0.3 \cdot (0,1,0) + 0.2 \cdot (0,0,1)$$
+$$= (0.5, 0, 0) + (0, 0.3, 0) + (0, 0, 0.2)$$
+$$= (0.5, 0.3, 0.2)$$
+因此该点的颜色为 RGB = $(0.5, 0.3, 0.2)$。</p>
+</details>
+<p><strong>3.3 透视正确插值</strong>
+在屏幕空间，三角形顶点的深度值（$1/w$）分别为 0.5、0.25 和 0.125。某点的重心坐标为 $(0.4, 0.4, 0.2)$。如果顶点的纹理坐标分别为 $(0,0)$、$(1,0)$ 和 $(0.5,1)$，计算该点的透视正确纹理坐标。</p>
+<p><em>提示：先插值 $1/w$，再进行透视除法。</em></p>
+<details>
+<summary>答案</summary>
+<p>首先插值 $1/w$：
+$$\frac{1}{w} = 0.4 \times 0.5 + 0.4 \times 0.25 + 0.2 \times 0.125 = 0.2 + 0.1 + 0.025 = 0.325$$
+然后计算每个分量的权重：
+$$\text{weight}_0 = \frac{0.4 \times 0.5}{0.325} = \frac{0.2}{0.325} = \frac{8}{13}$$
+$$\text{weight}_1 = \frac{0.4 \times 0.25}{0.325} = \frac{0.1}{0.325} = \frac{4}{13}$$
+$$\text{weight}_2 = \frac{0.2 \times 0.125}{0.325} = \frac{0.025}{0.325} = \frac{1}{13}$$
+最后插值纹理坐标：
+$$u = \frac{8}{13} \times 0 + \frac{4}{13} \times 1 + \frac{1}{13} \times 0.5 = \frac{4.5}{13} \approx 0.346$$
+$$v = \frac{8}{13} \times 0 + \frac{4}{13} \times 0 + \frac{1}{13} \times 1 = \frac{1}{13} \approx 0.077$$</p>
+<p>透视正确的纹理坐标为 $(0.346, 0.077)$。</p>
+</details>
+<p><strong>3.4 MSAA覆盖计算</strong>
+使用4×MSAA，采样点位置为像素中心偏移 $(-0.25, -0.25)$、$(0.25, -0.25)$、$(-0.25, 0.25)$ 和 $(0.25, 0.25)$。如果三角形边界恰好通过像素中心（从左下到右上的对角线），计算该像素的覆盖率。</p>
+<p><em>提示：判断每个采样点相对于边界的位置。</em></p>
+<details>
+<summary>答案</summary>
+<p>三角形边界是从左下到右上的对角线，可以表示为：$y = x$</p>
+<p>对于每个采样点，检查是否在边界下方（假设三角形在边界下方）：</p>
+<ol>
+<li>$(-0.25, -0.25)$：$-0.25 &lt; -0.25$ 不成立，不被覆盖</li>
+<li>$(0.25, -0.25)$：$-0.25 &lt; 0.25$ 成立，被覆盖</li>
+<li>$(-0.25, 0.25)$：$0.25 &lt; -0.25$ 不成立，不被覆盖</li>
+<li>$(0.25, 0.25)$：$0.25 &lt; 0.25$ 不成立，不被覆盖</li>
+</ol>
+<p>覆盖率 = 1/4 = 25%</p>
+<p>注意：如果三角形在边界上方，则采样点1和3会被覆盖，覆盖率为50%。</p>
+</details>
+<h3 id="_50">挑战题</h3>
+<p><strong>3.5 保守光栅化</strong>
+设计一个保守光栅化算法，确保所有与三角形有任何重叠的像素都被标记。描述你的算法并分析其与标准光栅化的差异。考虑：如何扩展三角形边界？如何处理极小的三角形？</p>
+<p><em>提示：考虑将三角形边界向外扩展半个像素。</em></p>
+<details>
+<summary>答案</summary>
+<p>保守光栅化算法设计：</p>
+<ol>
+<li>
+<p><strong>边界扩展方法</strong>：
+   - 将每条边沿法线方向向外扩展 $\frac{\sqrt{2}}{2}$ 个像素（最坏情况下的像素对角线长度）
+   - 边函数修改：$E'(p) = E(p) - \frac{\sqrt{2}}{2} \cdot ||\mathbf{n}||$</p>
+</li>
+<li>
+<p><strong>实现步骤</strong>：
+   <code>for each edge (v0, v1):
+       normal = perpendicular(v1 - v0)
+       offset = 0.5 * sqrt(2) * normalize(normal)
+       expanded_edge = translate edge by offset</code></p>
+</li>
+<li>
+<p><strong>极小三角形处理</strong>：
+   - 如果三角形面积小于一个像素，至少光栅化其质心所在的像素
+   - 使用包围球测试：如果像素中心到三角形的距离小于 $\frac{\sqrt{2}}{2}$，则光栅化</p>
+</li>
+<li>
+<p><strong>优化考虑</strong>：
+   - 使用分离轴定理进行精确的像素-三角形相交测试
+   - 对于轴对齐的边，扩展可以简化为0.5像素</p>
+</li>
+<li>
+<p><strong>应用场景</strong>：
+   - 体素化
+   - 碰撞检测
+   - 阴影体生成</p>
+</li>
+</ol>
+</details>
+<p><strong>3.6 自适应超采样</strong>
+设计一个自适应超采样系统，只在需要的地方（如边缘）使用高采样率。你的系统应该包括：边缘检测标准、采样模式选择、以及性能与质量的权衡分析。</p>
+<p><em>提示：可以基于深度或颜色的梯度来检测边缘。</em></p>
+<details>
+<summary>答案</summary>
+<p>自适应超采样系统设计：</p>
+<ol>
+<li>
+<p><strong>边缘检测标准</strong>：
+   <code>edge_score = max(
+       |depth_center - depth_neighbor| / depth_center,
+       |color_center - color_neighbor|,
+       |normal_center · normal_neighbor - 1|
+   )</code></p>
+</li>
+<li>
+<p><strong>采样策略分级</strong>：
+   - Level 0 (1×): edge_score &lt; 0.1
+   - Level 1 (4×): 0.1 ≤ edge_score &lt; 0.3
+   - Level 2 (8×): 0.3 ≤ edge_score &lt; 0.6
+   - Level 3 (16×): edge_score ≥ 0.6</p>
+</li>
+<li>
+<p><strong>实现流程</strong>：
+   - Pass 1: 以1×采样率渲染，同时输出G-buffer
+   - Analysis: 分析G-buffer，标记需要超采样的像素
+   - Pass 2: 对标记的像素进行超采样
+   - Resolve: 合并结果</p>
+</li>
+<li>
+<p><strong>优化技术</strong>：
+   - 时间复用：结合TAA，减少当前帧的采样需求
+   - 预测：基于前一帧的边缘信息预测当前帧
+   - 分块处理：以2×2或4×4块为单位决定采样率</p>
+</li>
+<li>
+<p><strong>性能分析</strong>：
+   - 最佳情况：大部分平滑区域，接近1×性能
+   - 最坏情况：全是边缘，退化为完全超采样
+   - 典型场景：20-40%的像素需要超采样，性能提升2-3倍</p>
+</li>
+</ol>
+</details>
+<p><strong>3.7 深度缓冲精度优化</strong>
+推导对数深度缓冲的数学公式，并分析其相对于标准深度缓冲的精度分布。实现一个深度值编码/解码方案，在24位定点数中最大化可用精度。</p>
+<p><em>提示：考虑人眼对近处细节的敏感度。</em></p>
+<details>
+<summary>答案</summary>
+<ol>
+<li><strong>对数深度推导</strong>：</li>
+</ol>
+<p>标准深度：$z_{std} = \frac{f+n}{f-n} - \frac{2fn}{(f-n)z}$</p>
+<p>对数深度：$z_{log} = \frac{\log(z/n)}{\log(f/n)}$</p>
+<p>精度分析：</p>
+<ul>
+<li>标准深度：$\frac{dz_{std}}{dz} = \frac{2fn}{(f-n)z^2}$（随z²下降）</li>
+<li>对数深度：$\frac{dz_{log}}{dz} = \frac{1}{z\log(f/n)}$（随z线性下降）</li>
+</ul>
+<ol start="2">
+<li>
+<p><strong>24位编码方案</strong>：
+   <code>encode(z_eye):
+       // 使用伪对数编码
+       if z_eye &lt; split_distance:
+           // 近处使用线性
+           encoded = (z_eye - n) / (split - n) * 0.5
+       else:
+           // 远处使用对数
+           encoded = 0.5 + 0.5 * log(z_eye/split) / log(f/split)
+       return uint24(encoded * (2^24 - 1))</code></p>
+</li>
+<li>
+<p><strong>精度分布优化</strong>：
+   - 分割点选择：$split = \sqrt{nf}$（几何平均）
+   - 近处精度：~0.01mm at 1m
+   - 远处精度：~1m at 1000m</p>
+</li>
+<li>
+<p><strong>实际考虑</strong>：
+   - 反向Z + 浮点：利用浮点数的指数特性
+   - W缓冲：直接存储线性深度1/w
+   - 多级深度：近景和远景使用独立缓冲</p>
+</li>
+</ol>
+</details>
+<p><strong>3.8 GPU分块大小优化</strong>
+分析不同分块大小（8×8, 16×16, 32×32）对GPU光栅化性能的影响。考虑：缓存命中率、负载均衡、几何复杂度的影响。设计一个实验来确定特定场景的最优分块大小。</p>
+<p><em>提示：考虑三角形大小分布和屏幕空间局部性。</em></p>
+<details>
+<summary>答案</summary>
+<ol>
+<li><strong>理论分析</strong>：</li>
+</ol>
+<p><strong>8×8分块</strong>：</p>
+<ul>
+<li>优点：细粒度负载均衡，小三角形效率高</li>
+<li>缺点：管理开销大，大三角形跨越多个块</li>
+</ul>
+<p><strong>16×16分块</strong>：</p>
+<ul>
+<li>优点：平衡的选择，适合中等大小三角形</li>
+<li>缺点：某些场景可能不够灵活</li>
+</ul>
+<p><strong>32×32分块</strong>：</p>
+<ul>
+<li>优点：管理开销小，大三角形效率高</li>
+<li>缺点：负载不均衡风险，小三角形浪费</li>
+</ul>
+<ol start="2">
+<li><strong>性能模型</strong>：
+   ```
+   Cost = N_tiles × (C_setup + N_prims × C_raster + N_pixels × C_shade)</li>
+</ol>
+<p>其中：</p>
+<ul>
+<li>N_tiles = ceil(W/tile_size) × ceil(H/tile_size)</li>
+<li>N_prims = avg_prims_per_tile（与分块大小相关）</li>
+<li>N_pixels = tile_size²（实际着色的像素可能更少）
+   ```</li>
+</ul>
+<ol start="3">
+<li>
+<p><strong>实验设计</strong>：
+   ```
+   for tile_size in [8, 16, 32]:
+       for scene in [many_small_tris, few_large_tris, mixed]:
+           measure:</p>
+<pre class="codehilite"><code>       - Frame time
+       - Tile occupancy
+       - Cache miss rate
+       - Warp divergence
+</code></pre>
+
+<p>```</p>
+</li>
+<li>
+<p><strong>自适应策略</strong>：
+   - 基于场景统计动态选择
+   - 混合分块：不同区域使用不同大小
+   - 预测模型：基于前几帧的统计信息</p>
+</li>
+<li>
+<p><strong>实际建议</strong>：
+   - UI渲染：8×8（many small triangles）
+   - 游戏场景：16×16（平衡选择）
+   - CAD/建筑：32×32（大型三角形）</p>
+</li>
+</ol>
+</details>
+<h2 id="gotchas">常见陷阱与错误（Gotchas）</h2>
+<h3 id="1">1. 精度相关问题</h3>
+<p><strong>浮点精度导致的裂缝</strong></p>
+<ul>
+<li><strong>问题</strong>：相邻三角形的共享边在光栅化时可能产生裂缝</li>
+<li><strong>原因</strong>：浮点运算的舍入误差</li>
+<li><strong>解决</strong>：使用定点数运算，确保共享顶点的坐标完全相同</li>
+</ul>
+<p><strong>深度精度不足</strong></p>
+<ul>
+<li><strong>问题</strong>：Z-fighting，远处物体深度分辨率低</li>
+<li><strong>原因</strong>：透视投影的非线性深度分布</li>
+<li><strong>解决</strong>：调整near/far平面，使用对数深度或反向Z</li>
+</ul>
+<h3 id="2">2. 插值错误</h3>
+<p><strong>屏幕空间线性插值</strong></p>
+<ul>
+<li><strong>问题</strong>：纹理扭曲，光照不正确</li>
+<li><strong>原因</strong>：忘记进行透视校正</li>
+<li><strong>解决</strong>：始终使用 $1/w$ 进行插值权重计算</li>
+</ul>
+<p><strong>属性插值溢出</strong></p>
+<ul>
+<li><strong>问题</strong>：颜色值超出[0,1]范围</li>
+<li><strong>原因</strong>：重心坐标计算错误或数值精度问题</li>
+<li><strong>解决</strong>：验证重心坐标和为1，添加范围检查</li>
+</ul>
+<h3 id="3_1">3. 性能陷阱</h3>
+<p><strong>过度绘制（Overdraw）</strong></p>
+<ul>
+<li><strong>问题</strong>：同一像素被多次着色</li>
+<li><strong>原因</strong>：绘制顺序不当，缺少早期剔除</li>
+<li><strong>解决</strong>：前向后渲染不透明物体，使用Early-Z</li>
+</ul>
+<p><strong>小三角形问题</strong></p>
+<ul>
+<li><strong>问题</strong>：GPU利用率低</li>
+<li><strong>原因</strong>：小于2×2像素的三角形导致quad利用率低</li>
+<li><strong>解决</strong>：使用LOD，合并小三角形</li>
+</ul>
+<h3 id="4">4. 抗锯齿相关</h3>
+<p><strong>MSAA与透明度</strong></p>
+<ul>
+<li><strong>问题</strong>：Alpha-tested几何体边缘仍有锯齿</li>
+<li><strong>原因</strong>：MSAA只对几何边缘有效，不处理着色器discard</li>
+<li><strong>解决</strong>：使用Alpha to Coverage或专门的透明度AA</li>
+</ul>
+<p><strong>TAA鬼影</strong></p>
+<ul>
+<li><strong>问题</strong>：移动物体出现拖尾</li>
+<li><strong>原因</strong>：历史帧权重过高或运动向量不准确</li>
+<li><strong>解决</strong>：降低历史帧权重，改进运动向量计算</li>
+</ul>
+<h3 id="5-gpu">5. GPU特定问题</h3>
+<p><strong>Warp发散</strong></p>
+<ul>
+<li><strong>问题</strong>：性能显著下降</li>
+<li><strong>原因</strong>：同一warp内的线程执行不同分支</li>
+<li><strong>解决</strong>：排序绘制调用，减少动态分支</li>
+</ul>
+<p><strong>纹理缓存未命中</strong></p>
+<ul>
+<li><strong>问题</strong>：带宽瓶颈</li>
+<li><strong>原因</strong>：纹理访问模式随机，mipmap选择不当</li>
+<li><strong>解决</strong>：改善UV布局，正确计算LOD</li>
+</ul>
+<h3 id="6">6. 调试技巧</h3>
+<p><strong>视觉化调试</strong></p>
+<pre class="codehilite"><code>// 可视化重心坐标
+color = vec3(alpha, beta, gamma);
+
+// 可视化mipmap级别
+color = heat_map(mipmap_level);
+
+// 可视化overdraw
+color = vec3(overdraw_count / max_overdraw);
+</code></pre>
+
+<p><strong>性能分析要点</strong></p>
+<ul>
+<li>使用GPU profiler识别瓶颈</li>
+<li>监控各阶段的吞吐量</li>
+<li>检查缓存命中率</li>
+</ul>
+<h2 id="_51">最佳实践检查清单</h2>
+<h3 id="_52">光栅化设计审查</h3>
+<h4 id="_53">几何处理</h4>
+<ul>
+<li>[ ] 三角形顶点按一致顺序（通常逆时针）</li>
+<li>[ ] 共享顶点使用索引缓冲</li>
+<li>[ ] 避免退化三角形（面积接近0）</li>
+<li>[ ] 合理的三角形大小（避免过小）</li>
+</ul>
+<h4 id="_54">精度管理</h4>
+<ul>
+<li>[ ] 定点数用于光栅化坐标</li>
+<li>[ ] 适当的子像素精度（通常8-16位）</li>
+<li>[ ] Near/far平面合理设置</li>
+<li>[ ] 深度缓冲格式选择得当</li>
+</ul>
+<h4 id="_55">性能优化</h4>
+<ul>
+<li>[ ] 实施背面剔除</li>
+<li>[ ] 启用Early-Z（避免禁用它的操作）</li>
+<li>[ ] 合理的绘制顺序（不透明物体前到后）</li>
+<li>[ ] 批处理相似的绘制调用</li>
+</ul>
+<h4 id="_56">抗锯齿策略</h4>
+<ul>
+<li>[ ] 根据目标平台选择AA方法</li>
+<li>[ ] MSAA采样模式优化</li>
+<li>[ ] TAA的运动向量正确</li>
+<li>[ ] 后处理AA作为备选方案</li>
+</ul>
+<h4 id="_57">内存与带宽</h4>
+<ul>
+<li>[ ] 深度缓冲压缩启用</li>
+<li>[ ] 颜色缓冲压缩启用</li>
+<li>[ ] 合理的渲染目标格式</li>
+<li>[ ] 避免不必要的缓冲清除</li>
+</ul>
+<h4 id="_58">着色器最佳实践</h4>
+<ul>
+<li>[ ] 避免着色器中的discard（影响Early-Z）</li>
+<li>[ ] 减少动态分支</li>
+<li>[ ] 利用插值器硬件</li>
+<li>[ ] 正确的导数计算（维持2×2 quad）</li>
+</ul>
+<h4 id="_59">现代特性利用</h4>
+<ul>
+<li>[ ] VRS用于性能优化</li>
+<li>[ ] Mesh shader用于几何优化</li>
+<li>[ ] 硬件光追的选择性使用</li>
+<li>[ ] 多分辨率渲染技术</li>
+</ul>
+<h4 id="_60">调试与验证</h4>
+<ul>
+<li>[ ] 无渲染错误（裂缝、闪烁）</li>
+<li>[ ] 性能指标达标</li>
+<li>[ ] 内存使用合理</li>
+<li>[ ] 支持必要的调试可视化</li>
+</ul>
+<h3 id="_61">代码质量</h3>
+<ul>
+<li>[ ] 光栅化参数可配置</li>
+<li>[ ] 适当的错误处理</li>
+<li>[ ] 性能计数器集成</li>
+<li>[ ] 清晰的管线状态管理</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="./chapter2.html" class="nav-link prev">← 第2章：几何变换</a><a href="./chapter4.html" class="nav-link next">第4章：着色基础 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

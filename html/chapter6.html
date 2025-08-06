@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第6章：几何表示</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class=""><a href="./index.html">计算机图形学高级教程</a></li><li class=""><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class=""><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class="active"><a href="./chapter6.html">第6章：几何表示</a></li><li class=""><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class=""><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class=""><a href="./chapter12.html">第12章：物质点法</a></li><li class=""><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="6">第6章：几何表示</h1>
+<p>本章深入探讨计算机图形学中几何对象的各种表示方法。我们将从基本的几何表示开始，逐步深入到参数化曲线曲面理论，最后讨论现代图形学中的网格处理技术和阴影图算法。对于AI科学家而言，理解这些几何表示不仅有助于3D视觉任务，还能为神经隐式表示（Neural Implicit Representations）等前沿技术打下坚实基础。</p>
+<h2 id="61">6.1 基本几何表示方法</h2>
+<h3 id="611">6.1.1 隐式表示与显式表示</h3>
+<p>几何对象的数学表示主要分为两大类：</p>
+<p><strong>隐式表示（Implicit Representation）</strong>：通过方程 $f(\mathbf{x}) = 0$ 定义几何对象，其中 $\mathbf{x} \in \mathbb{R}^n$。</p>
+<p>优点：</p>
+<ul>
+<li>易于判断点的内外关系：$f(\mathbf{x}) &lt; 0$ 表示内部，$f(\mathbf{x}) &gt; 0$ 表示外部</li>
+<li>便于进行布尔运算（并、交、差）</li>
+<li>自然支持实体建模</li>
+<li>光线求交简化为求解方程 $f(\mathbf{o} + t\mathbf{d}) = 0$</li>
+<li>易于实现形变和扰动</li>
+<li>无需存储连接信息，内存占用可预测</li>
+<li>支持无限精度的表面细节</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>难以参数化采样</li>
+<li>不易控制局部形状</li>
+<li>需要特殊技术（如Marching Cubes）进行可视化</li>
+<li>难以获得表面的参数化坐标</li>
+<li>纹理映射需要额外计算</li>
+<li>直接编辑困难</li>
+</ul>
+<p><strong>显式表示（Explicit Representation）</strong>：直接给出几何对象上点的坐标，如参数化表示 $\mathbf{x} = \mathbf{g}(u, v)$。</p>
+<p>优点：</p>
+<ul>
+<li>易于采样和遍历</li>
+<li>便于纹理映射</li>
+<li>直观的形状控制</li>
+<li>天然提供UV坐标</li>
+<li>适合GPU硬件加速</li>
+<li>支持分层细节（LOD）</li>
+<li>艺术家友好的编辑工具</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>难以判断点的内外关系</li>
+<li>拓扑变化处理复杂</li>
+<li>自相交检测困难</li>
+<li>难以表示体积信息</li>
+<li>需要额外的数据结构维护连接关系</li>
+<li>采样密度影响表示精度</li>
+</ul>
+<p><strong>数学转换关系</strong>：</p>
+<p>从隐式到显式的转换通常涉及：</p>
+<ul>
+<li><strong>等值面提取</strong>：Marching Cubes、Dual Contouring</li>
+<li><strong>光线投射</strong>：沿视线方向求解 $f(\mathbf{r}(t)) = 0$</li>
+<li><strong>粒子采样</strong>：在表面上分布粒子并松弛</li>
+</ul>
+<p>从显式到隐式的转换方法：</p>
+<ul>
+<li><strong>距离场计算</strong>：计算到最近表面点的距离</li>
+<li><strong>体素化</strong>：在规则网格上采样内外信息</li>
+<li><strong>径向基函数插值</strong>：$f(\mathbf{x}) = \sum_i w_i \phi(|\mathbf{x} - \mathbf{c}_i|)$</li>
+</ul>
+<p><strong>混合表示的应用场景</strong>：</p>
+<ul>
+<li>建模阶段：使用显式表示便于艺术家控制</li>
+<li>物理仿真：隐式表示便于碰撞检测</li>
+<li>渲染阶段：转换为三角网格利用GPU</li>
+<li>机器学习：神经隐式表示（如NeRF、DeepSDF）结合两者优势</li>
+<li>医学成像：体数据的隐式表示，表面提取用于可视化</li>
+<li>CAD/CAM：精确的隐式表示，网格化用于加工</li>
+</ul>
+<p><strong>表示选择的决策因素</strong>：</p>
+<ol>
+<li><strong>查询类型</strong>：点测试频繁→隐式；遍历频繁→显式</li>
+<li><strong>修改需求</strong>：拓扑变化→隐式；局部编辑→显式</li>
+<li><strong>精度要求</strong>：解析表示→隐式；固定精度→显式</li>
+<li><strong>硬件限制</strong>：GPU友好→显式；CPU计算→隐式皆可</li>
+<li><strong>数据来源</strong>：扫描数据→显式；数学定义→隐式</li>
+</ol>
+<h3 id="612">6.1.2 代数表面</h3>
+<p>代数表面是由多项式方程定义的隐式表面。对于度数为 $d$ 的代数表面：</p>
+<p>$$f(\mathbf{x}) = \sum_{i+j+k \leq d} a_{ijk} x^i y^j z^k = 0$$
+代数表面的系数数量为 $\binom{d+3}{3}$，因此二次曲面有10个系数，三次曲面有20个系数。</p>
+<p><strong>二次曲面（Quadrics）</strong> 是最常用的代数表面（$d=2$）：
+$$\mathbf{x}^T \mathbf{Q} \mathbf{x} + 2\mathbf{b}^T \mathbf{x} + c = 0$$
+其中 $\mathbf{Q}$ 是 $3 \times 3$ 对称矩阵，可以写成展开形式：
+$$Q_{11}x^2 + Q_{22}y^2 + Q_{33}z^2 + 2Q_{12}xy + 2Q_{13}xz + 2Q_{23}yz + 2b_1x + 2b_2y + 2b_3z + c = 0$$
+<strong>二次曲面的分类</strong>：</p>
+<p>通过特征值分解 $\mathbf{Q} = \mathbf{V}\mathbf{\Lambda}\mathbf{V}^T$，根据特征值 $\lambda_1, \lambda_2, \lambda_3$ 的符号可以分类：</p>
+<ol>
+<li>
+<p><strong>椭球体</strong>：三个正特征值 $(+,+,+)$
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} + \frac{z^2}{c^2} = 1$
+   - 有界、凸、封闭曲面</p>
+</li>
+<li>
+<p><strong>单叶双曲面</strong>：两正一负 $(+,+,-)$
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} - \frac{z^2}{c^2} = 1$
+   - 无界、鞍形曲面</p>
+</li>
+<li>
+<p><strong>双叶双曲面</strong>：一正两负 $(+,-,-)$
+   - 标准形式：$\frac{x^2}{a^2} - \frac{y^2}{b^2} - \frac{z^2}{c^2} = 1$
+   - 两个分离的无界部分</p>
+</li>
+<li>
+<p><strong>椭圆抛物面</strong>：两个非零特征值 $(+,+,0)$
+   - 标准形式：$z = \frac{x^2}{a^2} + \frac{y^2}{b^2}$
+   - 开放的碗状曲面</p>
+</li>
+<li>
+<p><strong>双曲抛物面</strong>：两个相反符号的非零特征值 $(+,-,0)$
+   - 标准形式：$z = \frac{x^2}{a^2} - \frac{y^2}{b^2}$
+   - 马鞍形曲面</p>
+</li>
+<li>
+<p><strong>圆柱面</strong>：一个零特征值 $(+,+,0)$，$\mathbf{b}$ 在零空间内
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} = 1$</p>
+</li>
+<li>
+<p><strong>圆锥面</strong>：一个零特征值 $(+,+,0)$，顶点在原点
+   - 标准形式：$\frac{x^2}{a^2} + \frac{y^2}{b^2} - z^2 = 0$</p>
+</li>
+<li>
+<p><strong>退化情况</strong>：
+   - 平面对：两个零特征值
+   - 直线：秩为1
+   - 点：秩为0（仅当 $c &gt; 0$）</p>
+</li>
+</ol>
+<p><strong>标准形式转换</strong>：</p>
+<ol>
+<li>找到二次型的中心（如果存在）：$\mathbf{x}_0 = -\mathbf{Q}^{-1}\mathbf{b}$</li>
+<li>平移：$\mathbf{x}' = \mathbf{x} - \mathbf{x}_0$</li>
+<li>旋转：$\mathbf{y} = \mathbf{V}^T\mathbf{x}'$</li>
+<li>得到标准形式：$\sum_{i=1}^3 \lambda_i y_i^2 + d = 0$</li>
+</ol>
+<p>其中 $d = c - \mathbf{b}^T\mathbf{Q}^{-1}\mathbf{b}$（对于非退化情况）</p>
+<p><strong>光线-二次曲面求交</strong>：</p>
+<p>将光线 $\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$ 代入二次曲面方程：
+$$at^2 + bt + c = 0$$
+其中：</p>
+<ul>
+<li>$a = \mathbf{d}^T\mathbf{Q}\mathbf{d}$</li>
+<li>$b = 2(\mathbf{d}^T\mathbf{Q}\mathbf{o} + \mathbf{b}^T\mathbf{d})$</li>
+<li>$c = \mathbf{o}^T\mathbf{Q}\mathbf{o} + 2\mathbf{b}^T\mathbf{o} + c$</li>
+</ul>
+<p>交点数量分析：</p>
+<ul>
+<li>$a = 0$：光线平行于二次曲面的渐近方向</li>
+<li>$\Delta = b^2 - 4ac &lt; 0$：无交点</li>
+<li>$\Delta = 0$：相切（一个交点）</li>
+<li>$\Delta &gt; 0$：两个交点</li>
+</ul>
+<p>法向量计算：在交点 $\mathbf{p}$ 处，法向量为：
+$$\mathbf{n} = \nabla f(\mathbf{p}) = 2\mathbf{Q}\mathbf{p} + 2\mathbf{b}$$
+<strong>高次代数表面</strong>：</p>
+<ol>
+<li>
+<p><strong>三次曲面（$d=3$）</strong>：
+   - 最多27条直线（Cayley-Salmon定理）
+   - 包含Clebsch对角三次曲面、Fermat三次曲面
+   - 可表示部分torus形状</p>
+</li>
+<li>
+<p><strong>四次曲面（$d=4$）</strong>：
+   - <strong>Torus（环面）</strong>：$(x^2 + y^2 + z^2 + R^2 - r^2)^2 - 4R^2(x^2 + y^2) = 0$
+   - <strong>Kummer曲面</strong>：具有16个奇点的特殊四次曲面
+   - <strong>Steiner的Roman曲面</strong>：$x^2y^2 + y^2z^2 + z^2x^2 = r^2xyz$</p>
+</li>
+<li>
+<p><strong>特殊代数曲面</strong>：
+   - <strong>Cayley曲面</strong>：三次确定性曲面，有4个锥形奇点
+   - <strong>Enneper曲面</strong>：八次极小曲面
+   - <strong>Boy曲面</strong>：实投影平面的浸入</p>
+</li>
+</ol>
+<p><strong>代数几何中的重要定理</strong>：</p>
+<ol>
+<li>
+<p><strong>Bézout定理</strong>：
+   - 平面情况：度数为 $m$ 和 $n$ 的代数曲线最多有 $mn$ 个交点（计重数）
+   - 空间推广：代数簇的交集维数和度数关系</p>
+</li>
+<li>
+<p><strong>Harnack定理</strong>：
+   - 度数为 $d$ 的非奇异实代数曲线的连通分支数最多为 $\frac{(d-1)(d-2)}{2} + 1$
+   - 对于曲面：限制了实部分的拓扑复杂度</p>
+</li>
+<li>
+<p><strong>代数曲面的拓扑不变量</strong>：
+   - 欧拉特征数：$\chi = 2 - 2g + s$（$g$ 是亏格，$s$ 是奇点数）
+   - Hodge数：描述曲面的复杂几何结构</p>
+</li>
+</ol>
+<p><strong>计算技巧与优化</strong>：</p>
+<ol>
+<li>
+<p><strong>隐式化</strong>：从参数表示转换为隐式表示
+   - 使用结式（resultant）消去参数
+   - Gröbner基方法</p>
+</li>
+<li>
+<p><strong>多项式求值优化</strong>：
+   - Horner法则：减少乘法次数
+   - 利用对称性减少计算</p>
+</li>
+<li>
+<p><strong>数值稳定性</strong>：
+   - 条件数分析：病态二次型的处理
+   - 使用齐次坐标避免无穷远点问题</p>
+</li>
+</ol>
+<h3 id="613-csg">6.1.3 构造实体几何（CSG）</h3>
+<p>CSG通过布尔运算组合简单几何体构建复杂形状。这是CAD系统中的核心技术，特别适合工程设计和精确建模。</p>
+<p><strong>基本布尔运算</strong>：</p>
+<p>对于两个隐式表示的对象 $A: f_A(\mathbf{x}) \leq 0$ 和 $B: f_B(\mathbf{x}) \leq 0$：</p>
+<ul>
+<li><strong>并集（Union）</strong>：$A \cup B: \min(f_A(\mathbf{x}), f_B(\mathbf{x})) \leq 0$</li>
+<li><strong>交集（Intersection）</strong>：$A \cap B: \max(f_A(\mathbf{x}), f_B(\mathbf{x})) \leq 0$</li>
+<li><strong>差集（Difference）</strong>：$A - B: \max(f_A(\mathbf{x}), -f_B(\mathbf{x})) \leq 0$</li>
+<li><strong>对称差（Symmetric Difference）</strong>：$(A - B) \cup (B - A)$</li>
+</ul>
+<p><strong>R-函数理论</strong>：</p>
+<p>Rvachev函数提供了保持可微性的布尔运算：</p>
+<ul>
+<li>R-并集：$f_{A \cup B} = f_A + f_B + \sqrt{f_A^2 + f_B^2}$</li>
+<li>R-交集：$f_{A \cap B} = f_A + f_B - \sqrt{f_A^2 + f_B^2}$</li>
+</ul>
+<p>这些函数保证了 $C^1$ 连续性，梯度为：
+$$\nabla f_{A \cup B} = \nabla f_A \left(1 + \frac{f_A}{\sqrt{f_A^2 + f_B^2}}\right) + \nabla f_B \left(1 + \frac{f_B}{\sqrt{f_A^2 + f_B^2}}\right)$$
+<strong>平滑布尔运算</strong>：</p>
+<p>为避免尖锐边缘并改善数值性质，可使用各种平滑函数：</p>
+<ol>
+<li><strong>指数平滑（LogSumExp）</strong>：
+$$\text{smin}(a, b, k) = -\frac{1}{k}\log(e^{-ka} + e^{-kb})$$</li>
+</ol>
+<ul>
+<li>当 $k \to \infty$ 时趋向于标准 $\min$</li>
+<li>保持 $C^\infty$ 连续性</li>
+</ul>
+<ol start="2">
+<li><strong>多项式平滑</strong>：
+$$\text{smin}(a, b, k) = \frac{a + b - \sqrt{(a-b)^2 + k^2}}{2}$$</li>
+</ol>
+<ul>
+<li>计算效率高</li>
+<li>过渡区域宽度为 $O(k)$</li>
+</ul>
+<ol start="3">
+<li><strong>幂平滑</strong>：
+$$\text{smin}(a, b, k) = (a^{-k} + b^{-k})^{-1/k}$$</li>
+</ol>
+<ul>
+<li>要求 $a, b &gt; 0$</li>
+<li>适合正定距离场</li>
+</ul>
+<ol start="4">
+<li><strong>三次平滑</strong>：
+   在过渡区域 $|a - b| &lt; k$ 内使用Hermite插值：
+$$h(t) = 3t^2 - 2t^3, \quad t = \frac{a - b + k}{2k}$$
+<strong>CSG树结构</strong>：</li>
+</ol>
+<pre class="codehilite"><code>CSGNode = Leaf(Primitive, Transform)
+        | Internal(Operation, CSGNode, CSGNode)
+        | Transform(Matrix, CSGNode)
+</code></pre>
+
+<p>树的属性：</p>
+<ul>
+<li><strong>叶节点</strong>：基本几何体（球、立方体、圆柱、圆锥、环面等）</li>
+<li><strong>内部节点</strong>：布尔运算符（∪、∩、-）</li>
+<li><strong>变换节点</strong>：仿射变换（平移、旋转、缩放、错切）</li>
+<li><strong>正规形式</strong>：可通过德摩根定律和分配律简化</li>
+</ul>
+<p><strong>CSG树的优化</strong>：</p>
+<ol>
+<li>
+<p><strong>空间包围盒剪枝</strong>：
+   - 并集：$\text{BBox}(A \cup B) = \text{BBox}(A) \cup \text{BBox}(B)$
+   - 交集：$\text{BBox}(A \cap B) = \text{BBox}(A) \cap \text{BBox}(B)$</p>
+</li>
+<li>
+<p><strong>树平衡</strong>：
+   - 使用启发式方法重组树以最小化深度
+   - 相似大小的对象优先组合</p>
+</li>
+<li>
+<p><strong>公共子表达式消除</strong>：
+   - 识别重复的子树
+   - 使用DAG（有向无环图）代替树</p>
+</li>
+</ol>
+<p><strong>光线追踪CSG</strong>：</p>
+<p>经典的区间分类算法：</p>
+<ol>
+<li>
+<p><strong>交点计算</strong>：
+   - 对每个叶节点计算光线交点 ${t_i^{\text{in}}, t_i^{\text{out}}}$
+   - 考虑数值容差处理相切情况</p>
+</li>
+<li>
+<p><strong>区间合并</strong>：
+   <code>Union: 合并重叠区间
+   Intersection: 取区间交集
+   Difference: 从第一个区间中减去第二个</code></p>
+</li>
+<li>
+<p><strong>法向量计算</strong>：
+   - 叶节点：直接计算几何体法向
+   - 并集：选择较小 SDF 值的法向
+   - 交集：选择较大 SDF 值的法向
+   - 差集：可能需要翻转法向</p>
+</li>
+</ol>
+<p><strong>改进的算法</strong>：</p>
+<ol>
+<li>
+<p><strong>Goldfeather算法</strong>：
+   - 使用深度缓冲和模板缓冲
+   - 适合GPU实现</p>
+</li>
+<li>
+<p><strong>SCS（Sequenced Convex Subtraction）</strong>：
+   - 将CSG转换为凸集的差集序列
+   - 减少渲染遍数</p>
+</li>
+</ol>
+<p><strong>CSG到边界表示的转换</strong>：</p>
+<ol>
+<li>
+<p><strong>边界求值算法</strong>：
+   - 计算所有基本体的交线
+   - 根据布尔运算选择保留的边界片段
+   - 拼接成完整的边界表示</p>
+</li>
+<li>
+<p><strong>Marching Cubes扩展</strong>：
+   - 在体素网格上评估CSG函数
+   - 使用双线性插值提高精度</p>
+</li>
+</ol>
+<p><strong>CSG的数学性质</strong>：</p>
+<ol>
+<li><strong>正则化布尔运算</strong>：
+$$A \cup^* B = \text{closure}(\text{interior}(A \cup B))$$</li>
+</ol>
+<ul>
+<li>消除悬挂边和孤立点</li>
+<li>保证结果是有效的实体</li>
+</ul>
+<ol start="2">
+<li><strong>CSG的完备性</strong>：
+   - 任何正则集可以表示为有限个半空间的正则布尔组合
+   - 实践中受基本体集合的限制</li>
+</ol>
+<p><strong>应用领域</strong>：</p>
+<ol>
+<li>
+<p><strong>CAD/CAM</strong>：
+   - 机械零件设计
+   - 建筑建模
+   - 3D打印路径规划</p>
+</li>
+<li>
+<p><strong>游戏引擎</strong>：
+   - 破坏系统（实时布尔运算）
+   - 程序化内容生成</p>
+</li>
+<li>
+<p><strong>科学可视化</strong>：
+   - 分子建模（范德华表面）
+   - 地质建模（地层结构）</p>
+</li>
+</ol>
+<p><strong>性能优化技巧</strong>：</p>
+<ol>
+<li><strong>空间哈希</strong>：加速邻近查询</li>
+<li><strong>层次化采样</strong>：自适应细化</li>
+<li><strong>GPU并行化</strong>：利用片元着色器</li>
+<li><strong>增量更新</strong>：局部重计算</li>
+</ol>
+<p><strong>CSG的优缺点</strong>：</p>
+<p>优点：</p>
+<ul>
+<li>精确的实体表示，无近似误差</li>
+<li>紧凑的存储（树结构）</li>
+<li>历史可追溯（保留建模步骤）</li>
+<li>易于参数化和约束求解</li>
+<li>支持精确的质量属性计算（体积、质心等）</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>渲染较慢（需要遍历树）</li>
+<li>难以高效转换为多边形网格</li>
+<li>局部修改可能需要全局重计算</li>
+<li>不适合自由形状和有机建模</li>
+<li>数值鲁棒性问题（布尔运算的退化情况）</li>
+</ul>
+<h3 id="614-sdf">6.1.4 符号距离场（SDF）</h3>
+<p>SDF是一种特殊的隐式表示，其中 $f(\mathbf{x})$ 表示点 $\mathbf{x}$ 到表面的有符号距离：
+$$f(\mathbf{x}) = \text{sign}(\mathbf{x}) \cdot \min_{\mathbf{y} \in \partial S} |\mathbf{x} - \mathbf{y}|$$
+其中符号函数定义为：
+$$\text{sign}(\mathbf{x}) = \begin{cases}
+-1 &amp; \text{如果 } \mathbf{x} \text{ 在物体内部} \
+0 &amp; \text{如果 } \mathbf{x} \text{ 在表面上} \
++1 &amp; \text{如果 } \mathbf{x} \text{ 在物体外部}
+\end{cases}$$
+<strong>SDF的数学性质</strong>：</p>
+<ol>
+<li>
+<p><strong>梯度性质</strong>：
+   - $|\nabla f| = 1$ 几乎处处成立（除了中轴上）
+   - 法向量：$\mathbf{n} = \nabla f$
+   - 梯度指向远离表面的方向</p>
+</li>
+<li>
+<p><strong>最近点映射</strong>：
+$$\mathbf{p}_{\text{closest}}(\mathbf{x}) = \mathbf{x} - f(\mathbf{x})\nabla f(\mathbf{x})$$
+这个映射在中轴（medial axis）上不连续</p>
+</li>
+<li>
+<p><strong>曲率与Hessian的关系</strong>：
+   在表面上，主曲率 $\kappa_1, \kappa_2$ 是Hessian矩阵 $\mathbf{H}_f$ 的特征值</p>
+</li>
+<li>
+<p><strong>水平集性质</strong>：
+   - 表面：${\mathbf{x} : f(\mathbf{x}) = 0}$
+   - 偏移表面：${\mathbf{x} : f(\mathbf{x}) = d}$</p>
+</li>
+</ol>
+<p><strong>Eikonal方程</strong>：</p>
+<p>SDF满足偏微分方程：
+$$|\nabla f| = 1$$
+这是一个Hamilton-Jacobi方程，可通过以下方法求解：</p>
+<ol>
+<li>
+<p><strong>快速行进法（FMM）</strong>：
+   - 基于Dijkstra算法的思想
+   - 时间复杂度：$O(N \log N)$
+   - 单向传播，适合单源问题</p>
+</li>
+<li>
+<p><strong>快速扫描法（FSM）</strong>：
+   - 使用Gauss-Seidel迭代
+   - 多次扫描直到收敛
+   - 简单实现，易于并行化</p>
+</li>
+<li>
+<p><strong>并行算法</strong>：
+   - GPU上的并行扫描
+   - 分块并行FMM</p>
+</li>
+</ol>
+<p><strong>基本几何体的解析SDF</strong>：</p>
+<ol>
+<li>
+<p><strong>球体</strong>（半径$r$，中心$\mathbf{c}$）：
+$$f(\mathbf{x}) = |\mathbf{x} - \mathbf{c}| - r$$</p>
+</li>
+<li>
+<p><strong>立方体</strong>（半边长$\mathbf{b}$）：
+$$f(\mathbf{x}) = |\max(\mathbf{0}, |\mathbf{x}| - \mathbf{b})|_\infty + \min(\max(|x|-b_x, |y|-b_y, |z|-b_z), 0)$$</p>
+</li>
+<li>
+<p><strong>圆环体</strong>（大半径$R$，小半径$r$）：
+$$f(\mathbf{x}) = \sqrt{(R - \sqrt{x^2 + y^2})^2 + z^2} - r$$</p>
+</li>
+<li>
+<p><strong>圆柱体</strong>（半径$r$，高度$h$）：
+$$f(\mathbf{x}) = \max(\sqrt{x^2 + y^2} - r, |z| - h/2)$$</p>
+</li>
+<li>
+<p><strong>圆锥</strong>（底半径$r$，高度$h$）：
+$$f(\mathbf{x}) = \max(\sqrt{x^2 + y^2} - r(1 - z/h), z)$$</p>
+</li>
+<li>
+<p><strong>八面体</strong>（半径$r$）：
+$$f(\mathbf{x}) = (|x| + |y| + |z| - r) / \sqrt{3}$$
+<strong>SDF的变换操作</strong>：</p>
+</li>
+<li>
+<p><strong>刚体变换</strong>：
+   - 平移：$f_T(\mathbf{x}) = f(\mathbf{x} - \mathbf{t})$
+   - 旋转：$f_R(\mathbf{x}) = f(\mathbf{R}^{-1}\mathbf{x})$
+   - 组合：$f_{TR}(\mathbf{x}) = f(\mathbf{R}^{-1}(\mathbf{x} - \mathbf{t}))$</p>
+</li>
+<li>
+<p><strong>非均匀缩放</strong>（破坏距离场性质）：
+$$f_S(\mathbf{x}) \approx \min(s_x, s_y, s_z) \cdot f(\mathbf{x}/\mathbf{s})$$</p>
+</li>
+<li>
+<p><strong>对称操作</strong>：
+   - 镜像：$f_{\text{mirror}}(\mathbf{x}) = f(|x|, y, z)$
+   - 重复：$f_{\text{repeat}}(\mathbf{x}) = f(\text{mod}(\mathbf{x}, \mathbf{p}) - \mathbf{p}/2)$</p>
+</li>
+<li>
+<p><strong>扭曲变换</strong>：
+   - 弯曲：应用非线性空间变换
+   - 扭转：$\mathbf{x}' = (x\cos(\theta z) - y\sin(\theta z), x\sin(\theta z) + y\cos(\theta z), z)$</p>
+</li>
+</ol>
+<p><strong>SDF的组合运算</strong>：</p>
+<ol>
+<li>
+<p><strong>标准布尔运算</strong>（破坏距离场性质）：
+   - 并集：$f_{A \cup B} = \min(f_A, f_B)$
+   - 交集：$f_{A \cap B} = \max(f_A, f_B)$
+   - 差集：$f_{A - B} = \max(f_A, -f_B)$</p>
+</li>
+<li>
+<p><strong>改进的运算</strong>（部分保持距离场性质）：
+   - Quilez的平滑最小：
+$$\text{smin}(a, b, k) = \min(a, b) - h(k)$$
+其中 $h(k) = k^2 / 4$ 当 $|a - b| &lt; k$</p>
+</li>
+<li>
+<p><strong>精确距离场运算</strong>：
+   - 需要考虑中轴变化
+   - 计算复杂度高
+   - 通常使用近似方法</p>
+</li>
+</ol>
+<p><strong>光线行进（Ray Marching）算法</strong>：</p>
+<pre class="codehilite"><code class="language-glsl">float rayMarch(vec3 ro, vec3 rd, float tMin, float tMax) {
+    float t = tMin;
+    for (int i = 0; i &lt; MAX_STEPS; i++) {
+        vec3 p = ro + t * rd;
+        float d = SDF(p);
+
+        if (d &lt; EPSILON) return t;  // 命中
+        if (t &gt; tMax) break;        // 超出范围
+
+        t += d * STEP_SCALE;        // 保守步进
+    }
+    return -1.0;  // 未命中
+}
+</code></pre>
+
+<p><strong>优化技术</strong>：</p>
+<ol>
+<li>
+<p><strong>自适应步长</strong>：
+   - 近表面时减小步长
+   - 使用梯度信息调整</p>
+</li>
+<li>
+<p><strong>空间划分</strong>：
+   - 包围盒层次结构
+   - 八叉树加速</p>
+</li>
+<li>
+<p><strong>屏幕空间优化</strong>：
+   - 时间相干性利用
+   - 分层光线行进</p>
+</li>
+</ol>
+<p><strong>SDF的高级应用</strong>：</p>
+<ol>
+<li>
+<p><strong>实时渲染</strong>：
+   - 体积渲染效果
+   - 软阴影和环境光遮蔽
+   - 次表面散射近似</p>
+</li>
+<li>
+<p><strong>物理仿真</strong>：
+   - 碰撞检测：$d = \text{SDF}(\mathbf{p})$
+   - 接触力计算：$\mathbf{f} = -k \cdot d \cdot \nabla\text{SDF}$
+   - 流体边界条件</p>
+</li>
+<li>
+<p><strong>形状分析</strong>：
+   - 中轴提取
+   - 形状描述子
+   - 对称性检测</p>
+</li>
+<li>
+<p><strong>机器学习应用</strong>：
+   - <strong>DeepSDF</strong>：神经网络隐式表示
+   - <strong>Neural Implicit Surfaces</strong>：连续形状表示
+   - <strong>Occupancy Networks</strong>：占用概率场</p>
+</li>
+<li>
+<p><strong>形状操作</strong>：
+   - 形态学操作（腐蚀、膨胀）
+   - 形状插值：$f_t = (1-t)f_0 + tf_1$
+   - 形状优化</p>
+</li>
+</ol>
+<p><strong>数值方法与实现</strong>：</p>
+<ol>
+<li>
+<p><strong>离散化存储</strong>：
+   - 规则网格：简单但内存密集
+   - 自适应网格：八叉树、KD树
+   - 稀疏表示：仅存储窄带</p>
+</li>
+<li>
+<p><strong>插值方法</strong>：
+   - 三线性插值：$C^0$ 连续
+   - 三次插值：$C^1$ 连续
+   - WENO方案：高阶精度</p>
+</li>
+<li>
+<p><strong>梯度计算</strong>：
+   - 有限差分：$(f(x+h) - f(x-h))/(2h)$
+   - 解析梯度：对于已知函数
+   - 自动微分：对于复杂组合</p>
+</li>
+</ol>
+<p><strong>常见问题与解决方案</strong>：</p>
+<ol>
+<li>
+<p><strong>C¹不连续性</strong>：
+   - 在布尔运算边界
+   - 使用平滑运算缓解</p>
+</li>
+<li>
+<p><strong>数值误差累积</strong>：
+   - 多次变换后的误差
+   - 定期重新初始化</p>
+</li>
+<li>
+<p><strong>中轴奇异性</strong>：
+   - 梯度不存在
+   - 使用正则化方法</p>
+</li>
+</ol>
+<h3 id="615">6.1.5 点云与体素表示</h3>
+<p><strong>点云表示</strong>：</p>
+<ul>
+<li>无连接信息的3D点集合 ${\mathbf{p}_i}_{i=1}^N$</li>
+<li>常用于3D扫描和激光雷达数据</li>
+<li>每个点可附加属性：法向量、颜色、置信度等</li>
+<li>表面重建方法：泊松重建、移动最小二乘（MLS）、Ball Pivoting</li>
+</ul>
+<p><strong>点云处理技术</strong>：</p>
+<ul>
+<li>降采样：体素网格滤波、随机采样、FPS（最远点采样）</li>
+<li>法向量估计：PCA分析局部邻域、一致性传播</li>
+<li>特征提取：FPFH、3D-SIFT、ISS关键点</li>
+<li>配准：ICP（迭代最近点）、RANSAC、特征匹配</li>
+</ul>
+<p><strong>移动最小二乘（MLS）表面</strong>：
+对于查询点 $\mathbf{x}$，拟合局部参考平面：
+$$\min_{\mathbf{n}, d} \sum_{i} w_i(\mathbf{x})[\mathbf{n} \cdot \mathbf{p}_i - d]^2$$
+其中权重函数 $w_i(\mathbf{x}) = \exp(-|\mathbf{x} - \mathbf{p}_i|^2/h^2)$</p>
+<p><strong>体素表示</strong>：</p>
+<ul>
+<li>3D网格中的占用信息</li>
+<li>规则网格：简单但内存密集</li>
+<li>层次结构：八叉树（Octree）表示</li>
+<li>稀疏体素八叉树（SVO）用于大规模场景</li>
+<li>适合体积渲染和物理仿真</li>
+</ul>
+<p><strong>八叉树结构</strong>：</p>
+<ul>
+<li>递归空间划分：每个节点有8个子节点</li>
+<li>自适应分辨率：细节区域深度更大</li>
+<li>高效的空间查询：$O(\log N)$</li>
+<li>支持out-of-core处理</li>
+</ul>
+<p><strong>体素化算法</strong>：</p>
+<ol>
+<li><strong>保守光栅化</strong>：确保不丢失薄结构</li>
+<li><strong>深度剥离</strong>：处理非流形和自相交</li>
+<li><strong>GPU并行化</strong>：使用原子操作</li>
+<li><strong>层次生成</strong>：自底向上构建八叉树</li>
+</ol>
+<p><strong>混合表示</strong>：</p>
+<ul>
+<li>点云 + 局部曲面：Surfels（surface elements）</li>
+<li>体素 + SDF：TSDF（Truncated SDF）用于3D重建</li>
+<li>八叉树 + 点云：用于大规模场景的LOD系统</li>
+</ul>
+<p><strong>现代应用</strong>：</p>
+<ul>
+<li>SLAM系统：实时3D地图构建</li>
+<li>自动驾驶：LiDAR点云处理</li>
+<li>医学成像：体素数据可视化</li>
+<li>深度学习：PointNet、VoxelNet等架构</li>
+</ul>
+<h3 id="616">6.1.6 网格表示</h3>
+<p>多边形网格（主要是三角网格）是实时图形学的主流表示：</p>
+<p><strong>基本元素</strong>：</p>
+<ul>
+<li>顶点（Vertices）：位置坐标，可附加法向量、UV坐标、颜色等</li>
+<li>边（Edges）：连接两个顶点</li>
+<li>面（Faces）：由边围成的多边形，通常是三角形或四边形</li>
+<li>半边（Half-edges）：有向边，便于遍历</li>
+</ul>
+<p><strong>网格数据结构</strong>：</p>
+<ol>
+<li>
+<p><strong>面表（Face List）</strong>：
+   - 简单但冗余：每个面存储顶点索引列表
+   - 适合静态网格和GPU渲染
+   - 邻接查询效率低</p>
+</li>
+<li>
+<p><strong>边表（Edge List）</strong>：
+   - 显式存储边信息
+   - 支持非流形结构
+   - 需要额外索引维护拓扑</p>
+</li>
+<li>
+<p><strong>半边数据结构（Half-Edge）</strong>：</p>
+</li>
+</ol>
+<pre class="codehilite"><code>struct HalfEdge {
+    Vertex* vertex;      // 指向的顶点
+    HalfEdge* twin;      // 对偶半边
+    HalfEdge* next;      // 下一条半边
+    Face* face;          // 所属面片
+};
+</code></pre>
+
+<ul>
+<li>高效的局部遍历</li>
+<li>只支持流形网格</li>
+<li>常用于网格编辑操作</li>
+</ul>
+<ol start="4">
+<li><strong>翼边结构（Winged-Edge）</strong>：
+   - 每条边存储四个相邻元素
+   - 对称性好但访问复杂</li>
+</ol>
+<p><strong>欧拉公式</strong>：对于连通的多面体网格：
+$$V - E + F = 2(1 - g)$$
+其中 $V$ 是顶点数，$E$ 是边数，$F$ 是面数，$g$ 是亏格（genus）。</p>
+<p><strong>网格的性质</strong>：</p>
+<ul>
+<li><strong>流形性</strong>：每条边最多被两个面共享</li>
+<li><strong>定向性</strong>：面片法向量的一致性</li>
+<li><strong>水密性</strong>：封闭且无孔洞</li>
+<li><strong>正则性</strong>：顶点度数接近6（三角网格）</li>
+</ul>
+<p><strong>网格质量度量</strong>：</p>
+<ul>
+<li>三角形质量：长宽比、最小角度</li>
+<li>顶点分布：均匀性、各向同性</li>
+<li>边长变化：梯度限制</li>
+<li>二面角：避免过于尖锐的折叠</li>
+</ul>
+<p><strong>常见网格操作</strong>：</p>
+<ul>
+<li><strong>边翻转（Edge Flip）</strong>：改变对角线</li>
+<li><strong>边收缩（Edge Collapse）</strong>：合并顶点</li>
+<li><strong>边分裂（Edge Split）</strong>：添加顶点</li>
+<li><strong>面分裂（Face Split）</strong>：细分三角形</li>
+</ul>
+<p><strong>网格的紧凑表示</strong>：</p>
+<ul>
+<li>索引网格：顶点数组 + 面索引数组</li>
+<li>三角形条带（Triangle Strips）：共享边的三角形序列</li>
+<li>三角形扇（Triangle Fans）：共享顶点的三角形序列</li>
+<li>压缩格式：量化坐标、预测编码</li>
+</ul>
+<h2 id="62">6.2 曲线与曲面</h2>
+<h3 id="621">6.2.1 参数曲线基础</h3>
+<p>参数曲线 $\mathbf{c}(t): [a, b] \rightarrow \mathbb{R}^3$ 的基本微分几何：</p>
+<p><strong>切向量</strong>：$\mathbf{t}(t) = \frac{d\mathbf{c}}{dt}$</p>
+<p><strong>弧长参数化</strong>：$s(t) = \int_a^t |\mathbf{c}'(\tau)| d\tau$</p>
+<p><strong>曲率</strong>：$\kappa = \frac{|\mathbf{t}' \times \mathbf{t}|}{|\mathbf{t}|^3}$</p>
+<p><strong>Frenet-Serret标架</strong>：</p>
+<ul>
+<li>切向量：$\mathbf{T} = \frac{\mathbf{c}'}{|\mathbf{c}'|}$</li>
+<li>法向量：$\mathbf{N} = \frac{\mathbf{T}'}{|\mathbf{T}'|}$</li>
+<li>副法向量：$\mathbf{B} = \mathbf{T} \times \mathbf{N}$</li>
+</ul>
+<p>Frenet-Serret公式：
+$$\begin{pmatrix} \mathbf{T}' \ \mathbf{N}' \ \mathbf{B}' \end{pmatrix} = \begin{pmatrix} 0 &amp; \kappa &amp; 0 \ -\kappa &amp; 0 &amp; \tau \ 0 &amp; -\tau &amp; 0 \end{pmatrix} \begin{pmatrix} \mathbf{T} \ \mathbf{N} \ \mathbf{B} \end{pmatrix}$$</p>
+<h3 id="622">6.2.2 贝塞尔曲线</h3>
+<p>$n$ 次贝塞尔曲线由 $n+1$ 个控制点 ${\mathbf{P}_i}_{i=0}^n$ 定义：
+$$\mathbf{B}(t) = \sum_{i=0}^n B_i^n(t) \mathbf{P}_i$$
+其中 $B_i^n(t) = \binom{n}{i}t^i(1-t)^{n-i}$ 是Bernstein基函数。</p>
+<p><strong>性质</strong>：</p>
+<ul>
+<li>端点插值：$\mathbf{B}(0) = \mathbf{P}_0$，$\mathbf{B}(1) = \mathbf{P}_n$</li>
+<li>凸包性质：曲线完全位于控制点的凸包内</li>
+<li>仿射不变性</li>
+<li>变差减少性质</li>
+</ul>
+<p><strong>de Casteljau算法</strong>：递归计算 $\mathbf{B}(t)$：
+$$\mathbf{P}_i^{(k)}(t) = (1-t)\mathbf{P}_i^{(k-1)} + t\mathbf{P}_{i+1}^{(k-1)}$$
+<strong>导数</strong>：
+$$\mathbf{B}'(t) = n\sum_{i=0}^{n-1} B_i^{n-1}(t)(\mathbf{P}_{i+1} - \mathbf{P}_i)$$</p>
+<h3 id="623-b">6.2.3 B样条曲线</h3>
+<p>B样条通过局部基函数实现局部控制：
+$$\mathbf{C}(t) = \sum_{i=0}^{n} N_{i,p}(t) \mathbf{P}_i$$
+其中 $N_{i,p}(t)$ 是 $p$ 次B样条基函数，由Cox-de Boor递归定义：
+$$N_{i,0}(t) = \begin{cases} 1 &amp; t_i \leq t &lt; t_{i+1} \ 0 &amp; \text{否则} \end{cases}$$</p>
+<p>$$N_{i,p}(t) = \frac{t - t_i}{t_{i+p} - t_i}N_{i,p-1}(t) + \frac{t_{i+p+1} - t}{t_{i+p+1} - t_{i+1}}N_{i+1,p-1}(t)$$
+<strong>节点向量</strong>：${t_0, t_1, ..., t_{m}}$，其中 $m = n + p + 1$</p>
+<p><strong>性质</strong>：</p>
+<ul>
+<li>局部支撑：$N_{i,p}(t) = 0$ 当 $t \notin [t_i, t_{i+p+1})$</li>
+<li>$C^{p-1}$ 连续性（简单节点情况）</li>
+<li>分段多项式</li>
+</ul>
+<h3 id="624-nurbsb">6.2.4 NURBS（非均匀有理B样条）</h3>
+<p>NURBS通过引入权重和有理形式扩展B样条：
+$$\mathbf{C}(t) = \frac{\sum_{i=0}^{n} w_i N_{i,p}(t) \mathbf{P}_i}{\sum_{i=0}^{n} w_i N_{i,p}(t)}$$
+<strong>优势</strong>：</p>
+<ul>
+<li>精确表示二次曲线（圆、椭圆、抛物线）</li>
+<li>投影不变性</li>
+<li>统一的数学框架</li>
+</ul>
+<h3 id="625">6.2.5 参数曲面</h3>
+<p>双参数曲面 $\mathbf{S}(u,v): D \subset \mathbb{R}^2 \rightarrow \mathbb{R}^3$</p>
+<p><strong>第一基本形式</strong>：度量曲面上的距离
+$$I = E du^2 + 2F du dv + G dv^2$$
+其中：</p>
+<ul>
+<li>$E = \mathbf{S}_u \cdot \mathbf{S}_u$</li>
+<li>$F = \mathbf{S}_u \cdot \mathbf{S}_v$</li>
+<li>$G = \mathbf{S}_v \cdot \mathbf{S}_v$</li>
+</ul>
+<p><strong>法向量</strong>：
+$$\mathbf{n} = \frac{\mathbf{S}_u \times \mathbf{S}_v}{|\mathbf{S}_u \times \mathbf{S}_v|}$$
+<strong>第二基本形式</strong>：描述曲面的弯曲
+$$II = L du^2 + 2M du dv + N dv^2$$
+其中：</p>
+<ul>
+<li>$L = \mathbf{S}_{uu} \cdot \mathbf{n}$</li>
+<li>$M = \mathbf{S}_{uv} \cdot \mathbf{n}$</li>
+<li>$N = \mathbf{S}_{vv} \cdot \mathbf{n}$</li>
+</ul>
+<p><strong>主曲率</strong>：Weingarten矩阵的特征值
+$$\mathbf{W} = \begin{pmatrix} L &amp; M \ M &amp; N \end{pmatrix} \begin{pmatrix} E &amp; F \ F &amp; G \end{pmatrix}^{-1}$$
+<strong>高斯曲率</strong>：$K = \kappa_1 \kappa_2 = \frac{LN - M^2}{EG - F^2}$</p>
+<p><strong>平均曲率</strong>：$H = \frac{\kappa_1 + \kappa_2}{2} = \frac{EN - 2FM + GL}{2(EG - F^2)}$</p>
+<h3 id="626">6.2.6 细分曲面</h3>
+<p>细分方案通过递归细化网格生成光滑曲面。</p>
+<p><strong>Loop细分</strong>（三角网格）：</p>
+<ul>
+<li>
+<p>新顶点位置（边中点）：
+$$\mathbf{v}_{\text{new}} = \frac{3}{8}(\mathbf{v}_1 + \mathbf{v}_2) + \frac{1}{8}(\mathbf{v}_3 + \mathbf{v}_4)$$</p>
+</li>
+<li>
+<p>旧顶点更新：
+$$\mathbf{v}_{\text{updated}} = (1 - n\beta)\mathbf{v}_{\text{old}} + \beta\sum_{i=1}^n \mathbf{v}_i$$
+其中 $\beta = \frac{1}{n}(\frac{5}{8} - (\frac{3}{8} + \frac{1}{4}\cos\frac{2\pi}{n})^2)$</p>
+</li>
+</ul>
+<p><strong>Catmull-Clark细分</strong>（四边形网格）：</p>
+<ul>
+<li>面点：面内顶点的平均</li>
+<li>边点：相邻两个顶点和两个面点的平均</li>
+<li>顶点更新：基于价数的加权平均</li>
+</ul>
+<p>极限曲面在正则顶点处为 $C^2$ 连续，在非正则顶点处为 $C^1$ 连续。</p>
+<h2 id="63">6.3 网格处理与阴影图</h2>
+<h3 id="631">6.3.1 网格简化</h3>
+<p>网格简化旨在减少多边形数量同时保持视觉质量。</p>
+<p><strong>边收缩（Edge Collapse）</strong>：
+将边 $(v_i, v_j)$ 收缩到新顶点 $\bar{v}$。使用二次误差度量（QEM）：</p>
+<p>每个顶点关联误差二次型：
+$$Q_v = \sum_{p \in \text{planes}(v)} K_p$$
+其中 $K_p = \mathbf{n}_p\mathbf{n}_p^T$ 对于平面 $\mathbf{n}_p^T\mathbf{x} + d = 0$。</p>
+<p>边收缩代价：
+$$\text{cost}(v_i, v_j) = \min_{\bar{v}} \bar{v}^T(Q_i + Q_j)\bar{v}$$
+最优位置通过求解线性系统获得：
+$$\bar{v} = -(Q_i + Q_j)^{-1}\mathbf{b}$$
+<strong>顶点聚类</strong>：
+将空间划分为网格，每个单元内的顶点合并为一个代表顶点。</p>
+<h3 id="632">6.3.2 网格参数化</h3>
+<p>将3D曲面映射到2D参数域 $\phi: M \rightarrow \mathbb{R}^2$。</p>
+<p><strong>调和映射（Harmonic Mapping）</strong>：
+最小化Dirichlet能量：
+$$E_D = \frac{1}{2}\int_M |\nabla \phi|^2 dA$$
+离散化后得到线性系统：
+$$\sum_{j \in N(i)} w_{ij}(u_j - u_i) = 0$$
+权重选择：</p>
+<ul>
+<li>均匀权重：$w_{ij} = 1$</li>
+<li>余切权重：$w_{ij} = \cot\alpha_{ij} + \cot\beta_{ij}$</li>
+<li>平均值坐标：考虑角度和距离</li>
+</ul>
+<p><strong>保角参数化（Conformal Parameterization）</strong>：
+最小化角度畸变，使用复数表示和Cauchy-Riemann方程。</p>
+<p><strong>LSCM（最小二乘保角映射）</strong>：
+$$\min_{\phi} \sum_{T} A_T ||\nabla \phi - R_{90°}\nabla \phi||^2$$</p>
+<h3 id="633">6.3.3 网格平滑</h3>
+<p><strong>拉普拉斯平滑</strong>：
+$$\mathbf{v}_i^{new} = \mathbf{v}_i + \lambda \mathbf{L}(\mathbf{v}_i)$$
+其中离散拉普拉斯算子：
+$$\mathbf{L}(\mathbf{v}_i) = \frac{1}{|N(i)|}\sum_{j \in N(i)} (\mathbf{v}_j - \mathbf{v}_i)$$
+<strong>双边滤波扩展</strong>：
+$$\mathbf{v}_i^{new} = \mathbf{v}_i + \lambda \sum_{j \in N(i)} w_s(||\mathbf{v}_j - \mathbf{v}_i||) w_n(\mathbf{n}_i \cdot \mathbf{n}_j) (\mathbf{v}_j - \mathbf{v}_i)$$</p>
+<h3 id="634">6.3.4 网格修复</h3>
+<p><strong>孔洞填充</strong>：</p>
+<ol>
+<li>检测边界环</li>
+<li>三角化边界多边形（最小角度、最小面积）</li>
+<li>细分和平滑新增三角形</li>
+</ol>
+<p><strong>自相交检测与修复</strong>：</p>
+<ul>
+<li>使用空间划分结构加速相交测试</li>
+<li>局部重新网格化解决相交</li>
+</ul>
+<h3 id="635-shadow-mapping">6.3.5 阴影图（Shadow Mapping）</h3>
+<p>阴影图是实时渲染中生成阴影的标准技术。</p>
+<p><strong>基本算法</strong>：</p>
+<ol>
+<li>从光源视角渲染场景，存储深度</li>
+<li>从相机视角渲染，测试每个片元是否在阴影中</li>
+</ol>
+<p><strong>深度比较</strong>：
+对于世界空间点 $\mathbf{p}$：</p>
+<ol>
+<li>变换到光源空间：$\mathbf{p}_{light} = \mathbf{M}_{light}\mathbf{p}$</li>
+<li>采样阴影图：$z_{stored} = \text{ShadowMap}(p_{light}.xy)$</li>
+<li>比较深度：$\text{inShadow} = (p_{light}.z &gt; z_{stored} + \text{bias})$</li>
+</ol>
+<p><strong>深度偏移（Bias）问题</strong>：</p>
+<ul>
+<li>恒定偏移：$\text{bias} = \epsilon$</li>
+<li>斜率偏移：$\text{bias} = \epsilon \cdot \tan(\theta)$</li>
+<li>法线偏移：沿法线方向偏移采样点</li>
+</ul>
+<h3 id="636-csm">6.3.6 级联阴影图（CSM）</h3>
+<p>将视锥体分割为多个子区域，每个使用独立的阴影图。</p>
+<p><strong>分割策略</strong>：</p>
+<ul>
+<li>均匀分割：$z_i = z_{near} + i \cdot \frac{z_{far} - z_{near}}{N}$</li>
+<li>对数分割：$z_i = z_{near} \cdot (z_{far}/z_{near})^{i/N}$</li>
+<li>实用分割：两者的混合</li>
+</ul>
+<p><strong>层级选择</strong>：</p>
+<pre class="codehilite"><code class="language-glsl">float depth = length(viewPos);
+int cascade = 0;
+for (int i = 0; i &lt; NUM_CASCADES - 1; i++) {
+    if (depth &gt; cascadeSplits[i]) cascade = i + 1;
+}
+</code></pre>
+
+<h3 id="637">6.3.7 软阴影技术</h3>
+<p><strong>PCF（Percentage Closer Filtering）</strong>：
+$$\text{shadow} = \frac{1}{N}\sum_{i=1}^N \text{ShadowTest}(\mathbf{p} + \delta_i)$$
+<strong>PCSS（Percentage Closer Soft Shadows）</strong>：</p>
+<ol>
+<li>阻挡物搜索：估计平均阻挡物深度</li>
+<li>半影估计：$w_{penumbra} = (d_{receiver} - d_{blocker}) \cdot w_{light} / d_{blocker}$</li>
+<li>PCF过滤：使用估计的半影大小</li>
+</ol>
+<p><strong>方差阴影图（VSM）</strong>：
+存储深度和深度平方，使用Chebyshev不等式估计阴影概率：
+$$P(z \geq t) \leq \frac{\sigma^2}{\sigma^2 + (t - \mu)^2}$$</p>
+<h3 id="638">6.3.8 光线追踪阴影</h3>
+<p><strong>硬阴影</strong>：
+发射阴影光线从着色点到光源：
+$$\text{visible} = \begin{cases} 1 &amp; \text{无遮挡} \ 0 &amp; \text{有遮挡} \end{cases}$$
+<strong>软阴影</strong>：
+对面光源采样多条光线：
+$$L = \frac{1}{N}\sum_{i=1}^N V(\mathbf{p}, \mathbf{x}_i) \cdot L_e(\mathbf{x}_i) \cdot G(\mathbf{p}, \mathbf{x}_i)$$
+其中 $V$ 是可见性函数，$G$ 是几何项。</p>
+<h3 id="639-ao">6.3.9 环境光遮蔽（AO）</h3>
+<p><strong>屏幕空间环境光遮蔽（SSAO）</strong>：
+$$AO(\mathbf{p}) = \frac{1}{N}\sum_{i=1}^N \text{visibility}(\mathbf{p}, \mathbf{p} + \mathbf{s}_i)$$
+采样点在半球内随机分布，使用深度缓冲判断遮挡。</p>
+<p><strong>预计算AO</strong>：</p>
+<ul>
+<li>每顶点存储遮蔽值</li>
+<li>使用光线投射计算</li>
+<li>考虑法线加权：$AO = \frac{1}{\pi}\int_{\Omega} V(\omega) \cdot (\mathbf{n} \cdot \omega)^+ d\omega$</li>
+</ul>
+<h2 id="_1">本章小结</h2>
+<p>本章系统介绍了计算机图形学中的几何表示方法：</p>
+<p><strong>基本几何表示</strong>：</p>
+<ul>
+<li>隐式表示：$f(\mathbf{x}) = 0$，便于内外判断和布尔运算</li>
+<li>显式表示：参数化形式，便于采样和纹理映射</li>
+<li>符号距离场（SDF）：特殊的隐式表示，梯度为单位向量</li>
+<li>CSG：通过布尔运算构建复杂几何</li>
+</ul>
+<p><strong>曲线与曲面理论</strong>：</p>
+<ul>
+<li>贝塞尔曲线：$\mathbf{B}(t) = \sum_{i=0}^n B_i^n(t) \mathbf{P}_i$</li>
+<li>B样条：局部控制，$C^{p-1}$ 连续性</li>
+<li>NURBS：有理形式，精确表示二次曲线</li>
+<li>微分几何：第一/第二基本形式，高斯曲率 $K$，平均曲率 $H$</li>
+<li>细分曲面：Loop（三角网格）、Catmull-Clark（四边形网格）</li>
+</ul>
+<p><strong>网格处理与阴影技术</strong>：</p>
+<ul>
+<li>网格简化：QEM边收缩算法</li>
+<li>网格参数化：调和映射、LSCM</li>
+<li>阴影图：深度比较 + 偏移处理</li>
+<li>级联阴影图：多分辨率解决透视走样</li>
+<li>软阴影：PCF、PCSS、VSM</li>
+<li>环境光遮蔽：SSAO、预计算AO</li>
+</ul>
+<h2 id="_2">练习题</h2>
+<h3 id="_3">基础题</h3>
+<p><strong>练习 6.1</strong>：给定一个椭球的隐式方程 $\frac{x^2}{a^2} + \frac{y^2}{b^2} + \frac{z^2}{c^2} = 1$，推导其在点 $(x_0, y_0, z_0)$ 处的法向量。</p>
+<p><em>提示</em>：法向量是梯度方向 $\nabla f$。</p>
+<details>
+<summary>答案</summary>
+<p>对隐式函数 $f(x,y,z) = \frac{x^2}{a^2} + \frac{y^2}{b^2} + \frac{z^2}{c^2} - 1$ 求梯度：
+$$\nabla f = \left(\frac{2x}{a^2}, \frac{2y}{b^2}, \frac{2z}{c^2}\right)$$
+在点 $(x_0, y_0, z_0)$ 处的单位法向量：
+$$\mathbf{n} = \frac{1}{\sqrt{\frac{4x_0^2}{a^4} + \frac{4y_0^2}{b^4} + \frac{4z_0^2}{c^4}}} \left(\frac{2x_0}{a^2}, \frac{2y_0}{b^2}, \frac{2z_0}{c^2}\right)$$</p>
+</details>
+<p><strong>练习 6.2</strong>：证明三次贝塞尔曲线的中点 $\mathbf{B}(0.5)$ 可以表示为：
+$$\mathbf{B}(0.5) = \frac{1}{8}(\mathbf{P}_0 + 3\mathbf{P}_1 + 3\mathbf{P}_2 + \mathbf{P}_3)$$
+<em>提示</em>：代入 $t = 0.5$ 到贝塞尔曲线公式。</p>
+<details>
+<summary>答案</summary>
+<p>三次贝塞尔曲线：
+$$\mathbf{B}(t) = (1-t)^3\mathbf{P}_0 + 3t(1-t)^2\mathbf{P}_1 + 3t^2(1-t)\mathbf{P}_2 + t^3\mathbf{P}_3$$
+代入 $t = 0.5$：</p>
+<ul>
+<li>$(1-0.5)^3 = 0.125 = \frac{1}{8}$</li>
+<li>$3 \cdot 0.5 \cdot (0.5)^2 = 3 \cdot 0.5 \cdot 0.25 = 0.375 = \frac{3}{8}$</li>
+<li>$3 \cdot (0.5)^2 \cdot 0.5 = 3 \cdot 0.25 \cdot 0.5 = 0.375 = \frac{3}{8}$</li>
+<li>$(0.5)^3 = 0.125 = \frac{1}{8}$</li>
+</ul>
+<p>因此：
+$$\mathbf{B}(0.5) = \frac{1}{8}\mathbf{P}_0 + \frac{3}{8}\mathbf{P}_1 + \frac{3}{8}\mathbf{P}_2 + \frac{1}{8}\mathbf{P}_3 = \frac{1}{8}(\mathbf{P}_0 + 3\mathbf{P}_1 + 3\mathbf{P}_2 + \mathbf{P}_3)$$</p>
+</details>
+<p><strong>练习 6.3</strong>：对于一个三角形网格，已知顶点数 $V = 100$，面数 $F = 196$，使用欧拉公式计算边数 $E$。假设网格是单连通的（genus = 0）。</p>
+<p><em>提示</em>：欧拉公式 $V - E + F = 2(1 - g)$。</p>
+<details>
+<summary>答案</summary>
+<p>对于单连通网格（$g = 0$）：
+$$V - E + F = 2(1 - 0) = 2$$
+代入已知值：
+$$100 - E + 196 = 2$$
+$$296 - E = 2$$
+$$E = 294$$
+验证：对于三角网格，每个面有3条边，每条边被2个面共享，所以 $E = \frac{3F}{2} = \frac{3 \times 196}{2} = 294$ ✓</p>
+</details>
+<p><strong>练习 6.4</strong>：给定参数曲面 $\mathbf{S}(u,v) = (u\cos v, u\sin v, u^2)$，计算在点 $(u,v) = (1, 0)$ 处的法向量。</p>
+<p><em>提示</em>：计算 $\mathbf{S}_u \times \mathbf{S}_v$。</p>
+<details>
+<summary>答案</summary>
+<p>首先计算偏导数：
+$$\mathbf{S}_u = (\cos v, \sin v, 2u)$$
+$$\mathbf{S}_v = (-u\sin v, u\cos v, 0)$$
+在 $(u,v) = (1,0)$ 处：
+$$\mathbf{S}_u(1,0) = (1, 0, 2)$$
+$$\mathbf{S}_v(1,0) = (0, 1, 0)$$
+叉积：
+$$\mathbf{n} = \mathbf{S}_u \times \mathbf{S}_v = \begin{vmatrix} \mathbf{i} &amp; \mathbf{j} &amp; \mathbf{k} \ 1 &amp; 0 &amp; 2 \ 0 &amp; 1 &amp; 0 \end{vmatrix} = (-2, 0, 1)$$
+单位法向量：
+$$\hat{\mathbf{n}} = \frac{(-2, 0, 1)}{\sqrt{4 + 0 + 1}} = \frac{1}{\sqrt{5}}(-2, 0, 1)$$</p>
+</details>
+<h3 id="_4">挑战题</h3>
+<p><strong>练习 6.5</strong>：证明对于符号距离场（SDF），如果 $f$ 是到曲面 $S$ 的符号距离函数，则 $|\nabla f| = 1$ 几乎处处成立。</p>
+<p><em>提示</em>：考虑最近点投影和距离函数的定义。</p>
+<details>
+<summary>答案</summary>
+<p>设 $\mathbf{x}$ 是空间中一点，$\mathbf{p}$ 是 $\mathbf{x}$ 在曲面 $S$ 上的最近点。</p>
+<p>定义：$f(\mathbf{x}) = \text{sign}(\mathbf{x}) \cdot |\mathbf{x} - \mathbf{p}|$</p>
+<p>对于曲面外的点（$f &gt; 0$），沿任意方向 $\mathbf{v}$ 的方向导数：
+$$\frac{\partial f}{\partial \mathbf{v}} = \lim_{h \to 0} \frac{f(\mathbf{x} + h\mathbf{v}) - f(\mathbf{x})}{h}$$
+由于 $\mathbf{p}$ 是最近点，当 $h$ 足够小时，$\mathbf{x} + h\mathbf{v}$ 的最近点仍是 $\mathbf{p}$（除非 $\mathbf{x}$ 在中轴上）。</p>
+<p>因此：
+$$f(\mathbf{x} + h\mathbf{v}) \approx |\mathbf{x} + h\mathbf{v} - \mathbf{p}|$$
+使用泰勒展开：
+$$|\mathbf{x} + h\mathbf{v} - \mathbf{p}| = |\mathbf{x} - \mathbf{p}| + h\frac{(\mathbf{x} - \mathbf{p}) \cdot \mathbf{v}}{|\mathbf{x} - \mathbf{p}|} + O(h^2)$$
+所以：
+$$\frac{\partial f}{\partial \mathbf{v}} = \frac{(\mathbf{x} - \mathbf{p}) \cdot \mathbf{v}}{|\mathbf{x} - \mathbf{p}|}$$
+梯度为：
+$$\nabla f = \frac{\mathbf{x} - \mathbf{p}}{|\mathbf{x} - \mathbf{p}|}$$
+因此 $|\nabla f| = 1$。</p>
+<p>注意：在中轴（medial axis）上，最近点不唯一，梯度不存在。</p>
+</details>
+<p><strong>练习 6.6</strong>：推导Loop细分中 $\beta$ 值的选择，使得细分曲面在正则顶点处达到 $C^2$ 连续性。</p>
+<p><em>提示</em>：分析细分矩阵的特征值。</p>
+<details>
+<summary>答案</summary>
+<p>对于价数为 $n$ 的顶点，Loop细分的更新规则：
+$$\mathbf{v}_{\text{new}} = (1 - n\beta)\mathbf{v}_{\text{old}} + \beta\sum_{i=1}^n \mathbf{v}_i$$
+细分矩阵 $\mathbf{S}$ 的特征值决定了曲面的连续性。</p>
+<p>对于 $C^2$ 连续性，需要：</p>
+<ol>
+<li>最大特征值 $\lambda_0 = 1$（保持仿射不变性）</li>
+<li>次大特征值 $\lambda_1 = \lambda_2 &lt; 1$（收敛性）</li>
+<li>$\lambda_1/\lambda_0 &gt; \lambda_3/\lambda_1$（$C^2$ 条件）</li>
+</ol>
+<p>通过傅里叶分析，特征值为：
+$$\lambda_k = \frac{1}{8}(5 - 3\cos\frac{2\pi k}{n}) + \beta(1 - \cos\frac{2\pi k}{n})$$
+要使 $\lambda_1 = \lambda_2$，需要旋转对称性。</p>
+<p>最优的 $\beta$ 值（Warren's choice）：
+$$\beta = \frac{1}{n}\left(\frac{5}{8} - \left(\frac{3}{8} + \frac{1}{4}\cos\frac{2\pi}{n}\right)^2\right)$$
+这保证了：</p>
+<ul>
+<li>$n = 3$：$\beta = 3/16$</li>
+<li>$n = 6$：$\beta = 1/16$（正则顶点）</li>
+<li>大 $n$：$\beta \approx 3/(8n)$</li>
+</ul>
+</details>
+<p><strong>练习 6.7</strong>：设计一个算法，将任意多边形网格转换为符号距离场表示。讨论算法的时间复杂度和精度权衡。</p>
+<p><em>提示</em>：考虑快速行进法（FMM）或快速扫描法。</p>
+<details>
+<summary>答案</summary>
+<p><strong>算法设计</strong>：</p>
+<ol>
+<li>
+<p><strong>初始化</strong>：
+   - 在规则网格上采样
+   - 标记网格点的内外关系（射线法）
+   - 计算到最近三角形的距离</p>
+</li>
+<li>
+<p><strong>精确距离计算</strong>（边界附近）：
+   - 对每个网格点，找最近的三角形
+   - 计算点到三角形的距离（考虑顶点、边、面）
+   - 使用空间划分加速（KD-tree或BVH）</p>
+</li>
+<li>
+<p><strong>快速行进法</strong>（远离边界）：
+   - 从已知距离的点开始传播
+   - 求解Eikonal方程：$|\nabla f| = 1$
+   - 使用堆维护波前</p>
+</li>
+<li>
+<p><strong>符号确定</strong>：
+   - 奇偶规则或缠绕数
+   - 法向量一致性检查</p>
+</li>
+</ol>
+<p><strong>时间复杂度</strong>：</p>
+<ul>
+<li>初始化：$O(N \log M)$，$N$ 是网格点数，$M$ 是三角形数</li>
+<li>FMM传播：$O(N \log N)$</li>
+<li>总体：$O(N \log N + N \log M)$</li>
+</ul>
+<p><strong>精度权衡</strong>：</p>
+<ul>
+<li>网格分辨率 vs. 内存消耗</li>
+<li>窄带宽度 vs. 计算时间</li>
+<li>插值阶数 vs. 平滑度</li>
+</ul>
+<p><strong>优化策略</strong>：</p>
+<ul>
+<li>自适应网格细化</li>
+<li>GPU并行化（特别适合快速扫描法）</li>
+<li>层次化表示（稀疏体素八叉树）</li>
+</ul>
+</details>
+<p><strong>练习 6.8</strong>：分析PCSS（Percentage Closer Soft Shadows）算法中，光源大小、遮挡物距离和接收器距离如何影响半影大小。推导半影估计公式。</p>
+<p><em>提示</em>：使用相似三角形原理。</p>
+<details>
+<summary>答案</summary>
+<p><strong>几何分析</strong>：</p>
+<p>设置：</p>
+<ul>
+<li>光源宽度：$w_{light}$</li>
+<li>遮挡物到光源距离：$d_{blocker}$</li>
+<li>接收器到光源距离：$d_{receiver}$</li>
+<li>遮挡物到接收器距离：$d_{receiver} - d_{blocker}$</li>
+</ul>
+<p><strong>半影大小推导</strong>：</p>
+<p>使用相似三角形：
+$$\frac{w_{penumbra}}{d_{receiver} - d_{blocker}} = \frac{w_{light}}{d_{blocker}}$$
+解得：
+$$w_{penumbra} = \frac{(d_{receiver} - d_{blocker}) \cdot w_{light}}{d_{blocker}}$$</p>
+<p><strong>影响因素分析</strong>：</p>
+<ol>
+<li>
+<p><strong>光源大小</strong> $w_{light}$：
+   - 线性关系：光源越大，半影越宽
+   - 点光源（$w_{light} \to 0$）：硬阴影</p>
+</li>
+<li>
+<p><strong>遮挡物距离</strong> $d_{blocker}$：
+   - 反比关系：遮挡物越近光源，半影越大
+   - 极限情况：$d_{blocker} \to 0$，$w_{penumbra} \to \infty$</p>
+</li>
+<li>
+<p><strong>接收器距离</strong> $d_{receiver}$：
+   - 正相关：接收器越远，半影越大
+   - 相对距离 $(d_{receiver} - d_{blocker})$ 是关键</p>
+</li>
+</ol>
+<p><strong>PCSS算法步骤</strong>：</p>
+<ol>
+<li>
+<p><strong>搜索遮挡物</strong>：
+   <code>glsl
+   float searchRadius = lightSize * (receiverDepth - nearPlane) / receiverDepth;
+   float avgBlockerDepth = findAverageBlockerDepth(shadowCoord, searchRadius);</code></p>
+</li>
+<li>
+<p><strong>估计半影</strong>：
+   <code>glsl
+   float penumbraWidth = (receiverDepth - avgBlockerDepth) * lightSize / avgBlockerDepth;</code></p>
+</li>
+<li>
+<p><strong>PCF过滤</strong>：
+   <code>glsl
+   float shadow = PCF(shadowCoord, penumbraWidth);</code></p>
+</li>
+</ol>
+<p><strong>误差来源</strong>：</p>
+<ul>
+<li>单一平均遮挡物深度的近似</li>
+<li>离散采样导致的噪声</li>
+<li>透视投影的非线性</li>
+</ul>
+</details>
+<h2 id="_5">常见陷阱与错误</h2>
+<ol>
+<li>
+<p><strong>符号距离场的梯度假设</strong>
+   - 错误：认为SDF的梯度处处为1
+   - 正确：在中轴（medial axis）上梯度不连续</p>
+</li>
+<li>
+<p><strong>贝塞尔曲线的参数化</strong>
+   - 错误：假设参数 $t$ 对应弧长
+   - 正确：贝塞尔曲线通常不是弧长参数化的</p>
+</li>
+<li>
+<p><strong>网格简化的拓扑保持</strong>
+   - 错误：边收缩可能改变拓扑（创建非流形结构）
+   - 正确：需要检查收缩操作的有效性</p>
+</li>
+<li>
+<p><strong>阴影图的深度精度</strong>
+   - 错误：忽略深度缓冲的有限精度
+   - 正确：使用适当的偏移和高精度深度格式</p>
+</li>
+<li>
+<p><strong>细分曲面的边界处理</strong>
+   - 错误：对边界顶点使用内部规则
+   - 正确：边界需要特殊的细分规则</p>
+</li>
+<li>
+<p><strong>NURBS权重的影响</strong>
+   - 错误：认为权重只是简单的缩放
+   - 正确：权重影响曲线的参数化速度</p>
+</li>
+<li>
+<p><strong>CSG运算的数值稳定性</strong>
+   - 错误：直接使用 min/max 进行布尔运算
+   - 正确：在边界附近需要特殊处理</p>
+</li>
+<li>
+<p><strong>环境光遮蔽的法线偏移</strong>
+   - 错误：不考虑自遮挡问题
+   - 正确：沿法线偏移采样起点</p>
+</li>
+</ol>
+<h2 id="_6">最佳实践检查清单</h2>
+<h3 id="_7">几何表示选择</h3>
+<ul>
+<li>[ ] 根据应用需求选择合适的表示（隐式/显式）</li>
+<li>[ ] 考虑内存占用和查询效率的平衡</li>
+<li>[ ] 评估修改操作的频率和复杂度</li>
+<li>[ ] 确保表示支持所需的查询操作</li>
+</ul>
+<h3 id="_8">曲线曲面设计</h3>
+<ul>
+<li>[ ] 选择适当的连续性要求（$C^0$/$C^1$/$C^2$）</li>
+<li>[ ] 验证控制点数量与曲线复杂度的匹配</li>
+<li>[ ] 检查参数域的有效范围</li>
+<li>[ ] 考虑数值精度和稳定性</li>
+</ul>
+<h3 id="_9">网格处理</h3>
+<ul>
+<li>[ ] 保持网格的流形性质</li>
+<li>[ ] 验证欧拉特征数的一致性</li>
+<li>[ ] 使用半边结构进行拓扑操作</li>
+<li>[ ] 实现鲁棒的相交测试</li>
+</ul>
+<h3 id="_10">阴影实现</h3>
+<ul>
+<li>[ ] 选择合适的阴影图分辨率</li>
+<li>[ ] 正确设置深度偏移参数</li>
+<li>[ ] 实现阴影图的过滤（PCF等）</li>
+<li>[ ] 考虑级联阴影图的必要性</li>
+</ul>
+<h3 id="_11">性能优化</h3>
+<ul>
+<li>[ ] 使用空间数据结构加速查询</li>
+<li>[ ] 实现细节层次（LOD）系统</li>
+<li>[ ] 利用GPU并行计算</li>
+<li>[ ] 缓存重复计算的结果</li>
+</ul>
+<h3 id="_12">数值稳定性</h3>
+<ul>
+<li>[ ] 避免除零和接近奇异的情况</li>
+<li>[ ] 使用稳定的算法（如QR分解代替法线方程）</li>
+<li>[ ] 选择合适的浮点精度</li>
+<li>[ ] 实现容错机制</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="./chapter5.html" class="nav-link prev">← 第5章：高级着色技术</a><a href="./chapter7.html" class="nav-link next">第7章：光线追踪基础 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

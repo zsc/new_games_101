@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第7章：光线追踪基础</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class=""><a href="./index.html">计算机图形学高级教程</a></li><li class=""><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class=""><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class=""><a href="./chapter6.html">第6章：几何表示</a></li><li class="active"><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class=""><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class=""><a href="./chapter12.html">第12章：物质点法</a></li><li class=""><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="7">第7章：光线追踪基础</h1>
+<p>光线追踪是计算机图形学中实现真实感渲染的核心技术之一。不同于光栅化的前向渲染方式，光线追踪采用逆向追踪光线的方式，从相机出发追踪光线在场景中的传播路径。本章将深入探讨光线追踪的基本原理、加速结构的设计与实现，以及光线与物体相交算法的优化技术。我们将重点关注算法的数学基础和性能优化策略，为后续的全局光照和高级渲染技术打下坚实基础。</p>
+<h2 id="71">7.1 光线追踪基本原理</h2>
+<h3 id="711">7.1.1 光线的数学表示</h3>
+<p>光线可以用参数方程表示：
+$$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$$
+其中：</p>
+<ul>
+<li>$\mathbf{o}$ 是光线起点（origin）</li>
+<li>$\mathbf{d}$ 是归一化的方向向量（direction）</li>
+<li>$t \geq 0$ 是参数，表示沿光线方向的距离</li>
+</ul>
+<p><strong>扩展表示</strong>：为了数值稳定性，实际应用中常使用：
+$$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}, \quad t \in [t_{\min}, t_{\max}]$$
+其中 $t_{\min} &gt; 0$ 避免自相交，$t_{\max}$ 限制光线长度。典型值：$t_{\min} = 10^{-4}$ 到 $10^{-3}$，取决于场景规模。</p>
+<p><strong>光线微分</strong>：用于抗锯齿和纹理过滤，追踪光线的微分信息：
+$$\frac{\partial \mathbf{r}}{\partial x} = \frac{\partial \mathbf{o}}{\partial x} + t\frac{\partial \mathbf{d}}{\partial x}$$
+这对于计算纹理footprint至关重要。考虑相邻像素的光线：
+$$\begin{aligned}
+\frac{\partial \mathbf{d}}{\partial x} &amp;\approx \mathbf{d}_{i+1,j} - \mathbf{d}_{i,j} \
+\frac{\partial \mathbf{d}}{\partial y} &amp;\approx \mathbf{d}_{i,j+1} - \mathbf{d}_{i,j}
+\end{aligned}$$
+<strong>光线锥（Ray Cone）表示</strong>：
+为了更准确的LOD选择和过滤，可以将光线扩展为圆锥：
+$$r(t) = r_0 + t \cdot \tan(\theta)$$
+其中 $r_0$ 是像素footprint在近平面的半径，$\theta$ 是锥角，通常：
+$$\theta \approx \frac{1}{\text{image_width}} \cdot \text{fov}$$
+<strong>光线的齐次坐标表示</strong>：
+在某些情况下（如投影变换），使用Plücker坐标更方便：
+$$\mathbf{L} = (\mathbf{d}, \mathbf{o} \times \mathbf{d})$$
+这种表示在处理光线-光线距离和相交测试时特别有用。</p>
+<h3 id="712">7.1.2 基本光线追踪算法</h3>
+<p>光线追踪的核心步骤：</p>
+<ol>
+<li><strong>主光线生成（Primary Ray Generation）</strong>
+   对于图像平面上的每个像素 $(i, j)$，生成从相机位置出发的主光线：
+$$\mathbf{d}_{i,j} = \text{normalize}(\mathbf{p}_{i,j} - \mathbf{e})$$
+其中 $\mathbf{e}$ 是相机位置，$\mathbf{p}_{i,j}$ 是像素在世界坐标系中的位置。</li>
+</ol>
+<p><strong>子像素采样</strong>：为了抗锯齿，在像素内部进行多次采样：
+$$\mathbf{p}_{i,j}^{(k)} = \mathbf{p}_{i,j} + \xi_x \Delta_x \mathbf{right} + \xi_y \Delta_y \mathbf{up}$$
+其中 $\xi_x, \xi_y \in [-0.5, 0.5]$ 是采样偏移。</p>
+<p><strong>采样模式</strong>：</p>
+<ul>
+<li><strong>规则采样</strong>：$\xi_x = \frac{k_x + 0.5}{n_x} - 0.5$</li>
+<li><strong>随机采样</strong>：$\xi_x \sim U(-0.5, 0.5)$</li>
+<li><strong>分层采样（Stratified）</strong>：将像素分为 $n \times n$ 子格，每格内随机采样</li>
+<li><strong>低差异序列</strong>：使用Halton或Sobol序列</li>
+</ul>
+<p><strong>重要性采样优化</strong>：
+   根据前帧或预览pass的信息，在高频区域增加采样：
+$$p(\xi) \propto |\nabla I(x, y)|^2 + \epsilon$$</p>
+<ol start="2">
+<li><strong>光线-场景相交测试</strong>
+   对每条光线，找到最近的相交点：
+$$t_{\text{hit}} = \min_{k \in \text{objects}} t_k$$
+其中 $t_k$ 是光线与第 $k$ 个物体的相交参数。</li>
+</ol>
+<p><strong>相交信息记录</strong>：
+   <code>struct HitRecord {
+       float t;           // 相交参数
+       vec3 point;        // 相交点
+       vec3 normal;       // 表面法线
+       vec2 uv;          // 纹理坐标
+       Material* mat;     // 材质指针
+       float pdf_area;    // 面积概率密度
+       vec3 dpdu, dpdv;   // 表面参数化导数
+       vec3 tangent;      // 切线向量
+       float curvature;   // 曲率信息
+   }</code></p>
+<p><strong>浮点误差处理</strong>：
+   相交点的精确计算考虑误差界：
+$$\mathbf{p}_{\text{hit}} = \mathbf{o} + t_{\text{hit}}\mathbf{d} \pm \epsilon_{\text{hit}}$$
+其中 $\epsilon_{\text{hit}} = \gamma_3(|\mathbf{o}| + t_{\text{hit}}|\mathbf{d}|)$，
+   $\gamma_n = \frac{n\epsilon_{\text{machine}}}{1 - n\epsilon_{\text{machine}}}$</p>
+<ol start="3">
+<li><strong>着色计算</strong>
+   在相交点处计算颜色，考虑：</li>
+</ol>
+<ul>
+<li>直接光照（使用阴影光线）</li>
+<li>反射（递归追踪反射光线）</li>
+<li>折射（对透明物体）</li>
+<li>环境光照（环境贴图采样）</li>
+</ul>
+<p><strong>光线相干性利用</strong>：</p>
+<ul>
+<li><strong>光线包（Ray Packets）</strong>：同时追踪多条相邻光线</li>
+<li><strong>光线排序</strong>：按方向或起点聚类以改善缓存局部性</li>
+<li><strong>光线重排序缓冲</strong>：延迟处理以批量化相似操作</li>
+</ul>
+<h3 id="713">7.1.3 递归光线追踪</h3>
+<p>递归光线追踪通过追踪次级光线来模拟复杂的光照效果：
+$$L_o(\mathbf{x}, \omega_o) = L_e(\mathbf{x}, \omega_o) + \int_{\Omega} f_r(\mathbf{x}, \omega_i, \omega_o) L_i(\mathbf{x}, \omega_i) (\omega_i \cdot \mathbf{n}) d\omega_i$$
+<strong>Whitted-style光线追踪</strong>简化为：
+$$L_o = L_e + k_d L_{\text{direct}} + k_s L_{\text{reflect}} + k_t L_{\text{refract}}$$
+其中：</p>
+<ul>
+<li>$L_{\text{direct}}$：直接光照（Lambert + Phong）</li>
+<li>$L_{\text{reflect}}$：镜面反射贡献</li>
+<li>$L_{\text{refract}}$：折射贡献</li>
+<li>$k_d, k_s, k_t$：材质参数，满足能量守恒 $k_d + k_s + k_t \leq 1$</li>
+</ul>
+<p><strong>直接光照计算的细节</strong>：</p>
+<p>对于点光源：
+$$L_{\text{direct}} = \sum_{i} \frac{I_i}{r_i^2} \cdot V_i \cdot \max(0, \mathbf{n} \cdot \mathbf{l}_i) \cdot \left(\frac{k_d}{\pi} + k_s \frac{(\mathbf{h}_i \cdot \mathbf{n})^n}{(\mathbf{n} \cdot \mathbf{l}_i)}\right)$$
+其中：</p>
+<ul>
+<li>$I_i$：光源强度</li>
+<li>$r_i$：到光源距离</li>
+<li>$V_i$：可见性函数（0或1）</li>
+<li>$\mathbf{h}_i = \text{normalize}(\mathbf{l}_i + \mathbf{v})$：半向量</li>
+<li>$n$：Phong指数</li>
+</ul>
+<p><strong>反射方向计算</strong>：
+$$\mathbf{r}_{\text{reflect}} = \mathbf{d} - 2(\mathbf{d} \cdot \mathbf{n})\mathbf{n}$$
+<strong>改进的反射模型</strong>：
+考虑微表面理论，可以添加粗糙度扰动：
+$$\mathbf{r}'_{\text{reflect}} = \text{normalize}(\mathbf{r}_{\text{reflect}} + \alpha \mathbf{\xi})$$
+其中 $\mathbf{\xi}$ 是随机扰动向量，$\alpha$ 是粗糙度参数。</p>
+<p><strong>扰动向量的生成</strong>：
+使用切线空间：</p>
+<ol>
+<li>构建正交基：${\mathbf{n}, \mathbf{t}, \mathbf{b}}$</li>
+<li>在半球内采样：$\mathbf{\xi} = \sqrt{1-u^2}\cos(2\pi v)\mathbf{t} + \sqrt{1-u^2}\sin(2\pi v)\mathbf{b} + u\mathbf{n}$</li>
+<li>其中 $u, v \in [0,1]$ 是随机数</li>
+</ol>
+<p><strong>折射方向计算</strong>（Snell定律）：
+$$\mathbf{r}_{\text{refract}} = \frac{\eta_i}{\eta_t}\mathbf{d} + \left(\frac{\eta_i}{\eta_t}(\mathbf{n} \cdot \mathbf{d}) - \sqrt{1 - \sin^2\theta_t}\right)\mathbf{n}$$
+其中 $\sin^2\theta_t = \left(\frac{\eta_i}{\eta_t}\right)^2(1 - (\mathbf{n} \cdot \mathbf{d})^2)$</p>
+<p><strong>稳定的折射计算</strong>：</p>
+<pre class="codehilite"><code>令 k = 1 - η²(1 - (n·d)²)
+if k &lt; 0: 全内反射
+else: t = η*d + (η*(n·d) - √k)*n
+</code></pre>
+
+<p><strong>全内反射判断</strong>：当 $\sin^2\theta_t &gt; 1$ 时发生全内反射。</p>
+<p>临界角：$\theta_c = \arcsin(\eta_t/\eta_i)$（当 $\eta_i &gt; \eta_t$）</p>
+<p><strong>Fresnel方程</strong>：
+计算反射和折射的能量分配：
+$$F_r = \frac{1}{2}\left[\left(\frac{\eta_i\cos\theta_i - \eta_t\cos\theta_t}{\eta_i\cos\theta_i + \eta_t\cos\theta_t}\right)^2 + \left(\frac{\eta_t\cos\theta_i - \eta_i\cos\theta_t}{\eta_t\cos\theta_i + \eta_i\cos\theta_t}\right)^2\right]$$
+Schlick近似（计算效率更高）：
+$$F_r \approx F_0 + (1 - F_0)(1 - \cos\theta_i)^5$$
+其中 $F_0 = \left(\frac{\eta_i - \eta_t}{\eta_i + \eta_t}\right)^2$</p>
+<p><strong>金属材质的Fresnel</strong>：
+复数折射率 $\tilde{\eta} = \eta + i\kappa$
+$$F_r = \frac{(\eta - 1)^2 + \kappa^2}{(\eta + 1)^2 + \kappa^2}$$
+<strong>色散效果</strong>：
+不同波长具有不同折射率：
+$$\eta(\lambda) = A + \frac{B}{\lambda^2} + \frac{C}{\lambda^4}$$ （Cauchy方程）</p>
+<p>典型值（玻璃）：</p>
+<ul>
+<li>红光（700nm）：$\eta_r \approx 1.513$</li>
+<li>绿光（550nm）：$\eta_g \approx 1.517$</li>
+<li>蓝光（450nm）：$\eta_b \approx 1.522$</li>
+</ul>
+<p><strong>实现色散</strong>：</p>
+<ol>
+<li>将白光分解为RGB分量</li>
+<li>对每个分量使用不同折射率</li>
+<li>分别追踪三条折射光线</li>
+<li>合成最终颜色</li>
+</ol>
+<p><strong>递归深度控制</strong>：</p>
+<p>简单深度限制：</p>
+<pre class="codehilite"><code>if (depth &gt; MAX_DEPTH) return background_color;
+</code></pre>
+
+<p>基于贡献的终止：</p>
+<pre class="codehilite"><code>if (throughput &lt; THRESHOLD) return black;
+</code></pre>
+
+<p><strong>俄罗斯轮盘赌</strong>终止策略：</p>
+<pre class="codehilite"><code>float p = max(color.r, color.g, color.b);
+if (random() &gt; p) return black;
+return color / p;  // 能量补偿
+</code></pre>
+
+<p><strong>改进的终止策略</strong>：
+考虑路径贡献和计算成本的平衡：
+$$p_{\text{continue}} = \min\left(1, \frac{\text{throughput} \cdot \text{max_radiance}}{\text{current_radiance}}\right)$$
+<strong>自适应深度策略</strong>：</p>
+<ul>
+<li>镜面反射：允许更深递归</li>
+<li>漫反射：较早终止</li>
+<li>基于材质重要性调整深度限制</li>
+</ul>
+<p><strong>光线树优化</strong>：
+记录光线贡献路径，避免重复计算：</p>
+<pre class="codehilite"><code>struct RayNode {
+    Ray ray;
+    float contribution;
+    Material* mat;
+    RayNode* children[2];  // reflect, refract
+}
+</code></pre>
+
+<p><strong>多次反射间的相互作用</strong>：</p>
+<ul>
+<li><strong>焦散（Caustics）</strong>：光线经过折射/反射聚焦</li>
+<li><strong>间接光照</strong>：多次漫反射</li>
+<li><strong>色彩渗透</strong>：相邻表面的颜色互相影响</li>
+</ul>
+<p>这些效果在Whitted模型中是近似的，更准确的模拟需要路径追踪或光子映射。</p>
+<h3 id="714">7.1.4 相机模型与光线生成</h3>
+<p><strong>透视投影相机</strong>的光线生成：</p>
+<p>给定视场角 $\text{fov}$、宽高比 $\text{aspect}$，像素 $(i, j)$ 对应的光线方向：
+$$\begin{aligned}
+u &amp;= \frac{2i - \text{width}}{\text{width}} \cdot \text{aspect} \cdot \tan(\text{fov}/2) \
+v &amp;= \frac{2j - \text{height}}{\text{height}} \cdot \tan(\text{fov}/2) \
+\mathbf{d} &amp;= \text{normalize}(u\mathbf{right} + v\mathbf{up} - \mathbf{forward})
+\end{aligned}$$
+<strong>改进的相机模型考虑</strong>：</p>
+<ul>
+<li><strong>传感器偏移</strong>：模拟tilt-shift效果</li>
+<li><strong>非方形像素</strong>：像素宽高比校正</li>
+<li><strong>畸变模型</strong>：径向和切向畸变</li>
+</ul>
+<p><strong>薄透镜相机模型</strong>（景深效果）：</p>
+<ol>
+<li>
+<p>计算焦平面上的目标点：
+$$\mathbf{p}_{\text{focus}} = \mathbf{o} + \frac{\text{focus_distance}}{|\mathbf{d} \cdot \mathbf{forward}|} \mathbf{d}$$</p>
+</li>
+<li>
+<p>在透镜上采样：
+$$\mathbf{o}' = \mathbf{o} + r(\cos\theta \mathbf{right} + \sin\theta \mathbf{up})$$
+其中 $r \leq \text{aperture}/2$，采样分布可以是：</p>
+</li>
+</ol>
+<ul>
+<li><strong>均匀圆盘</strong>：$r = \sqrt{\xi_1} \cdot \text{aperture}/2$, $\theta = 2\pi\xi_2$</li>
+<li><strong>多边形光圈</strong>：模拟真实光圈叶片</li>
+<li><strong>自定义形状</strong>：实现散景（bokeh）效果</li>
+</ul>
+<ol start="3">
+<li>新的光线方向：
+$$\mathbf{d}' = \text{normalize}(\mathbf{p}_{\text{focus}} - \mathbf{o}')$$
+<strong>景深的物理参数</strong>：</li>
+</ol>
+<ul>
+<li>弥散圆直径：$c = \frac{A|S_2 - S_1|}{S_2}$</li>
+<li>景深范围：$\text{DOF} = \frac{2Nc(S - f)^2}{f^2 - N^2c^2}$
+  其中 $N$ 是光圈数，$S$ 是对焦距离，$f$ 是焦距</li>
+</ul>
+<p><strong>鱼眼相机</strong>：
+$$\begin{aligned}
+r &amp;= \sqrt{u^2 + v^2} \
+\theta &amp;= r \cdot \text{fov} / 2 \
+\phi &amp;= \arctan2(v, u) \
+\mathbf{d} &amp;= \sin\theta\cos\phi \mathbf{right} + \sin\theta\sin\phi \mathbf{up} - \cos\theta \mathbf{forward}
+\end{aligned}$$
+<strong>其他投影模型</strong>：</p>
+<ul>
+<li><strong>等距投影</strong>：$\theta = r$</li>
+<li><strong>等立体角投影</strong>：$\theta = 2\sin^{-1}(r/2)$</li>
+<li><strong>正交投影</strong>：$\theta = \sin^{-1}(r)$</li>
+<li><strong>立体投影</strong>：$\theta = 2\tan^{-1}(r/2)$</li>
+</ul>
+<p><strong>全景相机</strong>：</p>
+<ul>
+<li><strong>等矩形投影</strong>：$(u, v) \rightarrow (\theta, \phi)$ 直接映射</li>
+<li><strong>立方体贴图</strong>：6个透视投影相机</li>
+<li><strong>双抛物面映射</strong>：前后两个抛物面投影</li>
+</ul>
+<p><strong>运动模糊</strong>：
+在快门时间内对相机位置和方向进行积分：
+$$\mathbf{o}(t) = \mathbf{o}_0 + t \cdot \mathbf{v}$$
+$$\mathbf{d}(t) = \mathbf{R}(t) \cdot \mathbf{d}_0$$
+其中 $t \in [0, \text{shutter_time}]$</p>
+<h2 id="72-bvhkd-tree">7.2 加速结构（BVH、KD-Tree）</h2>
+<h3 id="721">7.2.1 空间数据结构的必要性</h3>
+<p>朴素的光线追踪需要测试每条光线与场景中所有物体的相交，复杂度为 $O(N)$。对于包含百万级三角形的场景，这是不可接受的。空间加速结构可以将平均复杂度降低到 $O(\log N)$。</p>
+<p><strong>理论分析</strong>：</p>
+<ul>
+<li>无加速结构：每条光线需要 $N$ 次相交测试</li>
+<li>理想加速结构：$O(\log N)$ 次节点访问 + $O(1)$ 次图元测试</li>
+<li>实际性能：取决于场景分布和构建质量</li>
+</ul>
+<p><strong>性能模型</strong>：
+设光线追踪总时间 $T = T_{\text{build}} + R \cdot T_{\text{trace}}$，其中：</p>
+<ul>
+<li>$T_{\text{build}}$：构建时间</li>
+<li>$R$：光线数量</li>
+<li>$T_{\text{trace}}$：单条光线追踪时间</li>
+</ul>
+<p>对于单条光线：
+$$T_{\text{trace}} = T_{\text{traverse}} + N_{\text{leaf}} \cdot T_{\text{intersect}}$$
+其中 $N_{\text{leaf}}$ 是访问的叶节点数。</p>
+<p><strong>空间连贯性原理</strong>：</p>
+<ul>
+<li><strong>光线连贯性</strong>：相邻光线倾向于相交相似的物体集合</li>
+<li><strong>几何连贯性</strong>：空间相近的物体应该在加速结构中相近</li>
+<li><strong>时间连贯性</strong>：连续帧之间的相交模式相似</li>
+</ul>
+<p><strong>常见加速结构分类</strong>：</p>
+<ol>
+<li>
+<p><strong>空间分割</strong>：KD-Tree、Octree、BSP Tree
+   - 优点：无重叠，内存效率高
+   - 缺点：物体可能跨越多个节点</p>
+</li>
+<li>
+<p><strong>物体分割</strong>：BVH、R-Tree
+   - 优点：每个物体只属于一个叶节点
+   - 缺点：包围盒可能重叠</p>
+</li>
+<li>
+<p><strong>混合方法</strong>：SBVH、Dual-Split BVH
+   - 结合空间和物体分割的优点
+   - 更复杂的构建算法</p>
+</li>
+</ol>
+<p><strong>加速结构选择准则</strong>：</p>
+<ul>
+<li><strong>静态场景</strong>：KD-Tree（遍历效率最高）</li>
+<li><strong>动态场景</strong>：BVH（易于更新）</li>
+<li><strong>GPU实现</strong>：BVH（更规则的内存访问）</li>
+<li><strong>内存受限</strong>：压缩BVH或隐式Grid</li>
+</ul>
+<h3 id="722-bvh">7.2.2 层次包围盒（BVH）</h3>
+<p>BVH是一种物体层次结构，每个节点包含其所有子节点的轴对齐包围盒（AABB）。</p>
+<p><strong>BVH节点结构</strong>：</p>
+<pre class="codehilite"><code>struct BVHNode {
+    AABB bounds;          // 包围盒
+    union {
+        struct {          // 内部节点
+            BVHNode* left;
+            BVHNode* right;
+        };
+        struct {          // 叶节点
+            int primOffset;   // 图元起始索引
+            int primCount;    // 图元数量
+        };
+    };
+}
+</code></pre>
+
+<p><strong>BVH构建算法</strong>：</p>
+<ol>
+<li>
+<p><strong>自顶向下构建</strong>
+   ```
+   function BuildBVH(primitives, start, end):
+       if (end - start &lt;= leaf_threshold):
+           return CreateLeaf(primitives[start:end])</p>
+<p>axis = ChooseSplitAxis(primitives[start:end])
+   mid = Partition(primitives, start, end, axis)</p>
+<p>left = BuildBVH(primitives, start, mid)
+   right = BuildBVH(primitives, mid, end)</p>
+<p>return CreateNode(left, right)
+   ```</p>
+</li>
+<li>
+<p><strong>SAH（Surface Area Heuristic）</strong>
+   最优分割的代价函数：
+$$C = C_{\text{trav}} + \frac{A_L}{A} \cdot N_L \cdot C_{\text{isect}} + \frac{A_R}{A} \cdot N_R \cdot C_{\text{isect}}$$
+其中：</p>
+</li>
+</ol>
+<ul>
+<li>$C_{\text{trav}}$ 是遍历节点的代价（典型值：1.0）</li>
+<li>$C_{\text{isect}}$ 是相交测试的代价（典型值：4.0）</li>
+<li>$A_L, A_R$ 是左右子节点的表面积</li>
+<li>$N_L, N_R$ 是左右子节点包含的图元数</li>
+</ul>
+<p><strong>完整SAH实现考虑</strong>：
+$$C_{\text{split}} = C_{\text{trav}} + P_L \cdot C_L + P_R \cdot C_R$$
+其中概率 $P_L = \frac{A_L}{A}$，$P_R = \frac{A_R}{A}$</p>
+<p><strong>表面积计算</strong>（AABB）：
+$$A = 2(dx \cdot dy + dy \cdot dz + dz \cdot dx)$$
+其中 $dx = \text{max}_x - \text{min}_x$ 等。</p>
+<ol start="3">
+<li><strong>分割策略比较</strong>：</li>
+</ol>
+<p><strong>中点分割（Middle Split）</strong>：</p>
+<ul>
+<li>简单快速：$p = (\text{min} + \text{max}) / 2$</li>
+<li>可能产生不平衡的树</li>
+</ul>
+<p><strong>等数分割（Equal Count）</strong>：</p>
+<ul>
+<li>保证平衡：每边 $N/2$ 个图元</li>
+<li>可能产生重叠严重的包围盒</li>
+</ul>
+<p><strong>SAH分割</strong>：</p>
+<ul>
+<li>最小化期望遍历代价</li>
+<li>计算开销大，但质量最高</li>
+</ul>
+<p><strong>混合策略</strong>：
+   <code>if (图元数 &lt; 阈值) 使用中点分割
+   else 使用SAH分割</code></p>
+<ol start="4">
+<li><strong>高效SAH实现</strong>：</li>
+</ol>
+<p><strong>桶排序方法（Binned SAH）</strong>：
+   ```
+   将包围盒范围分为K个桶（典型K=32）
+   for each 图元:
+       计算质心
+       分配到对应桶</p>
+<p>for each 可能的分割位置（K-1个）:
+       计算左右两边的图元数和包围盒
+       评估SAH代价
+   选择最小代价的分割
+   ```</p>
+<p>复杂度：$O(KN)$ 而非 $O(N^2)$</p>
+<ol start="5">
+<li><strong>BVH遍历</strong></li>
+</ol>
+<p><strong>递归遍历</strong>：
+   ```
+   function Intersect(node, ray, tmin, tmax):
+       if (IsLeaf(node)):
+           return IntersectPrimitives(node.primitives, ray)</p>
+<pre class="codehilite"><code>   t1 = IntersectAABB(node.left.bbox, ray)
+   t2 = IntersectAABB(node.right.bbox, ray)
+
+   if (t1.hit &amp;&amp; t2.hit):
+       first = (t1.tmin &lt; t2.tmin) ? node.left : node.right
+       second = (t1.tmin &lt; t2.tmin) ? node.right : node.left
+
+       hit1 = Intersect(first, ray, tmin, tmax)
+       if (hit1.t &lt; second.tmin) return hit1
+
+       hit2 = Intersect(second, ray, tmin, tmax)
+       return Closer(hit1, hit2)
+</code></pre>
+
+<p>```</p>
+<p><strong>栈式遍历</strong>（更适合GPU）：
+   <code>stack[0] = root
+   while (stack not empty):
+       node = stack.pop()
+       if (IntersectAABB(node.bbox, ray)):
+           if (IsLeaf(node)):
+               ProcessPrimitives(node)
+           else:
+               stack.push(node.farChild)
+               stack.push(node.nearChild)</code></p>
+<p><strong>优化的遍历顺序</strong>：
+   基于光线方向符号预计算子节点访问顺序：
+   <code>dirIsNeg[3] = {ray.dir.x &lt; 0, ray.dir.y &lt; 0, ray.dir.z &lt; 0}
+   // 使用dirIsNeg[node.axis]决定先访问哪个子节点</code></p>
+<ol start="6">
+<li><strong>BVH质量评估</strong>：</li>
+</ol>
+<p><strong>SAH代价</strong>：
+$$\text{SAH}(T) = \sum_{\text{leaves}} P(\text{leaf}) \cdot N(\text{leaf})$$
+<strong>EPO（Expected Primary Operations）</strong>：
+   平均每条光线的期望操作数</p>
+<p><strong>树平衡度</strong>：
+$$\text{Balance} = \frac{\text{avg_depth}}{\log_2 N}$$</p>
+<ol start="7">
+<li><strong>高级BVH技术</strong>：</li>
+</ol>
+<p><strong>SBVH（Spatial Split BVH）</strong>：</p>
+<ul>
+<li>允许空间分割，不仅是物体分割</li>
+<li>可以减少包围盒重叠</li>
+<li>代价：可能增加图元引用数</li>
+</ul>
+<p><strong>实现策略</strong>：
+   <code>if (SAH代价 &gt; 阈值 &amp;&amp; 重叠率 &gt; 阈值):
+       尝试空间分割
+       选择最优的物体或空间分割</code></p>
+<p><strong>压缩BVH</strong>：</p>
+<ul>
+<li>量化包围盒坐标（16位或8位）</li>
+<li>节点合并（将多个节点打包）</li>
+<li>典型压缩率：50-75%</li>
+</ul>
+<p><strong>量化公式</strong>：
+$$\text{quantized} = \text{round}\left(\frac{\text{value} - \text{parent_min}}{\text{parent_max} - \text{parent_min}} \cdot (2^{bits} - 1)\right)$$
+<strong>Wide BVH</strong>：</p>
+<ul>
+<li>每个节点有4个或8个子节点</li>
+<li>更好的SIMD利用率</li>
+<li>减少内存访问次数</li>
+</ul>
+<ol start="8">
+<li><strong>动态场景的BVH更新</strong>：</li>
+</ol>
+<p><strong>重拟合（Refit）</strong>：
+   自底向上更新包围盒
+   <code>function Refit(node):
+       if (IsLeaf(node)):
+           node.bounds = ComputeBounds(node.primitives)
+       else:
+           Refit(node.left)
+           Refit(node.right)
+           node.bounds = Union(node.left.bounds, node.right.bounds)</code></p>
+<p><strong>局部重建</strong>：</p>
+<ul>
+<li>标记"脏"节点</li>
+<li>只重建变化较大的子树</li>
+<li>使用启发式判断是否需要重建</li>
+</ul>
+<p><strong>双缓冲策略</strong>：</p>
+<ul>
+<li>维护两个BVH</li>
+<li>异步更新非活动BVH</li>
+<li>快速切换</li>
+</ul>
+<ol start="9">
+<li><strong>内存布局优化</strong>：</li>
+</ol>
+<p><strong>深度优先布局</strong>：</p>
+<ul>
+<li>改善缓存局部性</li>
+<li>适合递归遍历</li>
+</ul>
+<p><strong>van Emde Boas布局</strong>：</p>
+<ul>
+<li>优化缓存性能</li>
+<li>适合任意遍历模式</li>
+</ul>
+<p><strong>节点压缩布局</strong>：
+   <code>struct CompactBVHNode {
+       float bounds_min[3];
+       float bounds_max[3];
+       uint32_t offset;      // 子节点偏移或图元偏移
+       uint8_t nPrims;       // 0表示内部节点
+       uint8_t axis;         // 分割轴
+       uint16_t pad;         // 对齐
+   }  // 32字节，正好两个缓存行</code></p>
+<h3 id="723-kd-tree">7.2.3 KD-Tree</h3>
+<p><strong>KD-Tree特点</strong>：</p>
+<ul>
+<li>空间分割而非物体分割</li>
+<li>分割平面与坐标轴对齐</li>
+<li>可能需要处理跨越分割平面的三角形</li>
+</ul>
+<p><strong>构建策略</strong>：</p>
+<ol>
+<li><strong>分割位置选择</strong>：</li>
+</ol>
+<p><strong>中位数分割</strong>：
+$$p_{\text{split}} = \text{median}({p_i \cdot \mathbf{axis} : i \in \text{primitives}})$$
+<strong>SAH分割</strong>：
+   最小化代价函数：
+$$C(p) = C_{\text{trav}} + \frac{V_L(p)}{V} N_L(p) C_{\text{isect}} + \frac{V_R(p)}{V} N_R(p) C_{\text{isect}}$$
+<strong>空盒优化</strong>：
+$$C_{\text{empty}} = 0.8 \cdot C_{\text{trav}}$$</p>
+<ol start="2">
+<li>
+<p><strong>精确SAH计算</strong>：
+   <code>for each candidate position p:
+       leftCount = CountPrimitivesLeft(p)
+       rightCount = CountPrimitivesRight(p)
+       leftVolume = ComputeVolume(min, p)
+       rightVolume = ComputeVolume(p, max)
+       cost = EvaluateSAH(leftCount, rightCount, leftVolume, rightVolume)</code></p>
+</li>
+<li>
+<p><strong>KD-Tree遍历算法</strong>：
+   ```
+   function TraverseKDTree(ray, tmin, tmax, node):
+       if (IsLeaf(node)):
+           return IntersectPrimitives(node.primitives, ray)</p>
+<p>axis = node.splitAxis
+   t_split = (node.splitPos - ray.origin[axis]) / ray.dir[axis]</p>
+<p>nearNode = (ray.origin[axis] &lt; node.splitPos) ? node.left : node.right
+   farNode = (ray.origin[axis] &lt; node.splitPos) ? node.right : node.left</p>
+<p>if (t_split &gt; tmax || t_split &lt; 0):
+       return TraverseKDTree(ray, tmin, tmax, nearNode)
+   if (t_split &lt; tmin):
+       return TraverseKDTree(ray, tmin, tmax, farNode)</p>
+<p>hit = TraverseKDTree(ray, tmin, t_split, nearNode)
+   if (hit.valid) return hit</p>
+<p>return TraverseKDTree(ray, t_split, tmax, farNode)
+   ```</p>
+</li>
+</ol>
+<p><strong>遍历优化</strong>：</p>
+<ul>
+<li>
+<p><strong>Mailboxing</strong>：避免重复相交测试
+  <code>struct Mailbox {
+      int rayID;
+      float t;
+  }</code></p>
+</li>
+<li>
+<p><strong>早期终止</strong>：当找到相交点后提前退出</p>
+</li>
+<li><strong>Rope技术</strong>：存储邻居指针加速遍历</li>
+</ul>
+<h3 id="724">7.2.4 加速结构比较</h3>
+<p>| 特性 | BVH | KD-Tree | Octree |</p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>BVH</th>
+<th>KD-Tree</th>
+<th>Octree</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>构建复杂度</td>
+<td>$O(N\log N)$</td>
+<td>$O(N\log N)$</td>
+<td>$O(N)$</td>
+</tr>
+<tr>
+<td>内存占用</td>
+<td>$O(N)$</td>
+<td>$O(N) - O(N\log N)$</td>
+<td>$O(N)$</td>
+</tr>
+<tr>
+<td>遍历效率</td>
+<td>中等</td>
+<td>高</td>
+<td>低</td>
+</tr>
+<tr>
+<td>动态更新</td>
+<td>支持（重拟合）</td>
+<td>困难</td>
+<td>中等</td>
+</tr>
+<tr>
+<td>GPU友好性</td>
+<td>高</td>
+<td>低（分支多）</td>
+<td>中等</td>
+</tr>
+<tr>
+<td>空间利用率</td>
+<td>可能重叠</td>
+<td>无重叠</td>
+<td>可能稀疏</td>
+</tr>
+</tbody>
+</table>
+<p><strong>性能模型</strong>：
+给定场景包含 $N$ 个图元，光线数量为 $R$：</p>
+<ol>
+<li>
+<p><strong>构建时间</strong>：
+   - BVH: $T_{\text{build}} = O(N\log N)$
+   - KD-Tree: $T_{\text{build}} = O(N\log^2 N)$（SAH）</p>
+</li>
+<li>
+<p><strong>遍历时间</strong>：
+   - 期望深度：$D = O(\log N)$
+   - 每条光线：$T_{\text{ray}} = D \cdot C_{\text{node}} + L \cdot C_{\text{leaf}}$
+   - 总时间：$T_{\text{total}} = R \cdot T_{\text{ray}}$</p>
+</li>
+<li>
+<p><strong>内存访问模式</strong>：
+   - BVH：更好的空间局部性
+   - KD-Tree：更深的树，更多cache miss</p>
+</li>
+</ol>
+<p><strong>混合加速结构</strong>：</p>
+<pre class="codehilite"><code>顶层：BVH（场景级别）
+  ├── 中层：KD-Tree（物体级别）
+  └── 底层：Grid（密集三角形）
+</code></pre>
+
+<h2 id="73-">7.3 光线-物体相交算法优化</h2>
+<h3 id="731-">7.3.1 光线-三角形相交</h3>
+<p>光线-三角形相交是光线追踪中最频繁的操作，其性能直接影响渲染速度。</p>
+<p><strong>Möller-Trumbore算法</strong>：</p>
+<p>给定三角形顶点 $\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2$，光线 $\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$：
+$$\begin{aligned}
+\mathbf{e}_1 &amp;= \mathbf{v}_1 - \mathbf{v}_0 \
+\mathbf{e}_2 &amp;= \mathbf{v}_2 - \mathbf{v}_0 \
+\mathbf{h} &amp;= \mathbf{d} \times \mathbf{e}_2 \
+a &amp;= \mathbf{e}_1 \cdot \mathbf{h}
+\end{aligned}$$
+如果 $|a| &lt; \epsilon$，光线与三角形平行。否则：
+$$\begin{aligned}
+f &amp;= 1/a \
+\mathbf{s} &amp;= \mathbf{o} - \mathbf{v}_0 \
+u &amp;= f(\mathbf{s} \cdot \mathbf{h})
+\end{aligned}$$
+如果 $u &lt; 0$ 或 $u &gt; 1$，无相交。继续：
+$$\begin{aligned}
+\mathbf{q} &amp;= \mathbf{s} \times \mathbf{e}_1 \
+v &amp;= f(\mathbf{d} \cdot \mathbf{q})
+\end{aligned}$$
+如果 $v &lt; 0$ 或 $u + v &gt; 1$，无相交。否则：
+$$t = f(\mathbf{e}_2 \cdot \mathbf{q})$$
+<strong>算法复杂度分析</strong>：</p>
+<ul>
+<li>1次除法，27次乘法，17次加减法</li>
+<li>2次叉积，3次点积</li>
+<li>分支预测友好（早期退出）</li>
+</ul>
+<p><strong>Baldwin-Weber算法</strong>（避免除法）：
+使用齐次坐标避免除法：
+$$\begin{aligned}
+\mathbf{o}' &amp;= \mathbf{o} - \mathbf{v}_0 \
+\mathbf{q}_1 &amp;= \mathbf{d} \times \mathbf{e}_2 \
+\mathbf{q}_2 &amp;= \mathbf{o}' \times \mathbf{e}_1 \
+\text{det} &amp;= \mathbf{q}_1 \cdot \mathbf{e}_1 \
+u &amp;= \mathbf{q}_1 \cdot \mathbf{o}' \
+v &amp;= \mathbf{q}_2 \cdot \mathbf{d} \
+t &amp;= \mathbf{q}_2 \cdot \mathbf{e}_2
+\end{aligned}$$
+相交条件（避免除法）：</p>
+<pre class="codehilite"><code>if (det &gt; 0):
+    return (u &gt;= 0) &amp;&amp; (v &gt;= 0) &amp;&amp; (u + v &lt;= det) &amp;&amp; (t &gt;= 0)
+else:
+    return (u &lt;= 0) &amp;&amp; (v &lt;= 0) &amp;&amp; (u + v &gt;= det) &amp;&amp; (t &lt;= 0)
+</code></pre>
+
+<p><strong>Woop算法</strong>（预计算优化）：
+预计算变换矩阵，将三角形变换到单位三角形：
+$$\mathbf{M} = \begin{bmatrix}
+\mathbf{v}_0 - \mathbf{v}_2 &amp; \mathbf{v}_1 - \mathbf{v}_2 &amp; \mathbf{v}_2
+\end{bmatrix}^{-1}$$
+光线变换：
+$$\begin{aligned}
+\mathbf{o}' &amp;= \mathbf{M} \cdot \mathbf{o} \
+\mathbf{d}' &amp;= \mathbf{M} \cdot \mathbf{d}
+\end{aligned}$$
+相交测试简化为：
+$$t = -\frac{o'_z}{d'_z}, \quad u = o'_x + t \cdot d'_x, \quad v = o'_y + t \cdot d'_y$$
+相交条件：$u \geq 0, v \geq 0, u + v \leq 1$</p>
+<p><strong>SIMD优化</strong>：
+同时测试4个三角形：</p>
+<pre class="codehilite"><code>__m128 e1x = _mm_sub_ps(v1x, v0x);
+__m128 e1y = _mm_sub_ps(v1y, v0y);
+__m128 e1z = _mm_sub_ps(v1z, v0z);
+// ... 继续向量化计算
+</code></pre>
+
+<p><strong>精度改进</strong>：
+使用Shewchuk的精确谓词算法处理边界情况：</p>
+<ul>
+<li>精确的方向测试</li>
+<li>鲁棒的重心坐标计算</li>
+<li>避免数值不一致</li>
+</ul>
+<h3 id="732-">7.3.2 光线-包围盒相交</h3>
+<p><strong>Slab方法</strong>：</p>
+<p>对于轴对齐包围盒（AABB），计算光线与每对平行平面的相交：
+$$\begin{aligned}
+t_{\text{min}} &amp;= \max(t_{x,\text{min}}, t_{y,\text{min}}, t_{z,\text{min}}) \
+t_{\text{max}} &amp;= \min(t_{x,\text{max}}, t_{y,\text{max}}, t_{z,\text{max}})
+\end{aligned}$$
+相交条件：$t_{\text{min}} \leq t_{\text{max}}$ 且 $t_{\text{max}} \geq 0$</p>
+<p><strong>优化实现</strong>：</p>
+<pre class="codehilite"><code>invD = 1.0 / ray.dir  // 预计算
+t0 = (box.min - ray.origin) * invD
+t1 = (box.max - ray.origin) * invD
+
+// 处理负方向
+tmin = min(t0, t1)
+tmax = max(t0, t1)
+
+// 计算最终区间
+tmin_final = max(tmin.x, tmin.y, tmin.z)
+tmax_final = min(tmax.x, tmax.y, tmax.z)
+
+return tmin_final &lt;= tmax_final &amp;&amp; tmax_final &gt;= 0
+</code></pre>
+
+<p><strong>Williams等人的优化</strong>：
+消除min/max中的分支：</p>
+<pre class="codehilite"><code>sign[3] = {ray.dir.x &lt; 0, ray.dir.y &lt; 0, ray.dir.z &lt; 0}
+tmin = (box[sign[0]].x - ray.origin.x) * invD.x
+tmax = (box[1-sign[0]].x - ray.origin.x) * invD.x
+</code></pre>
+
+<p><strong>SSE优化版本</strong>：</p>
+<pre class="codehilite"><code>__m128 tmin = _mm_mul_ps(_mm_sub_ps(box_min, origin), inv_dir);
+__m128 tmax = _mm_mul_ps(_mm_sub_ps(box_max, origin), inv_dir);
+__m128 t0 = _mm_min_ps(tmin, tmax);
+__m128 t1 = _mm_max_ps(tmin, tmax);
+</code></pre>
+
+<p><strong>鲁棒性改进</strong>：
+处理光线方向分量为0的情况：</p>
+<pre class="codehilite"><code>if (abs(ray.dir.x) &lt; epsilon):
+    if (ray.origin.x &lt; box.min.x || ray.origin.x &gt; box.max.x):
+        return false
+    tx_min = -infinity
+    tx_max = +infinity
+</code></pre>
+
+<h3 id="733-">7.3.3 光线-球体相交</h3>
+<p>球体方程：$||\mathbf{p} - \mathbf{c}||^2 = r^2$</p>
+<p>代入光线方程得到二次方程：
+$$at^2 + bt + c = 0$$
+其中：
+$$\begin{aligned}
+a &amp;= \mathbf{d} \cdot \mathbf{d} = 1 \text{ (归一化方向)} \
+b &amp;= 2\mathbf{d} \cdot (\mathbf{o} - \mathbf{c}) \
+c &amp;= ||\mathbf{o} - \mathbf{c}||^2 - r^2
+\end{aligned}$$
+判别式 $\Delta = b^2 - 4ac$，相交参数：
+$$t = \frac{-b \pm \sqrt{\Delta}}{2a}$$
+<strong>几何优化方法</strong>：</p>
+<pre class="codehilite"><code>L = center - ray.origin
+tca = dot(L, ray.dir)
+if (tca &lt; 0) return false  // 球在光线后方
+
+d2 = dot(L, L) - tca * tca
+if (d2 &gt; radius2) return false  // 光线错过球体
+
+thc = sqrt(radius2 - d2)
+t0 = tca - thc
+t1 = tca + thc
+</code></pre>
+
+<p><strong>数值稳定性改进</strong>：
+使用以下形式避免相减相消：
+$$t = \frac{-b - \text{sign}(b)\sqrt{\Delta}}{2a}$$
+<strong>椭球体相交</strong>：
+使用变换矩阵 $\mathbf{M}$ 将椭球变换为单位球：
+$$\begin{aligned}
+\mathbf{o}' &amp;= \mathbf{M}(\mathbf{o} - \mathbf{c}) \
+\mathbf{d}' &amp;= \mathbf{M}\mathbf{d}
+\end{aligned}$$
+然后使用球体相交算法。</p>
+<h3 id="734">7.3.4 其他几何体相交</h3>
+<p><strong>光线-圆柱相交</strong>：
+无限圆柱：$(x - c_x)^2 + (z - c_z)^2 = r^2$</p>
+<p>相交计算：
+$$a = d_x^2 + d_z^2$$
+$$b = 2(d_x(o_x - c_x) + d_z(o_z - c_z))$$
+$$c = (o_x - c_x)^2 + (o_z - c_z)^2 - r^2$$
+有限圆柱需要额外检查端盖。</p>
+<p><strong>光线-圆锥相交</strong>：
+圆锥方程：$x^2 + z^2 = (r(y/h))^2$</p>
+<p>二次方程系数：
+$$a = d_x^2 + d_z^2 - (r/h)^2 d_y^2$$
+$$b = 2(o_x d_x + o_z d_z - (r/h)^2 o_y d_y)$$
+$$c = o_x^2 + o_z^2 - (r/h)^2 o_y^2$$
+<strong>光线-环面（Torus）相交</strong>：
+四次方程，使用数值方法求解：
+$$(x^2 + y^2 + z^2 + R^2 - r^2)^2 = 4R^2(x^2 + z^2)$$
+可以使用Sturm序列或Ferrari方法求解。</p>
+<h3 id="735">7.3.5 相交测试优化策略</h3>
+<ol>
+<li>
+<p><strong>早期拒绝（Early Rejection）</strong>
+   - 使用简单包围体进行预测试
+   - 利用空间连贯性
+   - 背面剔除（对闭合物体）</p>
+</li>
+<li>
+<p><strong>SIMD并行化</strong>
+   - 同时测试多条光线（Ray Packets）
+   - 批量处理三角形
+   - 使用SOA（Structure of Arrays）布局</p>
+</li>
+<li>
+<p><strong>缓存优化</strong>
+   - 数据结构对齐（避免false sharing）
+   - 热数据分离（将常用数据打包）
+   - 预取（prefetch）关键数据</p>
+</li>
+<li>
+<p><strong>精度考虑</strong>
+   - 使用稳定的数值算法
+   - 处理自相交问题（shadow acne）
+   - 考虑舍入误差的传播</p>
+</li>
+<li>
+<p><strong>分支优化</strong>
+   - 减少条件分支（使用位运算）
+   - 使用模板特化消除运行时分支
+   - Profile-guided optimization</p>
+</li>
+<li>
+<p><strong>间隔算术（Interval Arithmetic）</strong>
+   用于保守估计和鲁棒性：
+   <code>struct Interval {
+       float min, max;
+       Interval operator*(const Interval&amp; b) {
+           float products[4] = {min*b.min, min*b.max, 
+                               max*b.min, max*b.max};
+           return {min(products), max(products)};
+       }
+   }</code></p>
+</li>
+<li>
+<p><strong>自适应精度</strong>
+   - 远处物体使用低精度
+   - 重要区域使用高精度
+   - 基于误差估计动态调整</p>
+</li>
+<li>
+<p><strong>光线差分（Ray Differentials）</strong>
+   追踪光线的微分信息用于：</p>
+</li>
+</ol>
+<ul>
+<li>LOD选择</li>
+<li>纹理过滤</li>
+<li>自适应细分
+$$\frac{\partial \mathbf{p}}{\partial u} = t \frac{\partial \mathbf{d}}{\partial u} + \frac{\partial t}{\partial u} \mathbf{d}$$</li>
+</ul>
+<h2 id="_1">本章小结</h2>
+<p>本章介绍了光线追踪的核心概念和关键技术：</p>
+<p><strong>核心概念</strong>：</p>
+<ul>
+<li>光线的参数表示：$\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$</li>
+<li>递归光线追踪实现全局光照效果</li>
+<li>空间加速结构将复杂度从 $O(N)$ 降至 $O(\log N)$</li>
+</ul>
+<p><strong>关键算法</strong>：</p>
+<ul>
+<li>Möller-Trumbore 三角形相交算法</li>
+<li>SAH启发式用于构建最优BVH</li>
+<li>Slab方法用于包围盒相交测试</li>
+</ul>
+<p><strong>性能优化</strong>：</p>
+<ul>
+<li>使用BVH或KD-Tree加速结构</li>
+<li>SIMD并行化相交测试</li>
+<li>缓存友好的数据布局</li>
+</ul>
+<p><strong>重要公式</strong>：</p>
+<ul>
+<li>SAH代价函数：$C = C_{\text{trav}} + \sum_i \frac{A_i}{A} N_i C_{\text{isect}}$</li>
+<li>透视投影光线生成</li>
+<li>各种几何体的相交测试公式</li>
+</ul>
+<p>光线追踪为后续的全局光照、路径追踪等高级渲染技术奠定了基础。掌握本章内容是理解现代渲染技术的关键。</p>
+<h2 id="_2">练习题</h2>
+<h3 id="_3">基础题</h3>
+<p><strong>练习7.1</strong> 推导正交投影相机的光线生成公式。</p>
+<details>
+<summary>提示</summary>
+<p>正交投影中，所有光线方向相同，只是起点不同。考虑视图体积的定义。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>对于正交投影，光线方向都是 $\mathbf{d} = -\mathbf{forward}$（相机前方）。</p>
+<p>光线起点：
+$$\mathbf{o}_{i,j} = \mathbf{e} + u\mathbf{right} + v\mathbf{up}$$
+其中：
+$$\begin{aligned}
+u &amp;= \frac{2i - \text{width}}{\text{width}} \cdot \frac{\text{width}_{\text{view}}}{2} \
+v &amp;= \frac{2j - \text{height}}{\text{height}} \cdot \frac{\text{height}_{\text{view}}}{2}
+\end{aligned}$$
+$\text{width}_{\text{view}}$ 和 $\text{height}_{\text{view}}$ 是视图体积的宽高。</p>
+</details>
+<p><strong>练习7.2</strong> 给定光线 $\mathbf{o} = (0, 0, 0)$, $\mathbf{d} = (1, 0, 0)$ 和三角形顶点 $\mathbf{v}_0 = (2, -1, -1)$, $\mathbf{v}_1 = (2, 1, -1)$, $\mathbf{v}_2 = (2, 0, 1)$，计算相交点和重心坐标。</p>
+<details>
+<summary>提示</summary>
+<p>使用 Möller-Trumbore 算法或先计算平面方程。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>三角形在平面 $x = 2$ 上。光线沿 $x$ 轴正方向，所以 $t = 2$。</p>
+<p>相交点：$\mathbf{p} = (2, 0, 0)$</p>
+<p>验证重心坐标：设 $\mathbf{p} = u\mathbf{v}_0 + v\mathbf{v}_1 + w\mathbf{v}_2$，其中 $u + v + w = 1$。</p>
+<p>解得：$u = 0$, $v = 0.5$, $w = 0.5$</p>
+<p>因此相交点在边 $\mathbf{v}_1\mathbf{v}_2$ 的中点。</p>
+</details>
+<p><strong>练习7.3</strong> 证明BVH中使用SAH构建的树，期望遍历代价是最优的。</p>
+<details>
+<summary>提示</summary>
+<p>考虑光线均匀分布的假设，以及条件概率。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>假设光线均匀分布，击中子节点的概率正比于其表面积。</p>
+<p>期望代价：
+$$E[C] = P(\text{hit}) \cdot C_{\text{hit}} + P(\text{miss}) \cdot C_{\text{miss}}$$
+对于内部节点：
+$$E[C] = C_{\text{trav}} + P(L) \cdot E[C_L] + P(R) \cdot E[C_R]$$
+其中 $P(L) = A_L/A$，$P(R) = A_R/A$。</p>
+<p>SAH正是最小化这个期望代价的贪心策略。通过递归论证，可以证明局部最优导致全局最优（在独立性假设下）。</p>
+</details>
+<p><strong>练习7.4</strong> 设计一个算法，检测光线是否穿过由多个三角形组成的封闭网格。</p>
+<details>
+<summary>提示</summary>
+<p>考虑奇偶规则（odd-even rule）或计算有符号体积。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>方法1：计数法</p>
+<ul>
+<li>从光线起点向任意方向发射测试光线</li>
+<li>计算与网格的相交次数</li>
+<li>奇数次相交表示起点在内部</li>
+</ul>
+<p>方法2：有符号体积法</p>
+<ul>
+<li>对每个三角形，计算光线起点与三角形构成的四面体有符号体积</li>
+<li>累加所有体积</li>
+<li>非零值表示在内部</li>
+</ul>
+<p>方法3：法向一致性</p>
+<ul>
+<li>检查所有相交点处的法向与光线方向的点积符号</li>
+<li>一致的符号模式可判断内外</li>
+</ul>
+</details>
+<h3 id="_4">挑战题</h3>
+<p><strong>练习7.5</strong> 推导四叉BVH（4个子节点）相对于二叉BVH的理论优势和劣势。在什么情况下四叉BVH更优？</p>
+<details>
+<summary>提示</summary>
+<p>考虑树的深度、节点访问次数、SIMD利用率和缓存性能。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>优势：</p>
+<ol>
+<li>树深度减少：$\log_4 N = \frac{1}{2}\log_2 N$</li>
+<li>SIMD友好：可以同时测试4个包围盒</li>
+<li>减少遍历开销：更少的节点访问</li>
+</ol>
+<p>劣势：</p>
+<ol>
+<li>构建复杂：需要考虑更多分割组合</li>
+<li>节点更大：每个节点存储4个子节点信息</li>
+<li>包围盒可能更松：难以找到最优4路分割</li>
+</ol>
+<p>适用场景：</p>
+<ul>
+<li>GPU实现（SIMD宽度大）</li>
+<li>场景较为均匀分布</li>
+<li>内存带宽充足</li>
+</ul>
+<p>理论分析：设节点访问代价为 $C_n$，包围盒测试代价为 $C_b$。</p>
+<ul>
+<li>二叉：$C_{\text{total}} = \log_2 N \cdot C_n + 2\log_2 N \cdot C_b$</li>
+<li>四叉：$C_{\text{total}} = \frac{1}{2}\log_2 N \cdot C_n + 2\log_2 N \cdot C_b$</li>
+</ul>
+<p>当 $C_n \gg C_b$ 时，四叉BVH更优。</p>
+</details>
+<p><strong>练习7.6</strong> 设计并分析一种自适应的光线追踪算法，能够根据场景复杂度动态调整采样密度。</p>
+<details>
+<summary>提示</summary>
+<p>考虑图像空间的梯度、几何复杂度和着色复杂度。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>自适应采样策略：</p>
+<ol>
+<li>
+<p><strong>初始稀疏采样</strong>
+   - 以低分辨率（如每4×4像素1个样本）进行初始采样
+   - 记录每个样本的：深度、法线、材质ID、颜色</p>
+</li>
+<li>
+<p><strong>复杂度估计</strong>
+   <code>复杂度 = w1·深度方差 + w2·法线差异 + w3·颜色梯度 + w4·材质边界</code></p>
+</li>
+<li>
+<p><strong>自适应细分</strong>
+   - 高复杂度区域：增加采样密度
+   - 使用四叉树结构管理采样点
+   - 最大细分级别限制</p>
+</li>
+<li>
+<p><strong>插值重建</strong>
+   - 平滑区域：双线性插值
+   - 边缘区域：最近邻或引导滤波</p>
+</li>
+<li>
+<p><strong>性能分析</strong>
+   - 最坏情况：$O(N)$（全分辨率）
+   - 最好情况：$O(N/16)$（4×4块）
+   - 实际：通常节省50-80%的光线</p>
+</li>
+</ol>
+<p>关键优化：</p>
+<ul>
+<li>使用GPU的分层深度缓冲</li>
+<li>时间连贯性：复用前帧信息</li>
+<li>并行化：基于tile的处理</li>
+</ul>
+</details>
+<p><strong>练习7.7</strong> 分析光线追踪中的数值精度问题，并提出一套完整的解决方案。</p>
+<details>
+<summary>提示</summary>
+<p>考虑浮点误差累积、自相交、薄物体穿透等问题。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>主要精度问题：</p>
+<ol>
+<li>
+<p><strong>自相交（Shadow Acne）</strong>
+   - 原因：相交点计算的浮点误差
+   - 解决：偏移光线起点
+   <code>ε = 1e-4 * max(|x|, |y|, |z|)
+   origin_offset = ε * normal</code></p>
+</li>
+<li>
+<p><strong>光线起点误差传播</strong>
+   - 使用误差界限追踪
+   - Welzl的误差分析：$\delta = \gamma_n \cdot |t|$
+   - 其中 $\gamma_n = \frac{n\epsilon}{1-n\epsilon}$</p>
+</li>
+<li>
+<p><strong>薄物体穿透</strong>
+   - 双面测试
+   - 保守包围盒扩展
+   - 使用区间算术</p>
+</li>
+<li>
+<p><strong>大场景的精度损失</strong>
+   - 局部坐标系变换
+   - 分层精度表示
+   - 使用双精度关键计算</p>
+</li>
+<li>
+<p><strong>完整解决方案</strong>
+   ```
+   结构：</p>
+</li>
+</ol>
+<ul>
+<li>使用相对坐标系</li>
+<li>包围盒适当扩展：box.min -= ε, box.max += ε</li>
+<li>相交测试使用稳定算法</li>
+</ul>
+<p>算法：</p>
+<ul>
+<li>Kahan求和处理累积</li>
+<li>使用有理数算术验证关键决策</li>
+<li>自适应精度：远处物体降低精度要求
+   ```</li>
+</ul>
+<p>误差分析：
+总误差 ≤ 相交误差 + 变换误差 + 着色误差
+典型值：~1e-3 到 1e-5 相对误差</p>
+</details>
+<p><strong>练习7.8</strong> 探讨如何将光线追踪扩展到非欧几何空间（如球面几何或双曲几何）。</p>
+<details>
+<summary>提示</summary>
+<p>考虑测地线、平行传输和曲率的影响。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>非欧几何光线追踪：</p>
+<ol>
+<li>
+<p><strong>球面几何（正曲率）</strong>
+   - 光线沿大圆路径传播
+   - 参数化：$\mathbf{r}(t) = \cos(t)\mathbf{o} + \sin(t)\mathbf{d}$
+   - 相交测试需要考虑周期性</p>
+</li>
+<li>
+<p><strong>双曲几何（负曲率）</strong>
+   - 使用Poincaré球模型或双曲面模型
+   - 测地线方程：
+$$\frac{d^2x^i}{dt^2} + \Gamma^i_{jk}\frac{dx^j}{dt}\frac{dx^k}{dt} = 0$$</p>
+</li>
+<li>
+<p><strong>算法修改</strong>
+   ```
+   光线传播：</p>
+</li>
+</ol>
+<ul>
+<li>使用数值积分求解测地线方程</li>
+<li>自适应步长控制</li>
+</ul>
+<p>相交测试：</p>
+<ul>
+<li>将物体变换到局部欧式坐标系</li>
+<li>或直接在曲面坐标系求解</li>
+</ul>
+<p>加速结构：</p>
+<ul>
+<li>需要考虑空间的拓扑结构</li>
+<li>BVH需要使用测地距离
+   ```</li>
+</ul>
+<ol start="4">
+<li>
+<p><strong>应用场景</strong>
+   - 相对论可视化
+   - 全景渲染
+   - 艺术效果</p>
+</li>
+<li>
+<p><strong>性能考虑</strong>
+   - 预计算测地线查找表
+   - 使用局部近似
+   - GPU上的并行积分器</p>
+</li>
+</ol>
+</details>
+<h2 id="_5">常见陷阱与错误</h2>
+<h3 id="1">1. 数值精度问题</h3>
+<p><strong>问题</strong>：自相交导致的阴影痤疮（Shadow Acne）</p>
+<pre class="codehilite"><code>错误：shadow_ray.origin = hit_point
+正确：shadow_ray.origin = hit_point + ε * normal
+</code></pre>
+
+<p><strong>问题</strong>：光线方向未归一化导致t值含义错误</p>
+<pre class="codehilite"><code>检查：assert(|ray.direction| ≈ 1.0)
+</code></pre>
+
+<h3 id="2">2. 性能陷阱</h3>
+<p><strong>问题</strong>：BVH构建时未考虑空间局部性</p>
+<ul>
+<li>使用Morton编码改善缓存性能</li>
+<li>考虑节点大小与缓存行对齐</li>
+</ul>
+<p><strong>问题</strong>：过早优化导致代码复杂</p>
+<ul>
+<li>先实现正确的算法</li>
+<li>使用性能分析工具定位瓶颈</li>
+</ul>
+<h3 id="3">3. 算法错误</h3>
+<p><strong>问题</strong>：BVH遍历时错误的节点访问顺序</p>
+<pre class="codehilite"><code>错误：总是先访问左子节点
+正确：先访问距离较近的子节点
+</code></pre>
+
+<p><strong>问题</strong>：忽略了背面剔除的边界情况</p>
+<ul>
+<li>透明物体需要双面测试</li>
+<li>法线翻转的处理</li>
+</ul>
+<h3 id="4">4. 边界情况</h3>
+<p><strong>问题</strong>：退化三角形（共线顶点）导致除零错误</p>
+<ul>
+<li>预处理移除退化几何</li>
+<li>相交测试中添加检查</li>
+</ul>
+<p><strong>问题</strong>：极小或极大的场景规模</p>
+<ul>
+<li>使用相对误差而非绝对误差</li>
+<li>考虑分层LOD</li>
+</ul>
+<h2 id="_6">最佳实践检查清单</h2>
+<h3 id="_7">设计阶段</h3>
+<ul>
+<li>[ ] 选择合适的加速结构（BVH vs KD-Tree）</li>
+<li>[ ] 确定精度要求和误差容限</li>
+<li>[ ] 规划内存布局和缓存优化策略</li>
+<li>[ ] 考虑目标平台（CPU/GPU）特性</li>
+</ul>
+<h3 id="_8">实现阶段</h3>
+<ul>
+<li>[ ] 光线方向始终保持归一化</li>
+<li>[ ] 正确处理数值精度问题</li>
+<li>[ ] 实现鲁棒的相交测试算法</li>
+<li>[ ] 添加适当的debug可视化</li>
+</ul>
+<h3 id="_9">优化阶段</h3>
+<ul>
+<li>[ ] 使用性能分析确定瓶颈</li>
+<li>[ ] 实现SIMD加速的相交测试</li>
+<li>[ ] 优化内存访问模式</li>
+<li>[ ] 考虑光线包（Ray Packet）技术</li>
+</ul>
+<h3 id="_10">验证阶段</h3>
+<ul>
+<li>[ ] 测试各种退化情况</li>
+<li>[ ] 验证数值稳定性</li>
+<li>[ ] 比较不同场景下的性能</li>
+<li>[ ] 确保结果的确定性（用于调试）</li>
+</ul>
+<h3 id="_11">维护阶段</h3>
+<ul>
+<li>[ ] 文档化关键算法选择</li>
+<li>[ ] 提供性能调优参数</li>
+<li>[ ] 支持渐进式渲染</li>
+<li>[ ] 保持代码的可扩展性</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="./chapter6.html" class="nav-link prev">← 第6章：几何表示</a><a href="./chapter8.html" class="nav-link next">第8章：全局光照 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

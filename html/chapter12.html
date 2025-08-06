@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第12章：物质点法</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class=""><a href="./index.html">计算机图形学高级教程</a></li><li class=""><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class=""><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class=""><a href="./chapter6.html">第6章：几何表示</a></li><li class=""><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class=""><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class="active"><a href="./chapter12.html">第12章：物质点法</a></li><li class=""><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="12">第12章：物质点法</h1>
+<p>物质点法（Material Point Method, MPM）是一种混合欧拉-拉格朗日数值方法，在计算机图形学中被广泛用于模拟各种材料的大变形行为，包括雪、沙、泥浆、弹性体等。MPM结合了粒子方法的灵活性和网格方法的计算效率，特别适合处理拓扑变化、碎裂、混合等复杂现象。本章将深入探讨MPM的理论基础、移动最小二乘MPM（MLS-MPM）的改进，以及高级技术与应用。</p>
+<h2 id="_1">章节大纲</h2>
+<h3 id="121">12.1 物质点法基础理论</h3>
+<ul>
+<li>连续介质力学基础</li>
+<li>MPM的基本框架</li>
+<li>粒子-网格交互</li>
+<li>时间积分方案</li>
+</ul>
+<h3 id="122-mls-mpm">12.2 MLS-MPM（移动最小二乘物质点法）</h3>
+<ul>
+<li>传统MPM的局限性</li>
+<li>MLS-MPM的理论推导</li>
+<li>APIC与MLS-MPM的关系</li>
+<li>实现细节与优化</li>
+</ul>
+<h3 id="123-mpm">12.3 高级MPM技术与应用</h3>
+<ul>
+<li>多材料MPM</li>
+<li>自适应MPM</li>
+<li>GPU加速技术</li>
+<li>工程应用案例</li>
+</ul>
+<h2 id="121_1">12.1 物质点法基础理论</h2>
+<h3 id="1211">12.1.1 连续介质力学基础</h3>
+<p>在介绍MPM之前，我们需要深入理解连续介质力学的基本概念。考虑一个连续体 $\Omega$，其运动可以用映射 $\phi: \Omega_0 \times [0,T] \rightarrow \mathbb{R}^d$ 描述，其中 $\Omega_0$ 是初始（参考）构型，$d$ 是空间维度（通常为2或3）。</p>
+<p><strong>运动学描述</strong>：</p>
+<ul>
+<li><strong>拉格朗日描述</strong>：跟踪材料点 $\mathbf{X} \in \Omega_0$ 的运动轨迹，适合追踪材料历史和内部变量演化</li>
+<li><strong>欧拉描述</strong>：关注空间点 $\mathbf{x} \in \Omega_t$ 处的物理量变化，适合流体力学和大变形问题</li>
+<li><strong>映射关系</strong>：$\mathbf{x} = \phi(\mathbf{X}, t)$</li>
+<li><strong>速度场</strong>：$\mathbf{v}(\mathbf{X}, t) = \frac{\partial \phi}{\partial t}(\mathbf{X}, t)$（拉格朗日）或 $\mathbf{v}(\mathbf{x}, t)$（欧拉）</li>
+</ul>
+<p><strong>变形梯度</strong>定义为：
+$$\mathbf{F} = \frac{\partial \phi}{\partial \mathbf{X}} = \frac{\partial \mathbf{x}}{\partial \mathbf{X}}$$
+变形梯度 $\mathbf{F}$ 是一个二阶张量，包含了所有的局部变形信息。从几何角度看，$\mathbf{F}$ 将参考构型中的无穷小线元 $d\mathbf{X}$ 映射到当前构型中的 $d\mathbf{x} = \mathbf{F} d\mathbf{X}$。</p>
+<p><strong>变形梯度的性质</strong>：</p>
+<ul>
+<li><strong>可逆性</strong>：物理上合理的变形要求 $\det(\mathbf{F}) &gt; 0$（避免材料穿透自身）</li>
+<li><strong>体积比</strong>：$J = \det(\mathbf{F})$ 表示局部体积变化率</li>
+<li>$J &gt; 0$：保持定向（物理上合理）</li>
+<li>$J = 1$：体积守恒（不可压缩）</li>
+<li>$J &lt; 1$：压缩</li>
+<li>$J &gt; 1$：膨胀</li>
+<li><strong>恒等变形</strong>：未变形状态对应 $\mathbf{F} = \mathbf{I}$</li>
+</ul>
+<p><strong>极分解定理</strong>：
+任何可逆的变形梯度可以唯一分解为旋转和拉伸的组合：
+$$\mathbf{F} = \mathbf{R}\mathbf{U} = \mathbf{V}\mathbf{R}$$
+其中：</p>
+<ul>
+<li>$\mathbf{R}$ 是旋转张量（正交张量）：$\mathbf{R}^T\mathbf{R} = \mathbf{I}$，$\det(\mathbf{R}) = 1$</li>
+<li>$\mathbf{U}$ 是右拉伸张量（对称正定）：描述旋转前的拉伸</li>
+<li>$\mathbf{V}$ 是左拉伸张量（对称正定）：描述旋转后的拉伸</li>
+</ul>
+<p>计算极分解的算法通常使用SVD：$\mathbf{F} = \mathbf{U}_{\text{svd}} \boldsymbol{\Sigma} \mathbf{V}_{\text{svd}}^T$，则 $\mathbf{R} = \mathbf{U}_{\text{svd}} \mathbf{V}_{\text{svd}}^T$。</p>
+<p><strong>应变度量</strong>：
+应变量化了变形中的拉伸部分，不同的应变张量适用于不同的变形程度和分析需求：</p>
+<ol>
+<li><strong>Green-Lagrange应变张量</strong>（拉格朗日描述，大变形）：
+$$\mathbf{E} = \frac{1}{2}(\mathbf{F}^T\mathbf{F} - \mathbf{I}) = \frac{1}{2}(\mathbf{C} - \mathbf{I})$$
+其中 $\mathbf{C} = \mathbf{F}^T\mathbf{F}$ 是右Cauchy-Green变形张量。</li>
+</ol>
+<ul>
+<li>物理意义：度量参考构型中线元长度的变化</li>
+<li>特点：在刚体旋转下不变，适合大变形分析</li>
+</ul>
+<ol start="2">
+<li><strong>Almansi-Euler应变张量</strong>（欧拉描述）：
+$$\mathbf{e} = \frac{1}{2}(\mathbf{I} - \mathbf{F}^{-T}\mathbf{F}^{-1}) = \frac{1}{2}(\mathbf{I} - \mathbf{B}^{-1})$$
+其中 $\mathbf{B} = \mathbf{F}\mathbf{F}^T$ 是左Cauchy-Green变形张量。</li>
+</ol>
+<ul>
+<li>物理意义：度量当前构型中线元长度的变化</li>
+<li>应用：适合更新拉格朗日格式</li>
+</ul>
+<ol start="3">
+<li><strong>小应变张量</strong>（线性化，工程应变）：
+   位移场 $\mathbf{u} = \mathbf{x} - \mathbf{X}$，位移梯度 $\mathbf{H} = \nabla\mathbf{u} = \mathbf{F} - \mathbf{I}$
+$$\boldsymbol{\epsilon} = \frac{1}{2}(\mathbf{H} + \mathbf{H}^T) = \frac{1}{2}(\nabla\mathbf{u} + \nabla\mathbf{u}^T)$$</li>
+</ol>
+<ul>
+<li>假设：$||\mathbf{H}|| \ll 1$（小变形、小转动）</li>
+<li>优点：线性理论，计算简单</li>
+</ul>
+<ol start="4">
+<li><strong>对数应变</strong>（Hencky应变）：
+$$\mathbf{E}_{\ln} = \ln(\mathbf{V}) = \frac{1}{2}\ln(\mathbf{B})$$</li>
+</ol>
+<ul>
+<li>特点：对于单轴拉伸给出真实应变</li>
+<li>计算：需要矩阵对数，通常通过特征值分解</li>
+</ul>
+<p><strong>应变率和自旋张量</strong>：
+速度梯度张量 $\mathbf{L} = \nabla\mathbf{v} = \dot{\mathbf{F}}\mathbf{F}^{-1}$ 可分解为：
+$$\mathbf{L} = \mathbf{D} + \mathbf{W}$$
+其中：</p>
+<ul>
+<li>变形率张量（对称）：$\mathbf{D} = \frac{1}{2}(\mathbf{L} + \mathbf{L}^T)$</li>
+<li>自旋张量（反对称）：$\mathbf{W} = \frac{1}{2}(\mathbf{L} - \mathbf{L}^T)$</li>
+</ul>
+<p><strong>应力度量</strong>：
+应力描述内力的分布，不同的应力张量对应不同的参考构型：</p>
+<ol>
+<li>
+<p><strong>Cauchy应力张量</strong> $\boldsymbol{\sigma}$（真实应力）：
+   - 定义：当前构型中单位面积上的力
+   - 对称性：角动量守恒要求 $\boldsymbol{\sigma} = \boldsymbol{\sigma}^T$
+   - 牵引力：$\mathbf{t} = \boldsymbol{\sigma} \mathbf{n}$（$\mathbf{n}$ 是当前构型的外法向）</p>
+</li>
+<li>
+<p><strong>第一Piola-Kirchhoff应力张量</strong> $\mathbf{P}$（名义应力）：
+$$\mathbf{P} = J\boldsymbol{\sigma}\mathbf{F}^{-T}$$</p>
+</li>
+</ol>
+<ul>
+<li>定义：当前力对参考面积的比值</li>
+<li>非对称：$\mathbf{P} \neq \mathbf{P}^T$（一般情况）</li>
+<li>功共轭：$\mathbf{P} : \dot{\mathbf{F}} = J\boldsymbol{\sigma} : \mathbf{D}$</li>
+</ul>
+<ol start="3">
+<li><strong>第二Piola-Kirchhoff应力张量</strong> $\mathbf{S}$：
+$$\mathbf{S} = \mathbf{F}^{-1}\mathbf{P} = J\mathbf{F}^{-1}\boldsymbol{\sigma}\mathbf{F}^{-T}$$</li>
+</ol>
+<ul>
+<li>定义：完全参考构型的应力度量</li>
+<li>对称性：$\mathbf{S} = \mathbf{S}^T$</li>
+<li>功共轭：$\mathbf{S} : \dot{\mathbf{E}} = J\boldsymbol{\sigma} : \mathbf{D}$</li>
+</ul>
+<ol start="4">
+<li><strong>Kirchhoff应力张量</strong> $\boldsymbol{\tau}$：
+$$\boldsymbol{\tau} = J\boldsymbol{\sigma}$$</li>
+</ol>
+<ul>
+<li>应用：不可压缩材料（$J = 1$）时等于Cauchy应力</li>
+<li>优点：在大变形问题中数值稳定性更好</li>
+</ul>
+<p><strong>守恒方程</strong>：
+连续介质必须满足基本的物理守恒定律：</p>
+<ol>
+<li><strong>质量守恒</strong>（连续性方程）：
+   - 积分形式：$\frac{d}{dt}\int_{\Omega_t} \rho \, dv = 0$
+   - 拉格朗日形式：$\rho_0 = J\rho$（质量密度关系）
+   - 欧拉形式：$\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho\mathbf{v}) = 0$
+   - 物质导数形式：$\frac{D\rho}{Dt} + \rho\nabla \cdot \mathbf{v} = 0$</li>
+</ol>
+<p>对于不可压缩材料：$\nabla \cdot \mathbf{v} = 0$</p>
+<ol start="2">
+<li><strong>动量守恒</strong>（运动方程）：
+   - 积分形式：$\frac{d}{dt}\int_{\Omega_t} \rho\mathbf{v} \, dv = \int_{\Omega_t} \rho\mathbf{b} \, dv + \int_{\partial\Omega_t} \mathbf{t} \, da$
+   - 拉格朗日形式：$\rho_0 \frac{\partial^2 \phi}{\partial t^2} = \nabla_0 \cdot \mathbf{P} + \rho_0\mathbf{b}$
+   - 欧拉形式（Cauchy运动方程）：$\rho\frac{D\mathbf{v}}{Dt} = \nabla \cdot \boldsymbol{\sigma} + \rho\mathbf{b}$</li>
+</ol>
+<p>其中物质导数：$\frac{D(\cdot)}{Dt} = \frac{\partial(\cdot)}{\partial t} + \mathbf{v} \cdot \nabla(\cdot)$</p>
+<ol start="3">
+<li>
+<p><strong>角动量守恒</strong>：
+   - 积分形式：$\frac{d}{dt}\int_{\Omega_t} \mathbf{x} \times \rho\mathbf{v} \, dv = \int_{\Omega_t} \mathbf{x} \times \rho\mathbf{b} \, dv + \int_{\partial\Omega_t} \mathbf{x} \times \mathbf{t} \, da$
+   - 局部结果：Cauchy应力张量的对称性 $\boldsymbol{\sigma} = \boldsymbol{\sigma}^T$</p>
+</li>
+<li>
+<p><strong>能量守恒</strong>（热力学第一定律）：
+$$\rho\frac{De}{Dt} = \boldsymbol{\sigma} : \mathbf{D} - \nabla \cdot \mathbf{q} + \rho r$$
+其中：</p>
+</li>
+</ol>
+<ul>
+<li>$e$：比内能</li>
+<li>$\boldsymbol{\sigma} : \mathbf{D}$：应力功率（机械功）</li>
+<li>$\mathbf{q}$：热流向量（Fourier定律：$\mathbf{q} = -k\nabla T$）</li>
+<li>$r$：体积热源</li>
+</ul>
+<p>总能量形式：$\rho\frac{D}{Dt}(e + \frac{1}{2}|\mathbf{v}|^2) = \nabla \cdot (\boldsymbol{\sigma} \cdot \mathbf{v}) - \nabla \cdot \mathbf{q} + \rho(\mathbf{b} \cdot \mathbf{v} + r)$</p>
+<ol start="5">
+<li><strong>熵不等式</strong>（热力学第二定律）：
+$$\rho\frac{Ds}{Dt} + \nabla \cdot \left(\frac{\mathbf{q}}{T}\right) - \frac{\rho r}{T} \geq 0$$
+其中 $s$ 是比熵，$T$ 是绝对温度。</li>
+</ol>
+<p><strong>边界条件和初始条件</strong>：
+完整的边值问题需要指定：</p>
+<ol>
+<li>
+<p><strong>边界条件</strong>：
+   - Dirichlet（本质）：$\mathbf{u} = \overline{\mathbf{u}}$ 在 $\partial\Omega_u$ 上
+   - Neumann（自然）：$\mathbf{t} = \boldsymbol{\sigma} \cdot \mathbf{n} = \overline{\mathbf{t}}$ 在 $\partial\Omega_t$ 上
+   - Robin（混合）：$\alpha\mathbf{u} + \beta\mathbf{t} = \mathbf{g}$</p>
+</li>
+<li>
+<p><strong>初始条件</strong>：
+   - 位置：$\mathbf{x}(\mathbf{X}, 0) = \mathbf{x}_0(\mathbf{X})$
+   - 速度：$\mathbf{v}(\mathbf{X}, 0) = \mathbf{v}_0(\mathbf{X})$</p>
+</li>
+</ol>
+<p><strong>虚功原理和弱形式</strong>：
+强形式的平衡方程等价于虚功原理，对任意运动学可容许的虚位移 $\delta\mathbf{u}$（满足 $\delta\mathbf{u} = \mathbf{0}$ 在 $\partial\Omega_u$ 上）：
+$$\delta W = \delta W^{\text{int}} - \delta W^{\text{ext}} = 0$$
+展开为：
+$$\int_{\Omega} \rho \ddot{\mathbf{u}} \cdot \delta\mathbf{u} \, dV + \int_{\Omega} \boldsymbol{\sigma} : \delta\boldsymbol{\epsilon} \, dV = \int_{\Omega} \rho\mathbf{b} \cdot \delta\mathbf{u} \, dV + \int_{\partial\Omega_t} \mathbf{t} \cdot \delta\mathbf{u} \, dA$$
+这是有限元方法和MPM的理论基础，通过分部积分将二阶导数降为一阶，降低了对解的光滑性要求。</p>
+<h3 id="1212-mpm">12.1.2 MPM的基本框架</h3>
+<p>MPM巧妙地结合了拉格朗日粒子法和欧拉网格法的优势。物质点（粒子）携带所有的历史信息和材料属性，而背景网格仅用于求解动量方程，避免了网格畸变问题。</p>
+<p><strong>MPM的核心思想</strong>：</p>
+<ol>
+<li><strong>双重表示</strong>：材料既由粒子表示（携带历史），又通过网格求解（高效计算）</li>
+<li><strong>信息流动</strong>：粒子→网格（收集信息）→求解→网格→粒子（更新状态）</li>
+<li><strong>自动处理拓扑变化</strong>：无需显式追踪界面或重新网格化</li>
+<li><strong>混合方法优势</strong>：结合了拉格朗日方法的材料追踪能力和欧拉方法的计算效率</li>
+</ol>
+<p><strong>理论基础</strong>：
+MPM可以看作是有限元方法的粒子化版本。考虑弱形式：
+$$\int_\Omega \rho \frac{D\mathbf{v}}{Dt} \cdot \delta\mathbf{v} \, dV + \int_\Omega \boldsymbol{\sigma} : \nabla\delta\mathbf{v} \, dV = \int_\Omega \rho\mathbf{b} \cdot \delta\mathbf{v} \, dV$$
+MPM使用粒子进行积分近似：
+$$\int_\Omega (\cdot) \, dV \approx \sum_p V_p (\cdot)_p$$
+<strong>离散化策略</strong>：
+将连续体 $\Omega$ 离散为 $N_p$ 个粒子，每个粒子 $p$ 代表一小块材料：</p>
+<ul>
+<li>初始体积：$V_p^0 = \int_{\Omega_p^0} dV$</li>
+<li>质量守恒：$m_p = \rho_p^0 V_p^0 = \text{const}$</li>
+<li>当前体积：$V_p = J_p V_p^0$</li>
+<li>密度更新：$\rho_p = m_p / V_p = \rho_p^0 / J_p$</li>
+</ul>
+<p><strong>粒子初始化</strong>：
+粒子的初始分布影响数值精度：</p>
+<ol>
+<li><strong>规则分布</strong>：在每个网格单元内均匀放置 $2^d$ 个粒子（$d$ 是维度）</li>
+<li><strong>随机扰动</strong>：添加小的随机偏移避免人工各向异性</li>
+<li><strong>自适应分布</strong>：根据应力梯度或变形程度调整粒子密度</li>
+</ol>
+<p><strong>基本变量</strong>：</p>
+<ol>
+<li>
+<p><strong>粒子变量</strong>（拉格朗日）：
+   - 位置：$\mathbf{x}_p \in \mathbb{R}^d$
+   - 速度：$\mathbf{v}_p \in \mathbb{R}^d$
+   - 质量：$m_p \in \mathbb{R}^+$（常数）
+   - 初始体积：$V_p^0 \in \mathbb{R}^+$（常数）
+   - 当前体积：$V_p = J_p V_p^0$
+   - 变形梯度：$\mathbf{F}_p \in \mathbb{R}^{d \times d}$，$\det(\mathbf{F}_p) &gt; 0$
+   - 应力张量：$\boldsymbol{\sigma}_p \in \mathbb{R}^{d \times d}$
+   - 内部变量：</p>
+<ul>
+<li>塑性应变：$\boldsymbol{\epsilon}_p^p$</li>
+<li>等效塑性应变：$\bar{\epsilon}_p^p$</li>
+<li>损伤变量：$d_p \in [0,1]$</li>
+<li>温度：$T_p$</li>
+<li>相场变量：$\phi_p$（多相材料）</li>
+</ul>
+</li>
+<li>
+<p><strong>网格变量</strong>（欧拉）：
+   - 节点位置：$\mathbf{x}_i \in \mathbb{R}^d$（固定）
+   - 节点速度：$\mathbf{v}_i \in \mathbb{R}^d$
+   - 节点质量：$m_i \in \mathbb{R}^+$
+   - 节点动量：$\mathbf{p}_i = m_i \mathbf{v}_i$
+   - 节点内力：$\mathbf{f}_i^{\text{int}} \in \mathbb{R}^d$
+   - 节点外力：$\mathbf{f}_i^{\text{ext}} \in \mathbb{R}^d$</p>
+</li>
+</ol>
+<p><strong>MPM的计算循环</strong>（单个时间步 $[t^n, t^{n+1}]$）：</p>
+<ol>
+<li><strong>粒子到网格的传输（P2G）</strong>：</li>
+</ol>
+<p><strong>质量传输</strong>：
+$$m_i = \sum_p w_{ip} m_p$$
+这确保了总质量守恒：$\sum_i m_i = \sum_p m_p$</p>
+<p><strong>动量传输</strong>：
+$$\mathbf{p}_i = \sum_p w_{ip} m_p \mathbf{v}_p$$
+其中插值权重：$w_{ip} = N_i(\mathbf{x}_p)$，$N_i$ 是与节点 $i$ 关联的形函数。</p>
+<p><strong>速度计算</strong>：
+$$\mathbf{v}_i = \begin{cases}
+   \frac{\mathbf{p}_i}{m_i} &amp; \text{if } m_i &gt; \epsilon_m \
+   \mathbf{0} &amp; \text{otherwise}
+   \end{cases}$$
+其中 $\epsilon_m$ 是防止除零的小量（如 $10^{-10}$）。</p>
+<ol start="2">
+<li><strong>力的计算</strong>：</li>
+</ol>
+<p><strong>内力</strong>（来自应力散度）：
+$$\mathbf{f}_i^{\text{int}} = -\sum_p V_p \boldsymbol{\sigma}_p \nabla w_{ip}$$
+这是虚功原理的离散形式。对于任意虚速度场 $\delta\mathbf{v} = \sum_i \delta\mathbf{v}_i N_i$：
+$$\delta W^{\text{int}} = -\int_\Omega \boldsymbol{\sigma} : \nabla\delta\mathbf{v} \, dV \approx -\sum_p V_p \boldsymbol{\sigma}_p : \sum_i \delta\mathbf{v}_i \otimes \nabla w_{ip}$$
+整理得到节点力：
+$$\mathbf{f}_i^{\text{int}} = -\frac{\partial W^{\text{int}}}{\partial \mathbf{v}_i}$$
+<strong>外力</strong>：</p>
+<ul>
+<li>体力贡献：$\mathbf{f}_i^{\text{body}} = \sum_p w_{ip} m_p \mathbf{b}_p$</li>
+<li>表面力贡献：$\mathbf{f}_i^{\text{traction}} = \int_{\partial\Omega_t} N_i \mathbf{t} \, dA$</li>
+<li>总外力：$\mathbf{f}_i^{\text{ext}} = \mathbf{f}_i^{\text{body}} + \mathbf{f}_i^{\text{traction}}$</li>
+</ul>
+<p><strong>阻尼力</strong>（可选）：
+$$\mathbf{f}_i^{\text{damp}} = -c_d m_i \mathbf{v}_i$$
+其中 $c_d$ 是阻尼系数。</p>
+<ol start="3">
+<li><strong>网格上的动量更新</strong>：</li>
+</ol>
+<p><strong>显式欧拉</strong>（一阶精度）：
+$$\mathbf{v}_i^{n+1} = \mathbf{v}_i^n + \frac{\Delta t}{m_i} (\mathbf{f}_i^{\text{int}} + \mathbf{f}_i^{\text{ext}})$$
+<strong>辛欧拉</strong>（保持相空间体积）：
+$$\mathbf{p}_i^{n+1} = \mathbf{p}_i^n + \Delta t \mathbf{f}_i$$
+   $$\mathbf{v}_i^{n+1} = \mathbf{p}_i^{n+1} / m_i$$
+<strong>速度Verlet</strong>（二阶精度）：
+$$\mathbf{v}_i^{n+1/2} = \mathbf{v}_i^n + \frac{\Delta t}{2m_i} \mathbf{f}_i^n$$
+   $$\mathbf{v}_i^{n+1} = \mathbf{v}_i^{n+1/2} + \frac{\Delta t}{2m_i} \mathbf{f}_i^{n+1}$$</p>
+<ol start="4">
+<li><strong>边界条件处理</strong>：</li>
+</ol>
+<p><strong>Dirichlet边界</strong>（位移/速度约束）：</p>
+<ul>
+<li>固定边界：$\mathbf{v}_i = \mathbf{0}$</li>
+<li>移动边界：$\mathbf{v}_i = \mathbf{v}_{\text{prescribed}}(t)$</li>
+<li>滑移边界：$\mathbf{v}_i \cdot \mathbf{n} = 0$，$\mathbf{v}_i = \mathbf{v}_i - (\mathbf{v}_i \cdot \mathbf{n})\mathbf{n}$</li>
+</ul>
+<p><strong>Neumann边界</strong>（力/应力约束）：
+   已包含在 $\mathbf{f}_i^{\text{traction}}$ 中</p>
+<p><strong>接触边界</strong>（单侧约束）：</p>
+<ul>
+<li>法向：$\mathbf{v}_n = \max(0, \mathbf{v}_i \cdot \mathbf{n})$</li>
+<li>切向（库仑摩擦）：
+$$\mathbf{v}_t = \begin{cases}
+     \mathbf{0} &amp; \text{if } ||\mathbf{v}_t|| \leq \mu |\mathbf{v}_n| \
+     (1-\mu|\mathbf{v}_n|/||\mathbf{v}_t||)\mathbf{v}_t &amp; \text{otherwise}
+     \end{cases}$$
+其中 $\mu$ 是摩擦系数。</li>
+</ul>
+<ol start="5">
+<li><strong>网格到粒子的传输（G2P）</strong>：</li>
+</ol>
+<p><strong>PIC更新</strong>（Particle-In-Cell，数值耗散大）：
+$$\mathbf{v}_p^{n+1} = \sum_i w_{ip} \mathbf{v}_i^{n+1}$$
+<strong>FLIP更新</strong>（Fluid-Implicit-Particle，保持细节但有噪声）：
+$$\mathbf{v}_p^{n+1} = \mathbf{v}_p^n + \sum_i w_{ip} (\mathbf{v}_i^{n+1} - \mathbf{v}_i^n)$$
+<strong>PIC/FLIP混合</strong>（平衡耗散和噪声）：
+$$\mathbf{v}_p^{n+1} = (1-\alpha)\mathbf{v}_p^{\text{PIC}} + \alpha\mathbf{v}_p^{\text{FLIP}}$$
+典型取 $\alpha \in [0.95, 0.99]$。</p>
+<p><strong>位置更新</strong>：
+$$\mathbf{x}_p^{n+1} = \mathbf{x}_p^n + \Delta t \mathbf{v}_p^{n+1}$$
+或使用中点法提高精度：
+$$\mathbf{x}_p^{n+1} = \mathbf{x}_p^n + \Delta t \sum_i w_{ip} \frac{\mathbf{v}_i^{n+1} + \mathbf{v}_i^n}{2}$$</p>
+<ol start="6">
+<li><strong>变形梯度更新</strong>：</li>
+</ol>
+<p><strong>速度梯度计算</strong>：
+$$\mathbf{L}_p = \sum_i \mathbf{v}_i^{n+1} \otimes \nabla w_{ip}$$
+<strong>一阶更新</strong>（简单但可能引入误差）：
+$$\mathbf{F}_p^{n+1} = (\mathbf{I} + \Delta t \mathbf{L}_p) \mathbf{F}_p^n$$
+<strong>指数映射</strong>（保持正定性和体积）：
+$$\mathbf{F}_p^{n+1} = \exp(\Delta t \mathbf{L}_p) \mathbf{F}_p^n$$
+对于小时间步，使用Padé近似：
+$$\exp(\mathbf{A}) \approx (\mathbf{I} - \frac{1}{2}\mathbf{A})^{-1}(\mathbf{I} + \frac{1}{2}\mathbf{A})$$
+<strong>体积更新</strong>：
+$$J_p^{n+1} = \det(\mathbf{F}_p^{n+1})$$
+   $$V_p^{n+1} = J_p^{n+1} V_p^0$$</p>
+<ol start="7">
+<li><strong>应力更新</strong>：</li>
+</ol>
+<p>根据本构模型计算新的应力：
+$$\boldsymbol{\sigma}_p^{n+1} = \mathcal{C}(\mathbf{F}_p^{n+1}, {\text{history}_p})$$
+其中 $\mathcal{C}$ 是本构关系，history包含：</p>
+<ul>
+<li>塑性应变历史</li>
+<li>损伤演化</li>
+<li>温度历史</li>
+<li>相变状态</li>
+</ul>
+<p><strong>返回映射算法</strong>（塑性）：</p>
+<ol>
+<li>弹性预测：$\boldsymbol{\sigma}^{\text{trial}} = \mathcal{C}^{\text{elastic}}(\mathbf{F}^{n+1})$</li>
+<li>检查屈服：$f(\boldsymbol{\sigma}^{\text{trial}}) \leq 0$？</li>
+<li>塑性修正：如果 $f &gt; 0$，投影回屈服面</li>
+</ol>
+<p><strong>算法特点与优势</strong>：</p>
+<ol>
+<li><strong>自动质量守恒</strong>：粒子质量不变，总质量精确守恒</li>
+<li><strong>动量守恒</strong>：通过网格求解，动量守恒到机器精度</li>
+<li><strong>历史依赖</strong>：粒子携带所有历史变量，自然处理路径依赖材料</li>
+<li><strong>大变形能力</strong>：无网格畸变，可处理任意大变形和拓扑变化</li>
+<li><strong>多物理耦合</strong>：易于添加热传导、相变、化学反应等</li>
+<li><strong>并行友好</strong>：P2G和G2P阶段高度并行</li>
+</ol>
+<p><strong>数值考虑</strong>：</p>
+<ol>
+<li><strong>网格穿越误差</strong>：粒子穿越网格单元时可能引入误差</li>
+<li><strong>数值断裂</strong>：粒子分离可能导致非物理断裂</li>
+<li><strong>粒子聚集</strong>：某些区域粒子过度聚集影响精度</li>
+<li><strong>边界处理</strong>：需要特殊技术处理复杂边界</li>
+</ol>
+<h3 id="1213-">12.1.3 粒子-网格交互</h3>
+<p>粒子与网格之间的信息传递是MPM的核心，形函数的选择直接影响数值精度、稳定性和计算效率。本节深入探讨形函数理论、实现细节和性能优化。</p>
+<p><strong>形函数的数学基础</strong>：
+形函数 $N_i(\mathbf{x})$ 是定义在网格上的基函数，必须满足以下性质：</p>
+<ol>
+<li><strong>插值性</strong>（分割单位性）：$\sum_i N_i(\mathbf{x}) = 1$ 对所有 $\mathbf{x} \in \Omega$</li>
+<li><strong>紧支性</strong>：$N_i(\mathbf{x}) = 0$ 当 $||\mathbf{x} - \mathbf{x}_i|| &gt; r_{\text{support}}$</li>
+<li><strong>非负性</strong>：$N_i(\mathbf{x}) \geq 0$（保证物理意义）</li>
+<li><strong>光滑性</strong>：至少 $C^0$ 连续，理想情况下 $C^{k-1}$（$k$ 阶精度需要）</li>
+<li><strong>局部性</strong>：每个点最多被有限个形函数覆盖</li>
+</ol>
+<p><strong>理论基础</strong>：
+从重构理论角度，任意函数 $f(\mathbf{x})$ 可以近似为：
+$$f(\mathbf{x}) \approx \sum_i f_i N_i(\mathbf{x})$$
+重构误差与形函数的逼近阶数相关：
+$$||f - f_h||_{L^2} = O(h^{k+1})$$
+其中 $k$ 是多项式精度阶数。</p>
+<p><strong>常用形函数族</strong>：</p>
+<ol>
+<li><strong>线性形函数</strong>（帐篷函数/三线性插值）：</li>
+</ol>
+<p>一维基函数：
+$$N^1(\xi) = \begin{cases}
+   1 - |\xi| &amp; |\xi| &lt; 1 \
+   0 &amp; \text{otherwise}
+   \end{cases}$$
+导数：
+$$\frac{dN^1}{d\xi} = \begin{cases}
+   -\text{sign}(\xi) &amp; |\xi| &lt; 1 \
+   0 &amp; \text{otherwise}
+   \end{cases}$$
+多维张量积（分离变量）：
+$$N(\boldsymbol{\xi}) = \prod_{d=1}^D N^1(\xi_d)$$
+梯度（链式法则）：
+$$\nabla N = \frac{1}{h}\begin{bmatrix}
+   \frac{dN^1}{d\xi_1}(\xi_1) \prod_{d=2}^D N^1(\xi_d) \
+   N^1(\xi_1) \frac{dN^1}{d\xi_2}(\xi_2) \prod_{d=3}^D N^1(\xi_d) \
+   \vdots
+   \end{bmatrix}$$
+特点：</p>
+<ul>
+<li>支撑域：$2^D$ 个节点（2×2×2 in 3D）</li>
+<li>连续性：$C^0$（位置连续，速度不连续）</li>
+<li>计算效率：最高（简单的加减乘除）</li>
+<li>数值问题：网格穿越噪声、力的不连续性</li>
+</ul>
+<ol start="2">
+<li><strong>二次B样条</strong>：</li>
+</ol>
+<p>一维基函数（中心化）：
+$$N^2(\xi) = \begin{cases}
+   \frac{3}{4} - \xi^2 &amp; |\xi| \leq \frac{1}{2} \
+   \frac{1}{2}(\frac{3}{2} - |\xi|)^2 &amp; \frac{1}{2} &lt; |\xi| \leq \frac{3}{2} \
+   0 &amp; |\xi| &gt; \frac{3}{2}
+   \end{cases}$$
+导数：
+$$\frac{dN^2}{d\xi} = \begin{cases}
+   -2\xi &amp; |\xi| \leq \frac{1}{2} \
+   -\text{sign}(\xi)(\frac{3}{2} - |\xi|) &amp; \frac{1}{2} &lt; |\xi| \leq \frac{3}{2} \
+   0 &amp; |\xi| &gt; \frac{3}{2}
+   \end{cases}$$
+特点：</p>
+<ul>
+<li>支撑域：$3^D$ 个节点（3×3×3 in 3D）</li>
+<li>连续性：$C^1$（速度连续）</li>
+<li>精度：$O(h^3)$ 收敛率</li>
+<li>应用：流体模拟首选（平滑性好）</li>
+</ul>
+<ol start="3">
+<li><strong>三次B样条</strong>：</li>
+</ol>
+<p>一维基函数：
+$$N^3(\xi) = \frac{1}{6}\begin{cases}
+   (2-|\xi|)^3 &amp; 1 &lt; |\xi| \leq 2 \
+   4 - 6\xi^2 + 3|\xi|^3 &amp; |\xi| \leq 1 \
+   0 &amp; |\xi| &gt; 2
+   \end{cases}$$
+导数：
+$$\frac{dN^3}{d\xi} = \frac{1}{6}\begin{cases}
+   -3\text{sign}(\xi)(2-|\xi|)^2 &amp; 1 &lt; |\xi| \leq 2 \
+   -12\xi + 9\xi|\xi| &amp; |\xi| \leq 1 \
+   0 &amp; |\xi| &gt; 2
+   \end{cases}$$
+特点：</p>
+<ul>
+<li>支撑域：$4^D$ 个节点（4×4×4 in 3D）</li>
+<li>连续性：$C^2$（加速度连续）</li>
+<li>精度：$O(h^4)$ 收敛率</li>
+<li>代价：计算量大，内存带宽需求高</li>
+</ul>
+<ol start="4">
+<li><strong>GIMP（Generalized Interpolation Material Point）形函数</strong>：</li>
+</ol>
+<p>核心思想：考虑粒子的有限尺寸，通过卷积获得形函数：
+$$S_{ip} = \int_{\Omega_p} N_i(\mathbf{x}) \chi_p(\mathbf{x}) d\mathbf{x}$$
+其中 $\chi_p$ 是粒子的特征函数（形状函数）。</p>
+<p>对于轴对齐矩形粒子，一维GIMP权重：
+$$S^1_{ip}(\xi, l) = \begin{cases}
+   1 - \frac{(|\xi|-l)^2}{4l} &amp; l &lt; |\xi| &lt; 1+l \
+   1 - |\xi| &amp; |\xi| &lt; l \
+   0 &amp; |\xi| &gt; 1+l
+   \end{cases}$$
+其中 $l = l_p/h$ 是归一化粒子半宽度。</p>
+<p>梯度（使用Leibniz积分法则）：
+$$\nabla S_{ip} = \int_{\Omega_p} \nabla N_i(\mathbf{x}) \chi_p(\mathbf{x}) d\mathbf{x}$$
+优势：</p>
+<ul>
+<li>减少粒子穿透</li>
+<li>更好的动量传递</li>
+<li>自适应分辨率</li>
+</ul>
+<p>变种：</p>
+<ul>
+<li>cpGIMP：收缩粒子域GIMP</li>
+<li>uGIMP：均匀GIMP（简化计算）</li>
+</ul>
+<p><strong>权重和梯度的高效计算</strong>：</p>
+<p>给定粒子位置 $\mathbf{x}_p$ 和网格节点 $i$ 的位置 $\mathbf{x}_i$：</p>
+<ol>
+<li>
+<p><strong>坐标变换</strong>：
+   <code>基节点索引: base = floor(x_p / h)
+   局部坐标: ξ = (x_p - x_i) / h
+   相对索引: offset = i - base</code></p>
+</li>
+<li>
+<p><strong>权重计算优化</strong>：
+   - <strong>查表法</strong>：预计算 $N(\xi)$ 在细分网格上的值
+   - <strong>分段多项式</strong>：直接计算，利用分支预测
+   - <strong>SIMD向量化</strong>：同时计算多个维度</p>
+</li>
+<li>
+<p><strong>梯度计算技巧</strong>：
+$$\nabla w_{ip} = \frac{1}{h} \begin{bmatrix}
+   \frac{\partial N}{\partial \xi_1} \frac{N(\xi_2)N(\xi_3)}{N(\boldsymbol{\xi})} \
+   \frac{\partial N}{\partial \xi_2} \frac{N(\xi_1)N(\xi_3)}{N(\boldsymbol{\xi})} \
+   \frac{\partial N}{\partial \xi_3} \frac{N(\xi_1)N(\xi_2)}{N(\boldsymbol{\xi})}
+   \end{bmatrix} w_{ip}$$
+避免重复计算基函数值。</p>
+</li>
+</ol>
+<p><strong>误差分析与收敛性</strong>：</p>
+<ol>
+<li>
+<p><strong>插值误差估计</strong>：
+   对于 $k$ 阶精度的形函数：
+$$||f - \Pi_h f||_{L^2(\Omega)} \leq C h^{k+1} ||f||_{H^{k+1}(\Omega)}$$
+其中 $\Pi_h$ 是插值算子。</p>
+</li>
+<li>
+<p><strong>积分精度</strong>：
+   数值积分误差：
+$$\left|\int_\Omega f dV - \sum_p V_p f_p\right| \leq C h^{k+1} ||f||_{W^{k+1,1}(\Omega)}$$</p>
+</li>
+<li>
+<p><strong>条件数分析</strong>：
+   质量矩阵条件数：$\kappa(M) = O(1)$（对角占优）
+   刚度矩阵条件数：$\kappa(K) = O(h^{-2})$（与FEM相同）</p>
+</li>
+</ol>
+<p><strong>数值稳定性考虑</strong>：</p>
+<ol>
+<li><strong>质量聚集问题</strong>：
+   当 $m_i = \sum_p w_{ip} m_p &lt; \epsilon_m$ 时：</li>
+</ol>
+<ul>
+<li>跳过该节点的力计算</li>
+<li>或使用正则化：$\tilde{m}_i = \max(m_i, \epsilon_m)$</li>
+</ul>
+<ol start="2">
+<li>
+<p><strong>梯度爆炸预防</strong>：
+   限制速度梯度：
+$$||\mathbf{L}_p|| \leq L_{\max} = \frac{c_{\max}}{h}$$
+其中 $c_{\max}$ 是材料波速上界。</p>
+</li>
+<li>
+<p><strong>边界附近的处理</strong>：
+   - 使用修正的形函数保证分割单位性
+   - 或采用虚拟节点技术</p>
+</li>
+</ol>
+<p><strong>高效实现策略</strong>：</p>
+<ol>
+<li><strong>数据结构优化</strong>：
+   ```
+   struct GridNode {
+       float mass;
+       vec3 momentum;
+       vec3 force;
+       // 填充到缓存行边界
+   };</li>
+</ol>
+<p>struct Particle {
+       vec3 position;
+       vec3 velocity;
+       mat3 F;  // 变形梯度
+       mat3 stress;
+       float volume;
+       // 按访问模式组织
+   };
+   ```</p>
+<ol start="2">
+<li>
+<p><strong>并行化策略</strong>：
+   - <strong>P2G并行</strong>：使用原子操作或图着色避免竞争
+   - <strong>力计算</strong>：完全并行（只读粒子数据）
+   - <strong>G2P并行</strong>：每个粒子独立更新</p>
+</li>
+<li>
+<p><strong>内存访问优化</strong>：
+   - <strong>粒子排序</strong>：按空间位置排序（Z-order、Hilbert曲线）
+   - <strong>缓存预取</strong>：显式预取下一个粒子数据
+   - <strong>AoS vs SoA</strong>：根据访问模式选择</p>
+</li>
+<li>
+<p><strong>计算优化</strong>：
+   ```
+   // 避免重复计算
+   float wx = N1(xi.x);
+   float wy = N1(xi.y);
+   float wz = N1(xi.z);
+   float wip = wx * wy * wz;</p>
+</li>
+</ol>
+<p>// 利用对称性
+   grad_wip.x = dN1(xi.x) * wy * wz / h;
+   ```</p>
+<p><strong>自适应形函数选择</strong>：</p>
+<p>根据局部物理状态动态选择形函数：</p>
+<ol>
+<li>
+<p><strong>应变率准则</strong>：
+$$\text{order} = \begin{cases}
+   1 &amp; ||\mathbf{D}|| &gt; D_{\text{thresh}} \
+   2 &amp; \text{otherwise}
+   \end{cases}$$</p>
+</li>
+<li>
+<p><strong>材料类型准则</strong>：
+   - 固体：二次B样条（平滑应力）
+   - 流体：三次B样条（高精度）
+   - 颗粒：线性（计算效率）</p>
+</li>
+<li>
+<p><strong>混合形函数</strong>：
+   在过渡区域使用加权组合：
+$$N^{\text{mix}} = \alpha N^{\text{low}} + (1-\alpha) N^{\text{high}}$$
+<strong>形函数选择决策树</strong>：</p>
+</li>
+</ol>
+<pre class="codehilite"><code>材料类型？
+├─ 弹性固体
+│  └─ 二次B样条（C¹连续性）
+├─ 流体
+│  ├─ 低雷诺数 → 三次B样条
+│  └─ 高雷诺数 → 二次B样条
+├─ 颗粒材料
+│  └─ 线性 + GIMP（防穿透）
+└─ 大变形塑性
+   └─ 自适应（应变率相关）
+</code></pre>
+
+<h3 id="1214">12.1.4 时间积分方案</h3>
+<p>MPM中常用的时间积分方案包括：</p>
+<ol>
+<li>
+<p><strong>显式积分</strong>：
+   - 前向欧拉：简单但稳定性受限
+   - 辛欧拉：保持能量守恒性质
+   - Runge-Kutta方法：高阶精度</p>
+</li>
+<li>
+<p><strong>半隐式积分</strong>：
+   - 对某些项（如弹性力）进行隐式处理
+   - 提高稳定性，允许更大的时间步长</p>
+</li>
+</ol>
+<p><strong>CFL条件</strong>：
+$$\Delta t \leq C \frac{h}{c}$$
+其中 $c = \sqrt{E/\rho}$ 是材料中的声速，$C$ 是CFL数（通常取0.1-0.5）。</p>
+<h3 id="1215">12.1.5 本构模型</h3>
+<p>MPM可以处理各种材料模型：</p>
+<ol>
+<li>
+<p><strong>线弹性</strong>：
+$$\boldsymbol{\sigma} = \lambda \text{tr}(\boldsymbol{\epsilon})\mathbf{I} + 2\mu\boldsymbol{\epsilon}$$</p>
+</li>
+<li>
+<p><strong>超弹性</strong>（Neo-Hookean）：
+$$\boldsymbol{\sigma} = \mu(\mathbf{B} - \mathbf{I}) + \lambda\ln(J)\mathbf{I}$$
+其中 $\mathbf{B} = \mathbf{F}\mathbf{F}^T$，$J = \det(\mathbf{F})$。</p>
+</li>
+<li>
+<p><strong>塑性模型</strong>：
+   - von Mises屈服准则
+   - Drucker-Prager模型（适用于颗粒材料）
+   - 雪的本构模型</p>
+</li>
+</ol>
+<p><strong>应力计算</strong>通常涉及：</p>
+<ol>
+<li>计算应变或变形梯度</li>
+<li>应用本构关系获得应力</li>
+<li>考虑塑性修正（如果适用）</li>
+</ol>
+<h2 id="122-mls-mpm_1">12.2 MLS-MPM（移动最小二乘物质点法）</h2>
+<h3 id="1221-mpm">12.2.1 传统MPM的局限性</h3>
+<p>传统MPM虽然在处理大变形问题上有优势，但存在一些固有问题：</p>
+<ol>
+<li><strong>数值耗散</strong>：粒子-网格-粒子的传输过程引入人工粘性</li>
+<li><strong>角动量守恒</strong>：FLIP（Fluid Implicit Particle）方法保持角动量但引入噪声</li>
+<li><strong>计算效率</strong>：需要存储和更新大量粒子信息</li>
+<li><strong>精度问题</strong>：低阶形函数限制了应力计算的精度</li>
+</ol>
+<h3 id="1222-mls-mpm">12.2.2 MLS-MPM的理论推导</h3>
+<p>MLS-MPM的核心思想是使用移动最小二乘（Moving Least Squares）方法在粒子周围重构速度场，从而获得更精确的变形梯度更新。</p>
+<p><strong>速度场重构</strong>：
+假设在粒子 $p$ 附近的速度场可以表示为：
+$$\mathbf{v}(\mathbf{x}) = \mathbf{c}_0 + \mathbf{C}_1 (\mathbf{x} - \mathbf{x}_p)$$
+其中 $\mathbf{c}_0$ 是常数项，$\mathbf{C}_1$ 是一阶导数矩阵。</p>
+<p><strong>最小二乘拟合</strong>：
+通过最小化加权误差：
+$$E = \sum_i w_{ip} m_i ||\mathbf{v}_i - \mathbf{c}_0 - \mathbf{C}_1(\mathbf{x}_i - \mathbf{x}_p)||^2$$
+求解得到：
+$$\mathbf{c}_0 = \sum_i w_{ip} \mathbf{v}_i$$
+$$\mathbf{C}_1 = \left(\sum_i w_{ip} \mathbf{v}_i \otimes (\mathbf{x}_i - \mathbf{x}_p)\right) \mathbf{D}_p^{-1}$$
+其中 $\mathbf{D}_p = \sum_i w_{ip} (\mathbf{x}_i - \mathbf{x}_p) \otimes (\mathbf{x}_i - \mathbf{x}_p)$ 是惯性张量。</p>
+<p><strong>APIC矩阵</strong>：
+MLS-MPM引入仿射粒子-网格（APIC）矩阵 $\mathbf{C}_p$ 来存储速度梯度信息：
+$$\mathbf{C}_p = \mathbf{B}_p \mathbf{D}_p^{-1}$$
+其中 $\mathbf{B}_p = \sum_i w_{ip} \mathbf{v}_i \otimes (\mathbf{x}_i - \mathbf{x}_p)$。</p>
+<h3 id="1223-mls-mpm">12.2.3 MLS-MPM算法流程</h3>
+<ol>
+<li>
+<p><strong>初始化</strong>：
+   - 设置粒子位置 $\mathbf{x}_p$、速度 $\mathbf{v}_p$、质量 $m_p$
+   - 初始化变形梯度 $\mathbf{F}_p = \mathbf{I}$
+   - 计算初始 APIC 矩阵 $\mathbf{C}_p = \mathbf{0}$</p>
+</li>
+<li>
+<p><strong>P2G传输（改进版）</strong>：
+$$m_i = \sum_p w_{ip} m_p$$
+   $$m_i \mathbf{v}_i = \sum_p w_{ip} m_p [\mathbf{v}_p + \mathbf{C}_p(\mathbf{x}_i - \mathbf{x}_p)]$$</p>
+</li>
+<li>
+<p><strong>网格动量更新</strong>（与传统MPM相同）：
+$$\mathbf{v}_i^{n+1} = \mathbf{v}_i^n + \frac{\Delta t}{m_i} \mathbf{f}_i$$</p>
+</li>
+<li>
+<p><strong>G2P传输（改进版）</strong>：
+$$\mathbf{v}_p^{n+1} = \sum_i w_{ip} \mathbf{v}_i^{n+1}$$
+   $$\mathbf{C}_p^{n+1} = \sum_i w_{ip} \mathbf{v}_i^{n+1} \otimes (\mathbf{x}_i - \mathbf{x}_p) \cdot \mathbf{D}_p^{-1}$$</p>
+</li>
+<li>
+<p><strong>粒子更新</strong>：
+$$\mathbf{x}_p^{n+1} = \mathbf{x}_p^n + \Delta t \mathbf{v}_p^{n+1}$$
+   $$\mathbf{F}_p^{n+1} = (\mathbf{I} + \Delta t \mathbf{C}_p^{n+1}) \mathbf{F}_p^n$$</p>
+</li>
+</ol>
+<h3 id="1224">12.2.4 优化技巧</h3>
+<ol>
+<li>
+<p><strong>惯性张量的高效计算</strong>：
+   对于规则网格和对称核函数：
+$$\mathbf{D}_p = \frac{4h^2}{3}\mathbf{I}$$（二维情况）$$\mathbf{D}_p = \frac{h^2}{2}\mathbf{I}$$（三维情况）</p>
+</li>
+<li>
+<p><strong>体积守恒</strong>：
+   通过修正变形梯度保持体积：
+   $$\mathbf{F}_p^{\text{corrected}} = J^{1/d} \mathbf{F}_p / \det(\mathbf{F}_p)^{1/d}$$</p>
+</li>
+<li>
+<p><strong>数值稳定性增强</strong>：
+   - 限制变形梯度的奇异值
+   - 使用隐式积分处理刚性材料
+   - 自适应时间步长</p>
+</li>
+</ol>
+<h3 id="1225-apic">12.2.5 与APIC的关系</h3>
+<p>MLS-MPM可以看作是APIC（Affine Particle-In-Cell）方法的推广：</p>
+<ol>
+<li><strong>APIC</strong>：保存仿射速度场 $\mathbf{v}(\mathbf{x}) = \mathbf{v}_p + \mathbf{C}_p(\mathbf{x} - \mathbf{x}_p)$</li>
+<li><strong>MLS-MPM</strong>：通过MLS重构获得最优的 $\mathbf{C}_p$</li>
+<li><strong>理论联系</strong>：MLS-MPM在数学上等价于使用特定权重的APIC</li>
+</ol>
+<p><strong>优势对比</strong>：</p>
+<ul>
+<li>APIC：实现简单，但精度受限</li>
+<li>MLS-MPM：更高精度，更好的动量守恒</li>
+<li>计算成本相近</li>
+</ul>
+<h2 id="123-mpm_1">12.3 高级MPM技术与应用</h2>
+<h3 id="1231-mpm">12.3.1 多材料MPM</h3>
+<p>实际应用中经常需要模拟多种材料的相互作用，如流体-固体耦合、多相流等。</p>
+<p><strong>多材料表示方法</strong>：</p>
+<ol>
+<li>
+<p><strong>分离粒子法</strong>：
+   - 不同材料使用不同的粒子集
+   - 在网格上进行耦合
+   - 适用于界面清晰的情况</p>
+</li>
+<li>
+<p><strong>混合粒子法</strong>：
+   - 单个粒子可以包含多种材料
+   - 使用体积分数 $\phi_k$ 表示材料 $k$ 的占比
+   - 适用于混合材料</p>
+</li>
+</ol>
+<p><strong>界面处理</strong>：</p>
+<ol>
+<li>
+<p><strong>接触算法</strong>：
+$$\mathbf{v}_i^{k,\text{final}} = \mathbf{v}_i^k + \frac{\Delta t}{m_i^k} \mathbf{f}_i^{\text{contact}}$$
+接触力通过罚函数或拉格朗日乘子计算。</p>
+</li>
+<li>
+<p><strong>混合理论</strong>：
+   应力通过体积加权平均：
+$$\boldsymbol{\sigma} = \sum_k \phi_k \boldsymbol{\sigma}_k$$
+<strong>表面张力</strong>：
+对于流体界面，需要考虑表面张力：
+$$\mathbf{f}_{\text{surface}} = \gamma \kappa \mathbf{n}$$
+其中 $\gamma$ 是表面张力系数，$\kappa$ 是曲率，$\mathbf{n}$ 是法向量。</p>
+</li>
+</ol>
+<h3 id="1232-mpm">12.3.2 自适应MPM</h3>
+<p>为了提高计算效率和精度，可以使用自适应技术：</p>
+<ol>
+<li><strong>空间自适应</strong>：
+   - <strong>自适应网格细化</strong>（AMR）：在需要高精度的区域使用更细的网格
+   - <strong>粒子分裂与合并</strong>：根据变形程度调整粒子密度</li>
+</ol>
+<p>分裂准则：
+$$\text{split if } \det(\mathbf{F}_p) &gt; \theta_{\text{split}}$$
+合并准则：
+$$\text{merge if } ||\mathbf{x}_p - \mathbf{x}_q|| &lt; r_{\text{merge}} \text{ and } \det(\mathbf{F}_p) &lt; \theta_{\text{merge}}$$</p>
+<ol start="2">
+<li>
+<p><strong>时间自适应</strong>：
+   根据局部CFL条件调整时间步长：
+$$\Delta t_p = \min\left(C_{\text{CFL}} \frac{h}{||\mathbf{v}_p|| + c_p}, \Delta t_{\text{max}}\right)$$</p>
+</li>
+<li>
+<p><strong>模型自适应</strong>：
+   - 在小变形区域使用线性模型
+   - 在大变形区域使用非线性模型
+   - 动态切换本构模型</p>
+</li>
+</ol>
+<h3 id="1233-gpu">12.3.3 GPU加速技术</h3>
+<p>MPM天然适合GPU并行化，关键优化策略包括：</p>
+<ol>
+<li>
+<p><strong>数据结构优化</strong>：
+   - <strong>粒子排序</strong>：按空间位置排序减少内存访问冲突
+   - <strong>网格哈希</strong>：使用空间哈希表快速查找粒子-网格映射
+   - <strong>稀疏网格</strong>：只分配活跃网格节点</p>
+</li>
+<li>
+<p><strong>并行化策略</strong>：
+   - <strong>P2G阶段</strong>：每个粒子独立计算，使用原子操作累加到网格
+   - <strong>网格更新</strong>：每个网格节点独立更新
+   - <strong>G2P阶段</strong>：每个粒子独立更新</p>
+</li>
+<li>
+<p><strong>性能优化</strong>：
+   - <strong>共享内存使用</strong>：缓存频繁访问的网格数据
+   - <strong>Warp级别优化</strong>：确保线程束内的一致性
+   - <strong>混合精度计算</strong>：在不影响精度的地方使用float16</p>
+</li>
+</ol>
+<p><strong>典型加速比</strong>：</p>
+<ul>
+<li>CPU单线程 → GPU：100-1000倍</li>
+<li>实时模拟成为可能（&gt;30 FPS）</li>
+</ul>
+<h3 id="1234">12.3.4 工程应用案例</h3>
+<ol>
+<li>
+<p><strong>计算机动画</strong>：
+   - 雪崩模拟（迪士尼《冰雪奇缘》）
+   - 沙尘效果
+   - 流体-固体交互</p>
+</li>
+<li>
+<p><strong>地质工程</strong>：
+   - 滑坡预测
+   - 土壤液化分析
+   - 爆破效果模拟</p>
+</li>
+<li>
+<p><strong>生物力学</strong>：
+   - 软组织变形
+   - 血流动力学
+   - 细胞力学</p>
+</li>
+<li>
+<p><strong>工业设计</strong>：
+   - 3D打印过程模拟
+   - 材料成型分析
+   - 碰撞安全测试</p>
+</li>
+</ol>
+<h3 id="1235">12.3.5 前沿研究方向</h3>
+<ol>
+<li>
+<p><strong>机器学习增强</strong>：
+   - 使用神经网络学习本构模型
+   - 加速结构预测
+   - 参数自动调优</p>
+</li>
+<li>
+<p><strong>多尺度MPM</strong>：
+   - 宏观-介观-微观耦合
+   - 分子动力学与连续介质耦合
+   - 自适应尺度转换</p>
+</li>
+<li>
+<p><strong>拓扑优化</strong>：
+   - 基于MPM的形状优化
+   - 材料分布优化
+   - 多目标优化</p>
+</li>
+<li>
+<p><strong>实时交互系统</strong>：
+   - VR/AR应用
+   - 触觉反馈
+   - 实时物理编辑</p>
+</li>
+</ol>
+<h2 id="_2">本章小结</h2>
+<p>本章深入介绍了物质点法（MPM）及其现代变种MLS-MPM，这是计算机图形学中模拟大变形材料的强大工具。</p>
+<p><strong>关键概念</strong>：</p>
+<ol>
+<li><strong>MPM基础</strong>：结合拉格朗日粒子和欧拉网格的混合方法</li>
+<li><strong>核心算法</strong>：P2G → 网格求解 → G2P → 状态更新</li>
+<li><strong>MLS-MPM</strong>：通过移动最小二乘改进精度和稳定性</li>
+<li><strong>高级技术</strong>：多材料、自适应、GPU加速</li>
+</ol>
+<p><strong>重要公式</strong>：</p>
+<ul>
+<li>变形梯度更新：$\mathbf{F}^{n+1} = (\mathbf{I} + \Delta t \mathbf{L}) \mathbf{F}^n$</li>
+<li>内力计算：$\mathbf{f}_i^{\text{int}} = -\sum_p V_p \boldsymbol{\sigma}_p \nabla w_{ip}$</li>
+<li>MLS速度场：$\mathbf{v}(\mathbf{x}) = \mathbf{c}_0 + \mathbf{C}_1 (\mathbf{x} - \mathbf{x}_p)$</li>
+<li>CFL条件：$\Delta t \leq C h/c$</li>
+</ul>
+<p><strong>算法选择指南</strong>：</p>
+<ul>
+<li>传统MPM：简单实现，适合教学</li>
+<li>MLS-MPM：生产环境推荐，更好的精度</li>
+<li>GIMP：需要精确接触处理时使用</li>
+<li>自适应MPM：大规模场景优化</li>
+</ul>
+<h2 id="_3">练习题</h2>
+<h3 id="_4">基础题</h3>
+<ol>
+<li><strong>形函数性质</strong>
+   证明二次B样条形函数满足分割单位性：$\sum_i N_i^2(\mathbf{x}) = 1$。</li>
+</ol>
+<p><em>提示：考虑一维情况，利用B样条的递归定义。</em></p>
+<details markdown="block">
+   
+
+<summary>答案</summary>
+
+
+   对于均匀网格上的二次B样条，任意点最多被3个基函数覆盖。设 $\xi = (x - x\_i)/h$，则：
+
+   - 节点 $i-1$：$N^2(\xi+1)$
+   - 节点 $i$：$N^2(\xi)$  
+   - 节点 $i+1$：$N^2(\xi-1)$
+
+   当 $\xi \in [-1/2, 1/2]$ 时：
+$$N^2(\xi+1) + N^2(\xi) + N^2(\xi-1) = \frac{1}{2}(1/2-\xi)^2 + (3/4-\xi^2) + \frac{1}{2}(1/2+\xi)^2 = 1$$
+类似可验证其他区间。
+   </details>
+<ol start="2">
+<li><strong>变形梯度的物理意义</strong>
+   给定变形梯度 $\mathbf{F} = \begin{bmatrix} 2 &amp; 0.5 \ 0 &amp; 1 \end{bmatrix}$，计算：
+   a) 体积比 $J$
+   b) 右Cauchy-Green张量 $\mathbf{C}$
+   c) Green-Lagrange应变 $\mathbf{E}$</li>
+</ol>
+<p><em>提示：使用 $J = \det(\mathbf{F})$，$\mathbf{C} = \mathbf{F}^T\mathbf{F}$。</em></p>
+<details markdown="block">
+   
+
+<summary>答案</summary>
+
+
+   a) $J = \det(\mathbf{F}) = 2 \times 1 - 0.5 \times 0 = 2$（体积膨胀2倍）
+
+   b) $\mathbf{C} = \mathbf{F}^T\mathbf{F} = \begin{bmatrix} 2 &amp; 0 \\ 0.5 &amp; 1 \end{bmatrix} \begin{bmatrix} 2 &amp; 0.5 \\ 0 &amp; 1 \end{bmatrix} = \begin{bmatrix} 4 &amp; 1 \\ 1 &amp; 1.25 \end{bmatrix}$
+
+   c) $\mathbf{E} = \frac{1}{2}(\mathbf{C} - \mathbf{I}) = \begin{bmatrix} 1.5 &amp; 0.5 \\ 0.5 &amp; 0.125 \end{bmatrix}$
+   </details>
+<ol start="3">
+<li><strong>CFL稳定性分析</strong>
+   对于杨氏模量 $E = 10^6$ Pa、密度 $\rho = 1000$ kg/m³ 的材料，网格间距 $h = 0.01$ m，计算最大允许时间步长（取CFL数 $C = 0.3$）。</li>
+</ol>
+<p><em>提示：声速 $c = \sqrt{E/\rho}$。</em></p>
+<details markdown="block">
+   
+
+<summary>答案</summary>
+
+
+   声速：$c = \sqrt{E/\rho} = \sqrt{10^6/1000} = 31.62$ m/s
+
+   最大时间步长：$\Delta t\_{\max} = C \cdot h/c = 0.3 \times 0.01/31.62 = 9.49 \times 10^{-5}$ s
+   </details>
+<h3 id="_5">挑战题</h3>
+<ol start="4">
+<li><strong>能量守恒分析</strong>
+   证明在无外力和无耗散的情况下，显式MPM的总能量（动能+势能）在一个时间步内的变化为 $O(\Delta t^2)$。</li>
+</ol>
+<p><em>提示：考虑辛结构和中点法则。</em></p>
+<details markdown="block">
+   
+
+<summary>答案</summary>
+
+
+   总能量 $E = T + V$，其中动能 $T = \frac{1}{2}\sum\_p m\_p ||\mathbf{v}\_p||^2$，势能 $V = \sum\_p V\_p \psi(\mathbf{F}\_p)$。
+
+   在一个时间步内：
+
+   - 速度更新引入 $O(\Delta t)$ 误差
+   - 位置更新引入额外 $O(\Delta t)$ 误差
+   - 总能量变化：$\Delta E = O(\Delta t^2)$
+
+   这表明MPM是近似能量守恒的。
+   </details>
+<ol start="5">
+<li><strong>MLS-MPM的理论分析</strong>
+   推导MLS-MPM中APIC矩阵 $\mathbf{C}_p$ 的更新公式，并说明其如何保持角动量守恒。</li>
+</ol>
+<p><em>提示：从最小二乘问题出发，考虑惯性张量的作用。</em></p>
+<details markdown="block">
+   
+
+<summary>答案</summary>
+
+
+   最小二乘问题：
+$$\min\_{\mathbf{c}\_0, \mathbf{C}\_1} \sum\_i w\_{ip} m\_i ||\mathbf{v}\_i - \mathbf{c}\_0 - \mathbf{C}\_1(\mathbf{x}\_i - \mathbf{x}\_p)||^2$$
+求导得到正规方程，解得：
+$$\mathbf{C}\_p = \left(\sum\_i w\_{ip} \mathbf{v}\_i \otimes (\mathbf{x}\_i - \mathbf{x}\_p)\right) \mathbf{D}\_p^{-1}$$
+
+   角动量 $\mathbf{L} = \sum\_p (\mathbf{x}\_p - \mathbf{x}\_c) \times m\_p \mathbf{v}\_p$ 在P2G和G2P过程中保持不变（忽略数值误差）。
+   </details>
+<ol start="6">
+<li><strong>多材料耦合</strong>
+   设计一个算法处理流固耦合问题，其中固体使用Neo-Hookean模型，流体使用不可压缩条件。讨论界面条件的处理。</li>
+</ol>
+<p><em>提示：考虑分离式求解和耦合约束。</em></p>
+<details markdown="block">
+   
+
+<summary>答案</summary>
+
+
+   算法框架：
+
+   1. 分别计算固体和流体的应力
+   2. 在网格上施加耦合条件：
+      - 速度连续：$\mathbf{v}\_{\text{solid}} = \mathbf{v}\_{\text{fluid}}$（界面处）
+      - 应力平衡：$\boldsymbol{\sigma}\_{\text{solid}} \cdot \mathbf{n} = -p\mathbf{n} + \boldsymbol{\tau}\_{\text{fluid}} \cdot \mathbf{n}$
+   3. 使用分数步法处理不可压缩性
+   4. 更新粒子状态
+
+   关键在于正确识别界面和施加约束。
+   </details>
+<h2 id="_6">常见陷阱与错误</h2>
+<ol>
+<li>
+<p><strong>数值不稳定</strong>
+   - 错误：使用过大的时间步长导致爆炸
+   - 解决：严格遵守CFL条件，考虑自适应时间步</p>
+</li>
+<li>
+<p><strong>质量损失</strong>
+   - 错误：网格节点质量过小导致除零
+   - 解决：设置最小质量阈值 $m_{\min} = 10^{-10} m_{\text{avg}}$</p>
+</li>
+<li>
+<p><strong>应力振荡</strong>
+   - 错误：使用线性形函数导致力的不连续
+   - 解决：改用B样条或GIMP形函数</p>
+</li>
+<li>
+<p><strong>内存泄漏</strong>
+   - 错误：动态分配网格但忘记释放
+   - 解决：使用稀疏数据结构和智能指针</p>
+</li>
+<li>
+<p><strong>并行化错误</strong>
+   - 错误：P2G阶段的竞争条件
+   - 解决：使用原子操作或着色算法</p>
+</li>
+<li>
+<p><strong>边界处理不当</strong>
+   - 错误：粒子穿透固定边界
+   - 解决：正确实现碰撞检测和响应</p>
+</li>
+</ol>
+<h2 id="_7">最佳实践检查清单</h2>
+<h3 id="_8">算法设计</h3>
+<ul>
+<li>[ ] 选择合适的形函数（精度vs效率权衡）</li>
+<li>[ ] 实现稳定的时间积分（CFL条件）</li>
+<li>[ ] 正确处理边界条件</li>
+<li>[ ] 考虑能量守恒性质</li>
+</ul>
+<h3 id="_9">数值稳定性</h3>
+<ul>
+<li>[ ] 避免极小质量的除法</li>
+<li>[ ] 限制变形梯度的条件数</li>
+<li>[ ] 使用适当的浮点精度</li>
+<li>[ ] 实现数值阻尼（如需要）</li>
+</ul>
+<h3 id="_10">性能优化</h3>
+<ul>
+<li>[ ] 利用空间局部性（粒子排序）</li>
+<li>[ ] 实现稀疏网格结构</li>
+<li>[ ] 考虑GPU并行化</li>
+<li>[ ] 使用高效的数据结构</li>
+</ul>
+<h3 id="_11">物理正确性</h3>
+<ul>
+<li>[ ] 验证质量守恒</li>
+<li>[ ] 检查动量守恒</li>
+<li>[ ] 测试能量行为</li>
+<li>[ ] 验证本构模型实现</li>
+</ul>
+<h3 id="_12">代码质量</h3>
+<ul>
+<li>[ ] 模块化设计（分离物理和数值）</li>
+<li>[ ] 充分的单元测试</li>
+<li>[ ] 性能基准测试</li>
+<li>[ ] 清晰的文档和注释</li>
+</ul>
+<h3 id="_13">调试建议</h3>
+<ul>
+<li>[ ] 实现可视化调试工具</li>
+<li>[ ] 添加物理量监控（质量、动量、能量）</li>
+<li>[ ] 使用简单测试案例验证</li>
+<li>[ ] 逐步增加复杂度</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="./chapter11.html" class="nav-link prev">← 第11章：动画与物理模拟</a><a href="./CLAUDE.html" class="nav-link next">Untitled →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

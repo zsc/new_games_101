@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Untitled</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class=""><a href="./index.html">计算机图形学高级教程</a></li><li class=""><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class=""><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class=""><a href="./chapter6.html">第6章：几何表示</a></li><li class=""><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class=""><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class=""><a href="./chapter12.html">第12章：物质点法</a></li><li class="active"><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <p>（交流可以用英文，本文档中文，保留这句）</p>
+<h2 id="_1">项目目标</h2>
+<p>编写一份计算机图形学中文教程markdown，要包含大量的习题和参考答案（答案默认折叠）。能数学算尽量数学算，合适时提及相关函数名但不写代码。
+内容组织参考 old.md
+公式都用 latex
+文件组织是 index.md + chapter1.md + ...</p>
+<h2 id="audience">Audience</h2>
+<p>verteran programmer and AI scientists</p>
+<h2 id="_2">章节结构要求</h2>
+<p>每个章节应包含：</p>
+<ol>
+<li><strong>开篇段落</strong>：简要介绍本章内容和学习目标</li>
+<li><strong>本章小结</strong>：总结关键概念和公式</li>
+<li><strong>练习题</strong>：
+   - 每章包含6-8道练习题
+   - 50%基础题（帮助熟悉材料）
+   - 50%挑战题（包括开放性思考题）
+   - 每题提供提示（Hint）
+   - 答案默认折叠，不包含代码</li>
+<li><strong>常见陷阱与错误</strong> (Gotchas)：每章包含该主题的常见错误和调试技巧</li>
+<li><strong>最佳实践检查清单</strong>：每章末尾提供设计审查要点</li>
+</ol>
+            </article>
+            
+            <nav class="page-nav"><a href="./chapter12.html" class="nav-link prev">← 第12章：物质点法</a><a href="./old.html" class="nav-link next">Untitled →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

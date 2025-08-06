@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第10章：成像系统</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class=""><a href="./index.html">计算机图形学高级教程</a></li><li class=""><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class=""><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class=""><a href="./chapter6.html">第6章：几何表示</a></li><li class=""><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class="active"><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class=""><a href="./chapter12.html">第12章：物质点法</a></li><li class=""><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="10">第10章：成像系统</h1>
+<p>本章深入探讨计算机图形学中的成像系统，从物理相机模型到人类视觉感知。我们将学习如何准确模拟真实世界的成像过程，理解光场的数学表示，以及颜色科学的基础理论。这些知识对于创建真实感图像、设计高级渲染算法以及理解人类视觉系统至关重要。</p>
+<h2 id="101">10.1 相机与透镜模型</h2>
+<h3 id="1011">10.1.1 针孔相机模型</h3>
+<p>针孔相机是最简单的成像模型，虽然在现实中很少使用，但它是理解复杂相机系统的基础。</p>
+<p><strong>基本原理</strong>：</p>
+<ul>
+<li>光线通过一个无限小的孔径（针孔）投射到成像平面</li>
+<li>成像关系：$\frac{h_i}{h_o} = \frac{d_i}{d_o}$</li>
+<li>$h_i$：像高，$h_o$：物高</li>
+<li>$d_i$：像距，$d_o$：物距</li>
+<li>成像特点：景深无限大，但光通量极小</li>
+</ul>
+<p><strong>几何光学基础</strong>：
+针孔成像遵循直线传播原理。考虑一个位于原点的针孔，成像平面位于$z = -f$处：</p>
+<ul>
+<li>物点：$\mathbf{P} = (X, Y, Z)$，其中$Z &gt; 0$</li>
+<li>像点：$\mathbf{p} = (x, y, -f)$</li>
+<li>相似三角形关系：$\frac{x}{-f} = \frac{X}{Z}$，$\frac{y}{-f} = \frac{Y}{Z}$</li>
+</ul>
+<p>解得像点坐标：
+$$x = -f\frac{X}{Z}, \quad y = -f\frac{Y}{Z}$$
+负号表示成像是倒立的。为了方便，通常将成像平面放在$z = f$前方，得到：
+$$x = f\frac{X}{Z}, \quad y = f\frac{Y}{Z}$$
+<strong>透视投影的数学描述</strong>：
+世界坐标系中的点 $\mathbf{X}_w = [X_w, Y_w, Z_w]^T$ 需要先变换到相机坐标系：
+$$\mathbf{X}_c = \mathbf{R}\mathbf{X}_w + \mathbf{t}$$
+然后投影到图像平面：
+$$\begin{aligned}
+x &amp;= f\frac{X_c}{Z_c} \
+y &amp;= f\frac{Y_c}{Z_c}
+\end{aligned}$$
+其中 $(X_c, Y_c, Z_c)$ 是相机坐标系中的坐标。</p>
+<p><strong>归一化图像平面</strong>：
+定义归一化图像平面在$z = 1$处，归一化坐标为：
+$$x_n = \frac{X_c}{Z_c}, \quad y_n = \frac{Y_c}{Z_c}$$
+物理图像坐标与归一化坐标的关系：
+$$x = f \cdot x_n, \quad y = f \cdot y_n$$
+<strong>像素坐标系</strong>：
+实际数字图像使用离散的像素坐标$(u, v)$：
+$$\begin{aligned}
+u &amp;= \frac{x}{p_x} + c_x = \frac{f}{p_x} \cdot \frac{X_c}{Z_c} + c_x \
+v &amp;= \frac{y}{p_y} + c_y = \frac{f}{p_y} \cdot \frac{Y_c}{Z_c} + c_y
+\end{aligned}$$
+其中：</p>
+<ul>
+<li>$p_x, p_y$：像素的物理尺寸（mm/pixel）</li>
+<li>$c_x, c_y$：主点的像素坐标</li>
+<li>$f_x = f/p_x, f_y = f/p_y$：以像素为单位的焦距</li>
+</ul>
+<p><strong>齐次坐标表示</strong>：
+使用齐次坐标，投影过程可以表示为线性变换：
+$$s\begin{bmatrix} u \ v \ 1 \end{bmatrix} = \mathbf{K}[\mathbf{R}|\mathbf{t}]\begin{bmatrix} X_w \ Y_w \ Z_w \ 1 \end{bmatrix}$$
+其中 $s = Z_c$ 是尺度因子。</p>
+<p><strong>投影矩阵分解</strong>：
+$$\mathbf{P} = \mathbf{K}[\mathbf{R}|\mathbf{t}] = \mathbf{K}\mathbf{R}[\mathbf{I}|\mathbf{R}^T\mathbf{t}]$$
+其中内参矩阵：
+$$\mathbf{K} = \begin{bmatrix}
+f_x &amp; s &amp; c_x \
+0 &amp; f_y &amp; c_y \
+0 &amp; 0 &amp; 1
+\end{bmatrix}$$</p>
+<ul>
+<li>$f_x, f_y$：焦距（像素单位）</li>
+<li>$c_x, c_y$：主点坐标</li>
+<li>$s$：扭曲参数（skew），表示像素坐标轴的非正交性，现代相机通常为0</li>
+</ul>
+<p><strong>外参矩阵</strong>：</p>
+<ul>
+<li>$\mathbf{R}$：3×3旋转矩阵（正交矩阵，$\det(\mathbf{R}) = 1$）</li>
+<li>$\mathbf{t}$：3×1平移向量</li>
+<li>总共6个自由度：3个旋转+3个平移</li>
+</ul>
+<p><strong>投影矩阵的性质</strong>：</p>
+<ol>
+<li><strong>维度</strong>：$\mathbf{P}$是3×4矩阵，秩为3</li>
+<li><strong>零空间</strong>：维度为1，对应相机中心$\mathbf{C}$，满足$\mathbf{P}\mathbf{C} = \mathbf{0}$</li>
+<li><strong>相机中心</strong>：$\mathbf{C} = -\mathbf{R}^T\mathbf{t}$（世界坐标系）</li>
+<li><strong>主轴方向</strong>：相机的光轴方向为$\mathbf{R}^T[0, 0, 1]^T$</li>
+<li><strong>保持直线</strong>：3D直线投影后仍为2D直线（或点）</li>
+<li><strong>不保持平行</strong>：平行线投影后会相交于消失点（除非平行于成像平面）</li>
+</ol>
+<p><strong>逆投影（反投影）</strong>：
+给定图像点$(u, v)$，对应的3D射线方向（相机坐标系）：
+$$\mathbf{d}_c = \mathbf{K}^{-1}\begin{bmatrix} u \ v \ 1 \end{bmatrix}$$
+世界坐标系中的射线：
+$$\mathbf{X}_w(\lambda) = \mathbf{C} + \lambda \mathbf{R}^T\mathbf{d}_c$$
+其中$\lambda &gt; 0$是射线参数。</p>
+<p><strong>消失点与消失线</strong>：</p>
+<ul>
+<li><strong>消失点</strong>：平行线在图像中的交点</li>
+<li>
+<p>世界坐标系中方向为$\mathbf{d}$的平行线，其消失点为：
+$$\mathbf{v} = \mathbf{K}\mathbf{R}\mathbf{d}$$</p>
+</li>
+<li>
+<p><strong>消失线</strong>：平行平面的像，由该平面所有方向的消失点组成</p>
+</li>
+<li>地平线是所有水平方向消失点的集合</li>
+</ul>
+<p><strong>针孔相机的局限性</strong>：</p>
+<ol>
+<li><strong>光通量</strong>：孔径极小，进光量不足，需要长时间曝光</li>
+<li><strong>衍射效应</strong>：孔径过小时衍射会降低图像质量</li>
+<li><strong>最优孔径</strong>：约为$d_{opt} = \sqrt{2.44\lambda L}$，其中$\lambda$是波长，$L$是物距</li>
+<li><strong>实用性</strong>：实际相机使用透镜系统增加进光量</li>
+</ol>
+<h3 id="1012">10.1.2 薄透镜模型</h3>
+<p>薄透镜模型更接近真实相机，引入了有限孔径和景深效果。</p>
+<p><strong>透镜制造者方程</strong>：
+对于半径为$R_1$和$R_2$的两个球面，折射率为$n$的薄透镜：
+$$\frac{1}{f} = (n-1)\left(\frac{1}{R_1} - \frac{1}{R_2}\right)$$
+约定：凸面半径为正，凹面半径为负。</p>
+<p><strong>高斯透镜方程</strong>：
+$$\frac{1}{f} = \frac{1}{d_o} + \frac{1}{d_i}$$
+这个方程描述了物距、像距和焦距之间的基本关系。</p>
+<p><strong>特殊情况</strong>：</p>
+<ul>
+<li>无穷远物体：$d_o \to \infty \Rightarrow d_i = f$</li>
+<li>物体在焦点：$d_o = f \Rightarrow d_i \to \infty$（平行光出射）</li>
+<li>物体在2倍焦距：$d_o = 2f \Rightarrow d_i = 2f$（等大成像）</li>
+</ul>
+<p><strong>牛顿形式</strong>：
+以焦点为参考：
+$$x \cdot x' = f^2$$
+其中$x = d_o - f$，$x' = d_i - f$。</p>
+<p><strong>横向放大率</strong>：
+$$M = -\frac{d_i}{d_o} = \frac{f}{f - d_o} = \frac{d_i - f}{f}$$
+负号表示像是倒立的。</p>
+<p><strong>角放大率</strong>：
+$$\gamma = \frac{\tan\theta'}{\tan\theta} = \frac{d_o}{d_i} = -\frac{1}{M}$$
+其中$\theta$和$\theta'$是入射和出射光线与光轴的夹角。</p>
+<p><strong>光圈与f数</strong>：</p>
+<ul>
+<li>光圈直径：$D = \frac{f}{N}$</li>
+<li>f数（f-number）：$N = \frac{f}{D}$</li>
+<li>常见f数序列：f/1.4, f/2, f/2.8, f/4, f/5.6, f/8, f/11, f/16</li>
+<li>每一级相差$\sqrt{2}$倍，光通量相差2倍</li>
+</ul>
+<p><strong>有效f数</strong>：
+当对焦在有限距离时：
+$$N_{eff} = N(1 + M) = N\left(1 + \frac{d_i - f}{f}\right)$$
+这在微距摄影中特别重要。</p>
+<p><strong>景深的精确计算</strong>：
+景深是指在成像平面上产生可接受清晰图像的物体深度范围。</p>
+<p><strong>超焦距</strong>：
+$$H = \frac{f^2}{Nc} + f \approx \frac{f^2}{Nc}$$
+对于大多数情况，$f \ll \frac{f^2}{Nc}$，所以可以简化。</p>
+<p><strong>近景深界限</strong>：
+$$D_n = \frac{d(H-f)}{H + d - 2f} \approx \frac{Hd}{H + d}$$
+<strong>远景深界限</strong>：
+$$D_f = \frac{d(H-f)}{H - d} \approx \frac{Hd}{H - d}$$
+<strong>景深总量</strong>：
+$$\text{DOF} = D_f - D_n = \frac{2Hd^2(H-f)}{H^2 - d^2} \approx \frac{2Hd^2}{H^2 - d^2}$$
+<strong>特殊情况</strong>：</p>
+<ol>
+<li>当$d = H$时，$D_f \to \infty$，远景深无限远</li>
+<li>当$d \ll H$时，$\text{DOF} \approx \frac{2d^2Nc}{f^2}$</li>
+<li>当$d \gg H$时，$\text{DOF} \approx \frac{2HNc}{f}$</li>
+</ol>
+<p><strong>景深的实用规则</strong>：</p>
+<ol>
+<li>景深与光圈数成正比：$\text{DOF} \propto N$</li>
+<li>景深与焦距平方成反比：$\text{DOF} \propto \frac{1}{f^2}$（远距离）</li>
+<li>景深与对焦距离平方成正比：$\text{DOF} \propto d^2$（近距离）</li>
+</ol>
+<p><strong>弥散圆与模糊</strong>：
+对于物距为$d_o'$的点，其在对焦平面上形成的弥散圆直径：
+$$b = \frac{D \cdot |d_i - d_i'|}{d_i'} = \frac{f}{N} \cdot \left|\frac{d_i}{d_i'} - 1\right|$$
+使用透镜方程：
+$$b = \frac{f^2}{N} \cdot \left|\frac{1}{d_o} - \frac{1}{d_o'}\right|$$
+<strong>弥散圆的角度大小</strong>：
+从物体看，弥散圆的角度大小为：
+$$\theta_b = \frac{b \cdot d_o}{d_i \cdot d_o'} = \frac{D}{d_o'} \cdot \left|1 - \frac{d_o'}{d_o}\right|$$
+<strong>点扩散函数（PSF）</strong>：
+理想薄透镜的PSF在焦外是均匀圆盘：
+$$\text{PSF}(x, y) = \begin{cases}
+\frac{1}{\pi (b/2)^2} &amp; \text{if } x^2 + y^2 \leq (b/2)^2 \
+0 &amp; \text{otherwise}
+\end{cases}$$
+<strong>实际应用考虑</strong>：</p>
+<ol>
+<li><strong>弥散圆容许度</strong>：通常取传感器对角线的$1/1500$到$1/1000$</li>
+<li><strong>像素尺寸限制</strong>：弥散圆小于2倍像素尺寸时被认为清晰</li>
+<li><strong>衍射极限</strong>：当$N &gt; \frac{f}{1.22\lambda}$时，衍射效应超过弥散圆</li>
+</ol>
+<h3 id="1013">10.1.3 厚透镜与透镜组</h3>
+<p>实际相机镜头由多个透镜元件组成，需要考虑更复杂的光学系统。</p>
+<p><strong>基主点系统</strong>：
+厚透镜的完整描述需要六个基主点：</p>
+<ul>
+<li>前主点 $H$ 和后主点 $H'$</li>
+<li>前焦点 $F$ 和后焦点 $F'$</li>
+<li>前节点 $N$ 和后节点 $N'$</li>
+</ul>
+<p><strong>主点和节点的物理意义</strong>：</p>
+<ul>
+<li><strong>主点</strong>：横向放大率为+1的共轭点</li>
+<li>通过$H$的入射光线平行于通过$H'$的出射光线</li>
+<li>满足：$h' = h$（物高等于像高）</li>
+<li><strong>节点</strong>：角放大率为+1的共轭点</li>
+<li>通过$N$的入射光线与通过$N'$的出射光线平行</li>
+<li>满足：$\tan\theta' = \tan\theta$</li>
+</ul>
+<p><strong>重要性质</strong>：</p>
+<ol>
+<li>当前后介质相同时（如空气），主点和节点重合</li>
+<li>浸没透镜中，$HN = \frac{n_1 - n_3}{n_3}f$，$H'N' = \frac{n_3 - n_1}{n_1}f'$</li>
+</ol>
+<p><strong>厚透镜的基本参数</strong>：
+对于半径为$R_1$和$R_2$，厚度为$t$，折射率为$n$的厚透镜：</p>
+<p><strong>光焦度</strong>：
+$$P = P_1 + P_2 - \frac{t}{n}P_1 P_2$$
+其中：</p>
+<ul>
+<li>$P_1 = \frac{n-1}{R_1}$：第一面光焦度</li>
+<li>$P_2 = \frac{1-n}{R_2}$：第二面光焦度</li>
+</ul>
+<p><strong>等效焦距</strong>：
+$$f = \frac{1}{P} = \frac{nR_1R_2}{(n-1)[n(R_2-R_1) + t(n-1)]}$$
+<strong>主点位置</strong>：</p>
+<ul>
+<li>前主点到第一面：$\ell_H = -\frac{f \cdot t(n-1)}{nR_2}$</li>
+<li>后主点到第二面：$\ell_{H'} = \frac{f \cdot t(n-1)}{nR_1}$</li>
+</ul>
+<p><strong>组合透镜系统的矩阵方法</strong>：
+使用ABCD矩阵（光线传输矩阵）：
+$$\begin{bmatrix} y_2 \ \theta_2 \end{bmatrix} = \begin{bmatrix} A &amp; B \ C &amp; D \end{bmatrix} \begin{bmatrix} y_1 \ \theta_1 \end{bmatrix}$$
+<strong>基本元件的ABCD矩阵</strong>：</p>
+<ol>
+<li>
+<p><strong>自由空间传播</strong>：
+$$\mathbf{M}_{\text{space}} = \begin{bmatrix} 1 &amp; d \ 0 &amp; 1 \end{bmatrix}$$</p>
+</li>
+<li>
+<p><strong>薄透镜</strong>：
+$$\mathbf{M}_{\text{lens}} = \begin{bmatrix} 1 &amp; 0 \ -1/f &amp; 1 \end{bmatrix}$$</p>
+</li>
+<li>
+<p><strong>球面折射</strong>：
+$$\mathbf{M}_{\text{refr}} = \begin{bmatrix} 1 &amp; 0 \ \frac{n_1-n_2}{R n_2} &amp; \frac{n_1}{n_2} \end{bmatrix}$$
+<strong>系统矩阵的级联</strong>：
+$$\mathbf{M}_{\text{total}} = \mathbf{M}_n \cdot \mathbf{M}_{n-1} \cdot ... \cdot \mathbf{M}_2 \cdot \mathbf{M}_1$$
+<strong>从系统矩阵提取参数</strong>：</p>
+</li>
+</ol>
+<ul>
+<li>等效焦距：$f = -\frac{1}{C}$</li>
+<li>前主点位置：$\ell_H = \frac{D-1}{C}$</li>
+<li>后主点位置：$\ell_{H'} = \frac{1-A}{C}$</li>
+<li>前焦距：$\text{FFL} = \frac{D}{C}$</li>
+<li>后焦距：$\text{BFL} = -\frac{A}{C}$</li>
+</ul>
+<p><strong>两透镜系统的详细分析</strong>：
+两个焦距为$f_1$和$f_2$，间距为$d$的薄透镜：
+$$\mathbf{M} = \begin{bmatrix} 1 &amp; 0 \ -1/f_2 &amp; 1 \end{bmatrix} \begin{bmatrix} 1 &amp; d \ 0 &amp; 1 \end{bmatrix} \begin{bmatrix} 1 &amp; 0 \ -1/f_1 &amp; 1 \end{bmatrix}$$</p>
+<p>$$= \begin{bmatrix} 1-d/f_1 &amp; d \ -1/f_1-1/f_2+d/(f_1f_2) &amp; 1-d/f_2 \end{bmatrix}$$
+<strong>有效焦距</strong>：
+$$\frac{1}{f} = \frac{1}{f_1} + \frac{1}{f_2} - \frac{d}{f_1 f_2}$$
+<strong>主点位置</strong>：</p>
+<ul>
+<li>前主点到第一透镜：$\text{H}_1 = -\frac{fd}{f_2}$</li>
+<li>后主点到第二透镜：$\text{H}_2 = \frac{fd}{f_1}$</li>
+</ul>
+<p><strong>焦距位置</strong>：</p>
+<ul>
+<li>前焦距（FFL）：$\text{FFL} = f_1 \frac{f_2 - d}{f_1 + f_2 - d}$</li>
+<li>后焦距（BFL）：$\text{BFL} = f_2 \frac{f_1 - d}{f_1 + f_2 - d}$</li>
+</ul>
+<p><strong>特殊配置</strong>：</p>
+<ol>
+<li>
+<p><strong>望远镜配置</strong>：$d = f_1 + f_2$
+   - 系统焦距：$f \to \infty$（无焦系统）
+   - 角放大率：$\gamma = -\frac{f_2}{f_1}$</p>
+</li>
+<li>
+<p><strong>显微镜配置</strong>：$d &gt; f_1 + f_2$
+   - 虚像放大
+   - 总放大率：$M = M_1 \times M_2$</p>
+</li>
+<li>
+<p><strong>4f系统</strong>：$d = 2(f_1 + f_2)$，且$f_1 = f_2 = f$
+   - 单位放大率（$M = -1$）
+   - 用于僅里叶变换和空间滤波</p>
+</li>
+</ol>
+<p><strong>多元件系统的设计考虑</strong>：</p>
+<ol>
+<li><strong>表面数量优化</strong>：每个空气-玻璃界面都会引入反射损失</li>
+<li><strong>玻璃选择</strong>：不同折射率和色散特性的组合</li>
+<li><strong>机械约束</strong>：总长度、重量、成本的平衡</li>
+</ol>
+<p><strong>像差类型与特征</strong>：</p>
+<ol>
+<li>
+<p><strong>球差（Spherical Aberration）</strong>
+   - 不同入射高度的光线聚焦位置不同
+   - 纵向球差：$\Delta s' = s'_{\text{marginal}} - s'_{\text{paraxial}}$
+   - 可通过非球面透镜或透镜组合校正</p>
+</li>
+<li>
+<p><strong>彗差（Coma）</strong>
+   - 离轴点光源成像为彗星状
+   - 与入射角的三次方成正比
+   - 正弦条件：$n y \sin u = n' y' \sin u'$</p>
+</li>
+<li>
+<p><strong>像散（Astigmatism）</strong>
+   - 子午面和弧矢面的聚焦位置不同
+   - 像散差：$\Delta s' = s'_T - s'_S$
+   - 产生椭圆形的点扩散函数</p>
+</li>
+<li>
+<p><strong>场曲（Field Curvature）</strong>
+   - 平面物体成像在曲面上
+   - Petzval曲率：$\rho_P = \sum \frac{1}{n_i f_i}$
+   - 可通过场镜校正</p>
+</li>
+<li>
+<p><strong>畸变（Distortion）</strong>
+   - 影响几何形状但不影响清晰度
+   - 桶形畸变：$r' = r(1 - kr^2)$
+   - 枕形畸变：$r' = r(1 + kr^2)$</p>
+</li>
+<li>
+<p><strong>色差（Chromatic Aberration）</strong>
+   - 纵向色差：不同波长焦距不同
+   - 横向色差：不同波长放大率不同
+   - 使用不同色散材料组合消除</p>
+</li>
+</ol>
+<p><strong>Seidel像差系数</strong>：
+对于三阶像差，可用五个Seidel系数描述：</p>
+<ul>
+<li>$S_I$：球差系数</li>
+<li>$S_{II}$：彗差系数  </li>
+<li>$S_{III}$：像散系数</li>
+<li>$S_{IV}$：场曲系数</li>
+<li>$S_V$：畸变系数</li>
+</ul>
+<h3 id="1014">10.1.4 径向畸变模型</h3>
+<p>实际镜头的畸变主要包括径向和切向畸变，这些畸变需要在图像处理中进行校正。</p>
+<p><strong>径向畸变</strong>：
+由透镜的径向对称性引起，使得图像中心和边缘的放大率不同。
+$$\begin{aligned}
+x_d &amp;= x_u(1 + k_1r^2 + k_2r^4 + k_3r^6) \
+y_d &amp;= y_u(1 + k_1r^2 + k_2r^4 + k_3r^6)
+\end{aligned}$$</p>
+<ul>
+<li>$k_1 &lt; 0$：桶形畸变（barrel distortion）</li>
+<li>$k_1 &gt; 0$：枕形畸变（pincushion distortion）</li>
+<li>通常$|k_1| \gg |k_2| \gg |k_3|$</li>
+</ul>
+<p><strong>切向畸变</strong>：
+由透镜和成像平面不完全平行引起，也称为偏心畸变。
+$$\begin{aligned}
+x_d &amp;= x_u + [2p_1x_uy_u + p_2(r^2 + 2x_u^2)] \
+y_d &amp;= y_u + [p_1(r^2 + 2y_u^2) + 2p_2x_uy_u]
+\end{aligned}$$
+其中 $r^2 = x_u^2 + y_u^2$，$(x_u, y_u)$ 是归一化的未畸变坐标。</p>
+<p><strong>完整的畸变模型</strong>：
+组合径向和切向畸变：
+$$\begin{aligned}
+x_d &amp;= x_u(1 + k_1r^2 + k_2r^4 + k_3r^6) + [2p_1x_uy_u + p_2(r^2 + 2x_u^2)] \
+y_d &amp;= y_u(1 + k_1r^2 + k_2r^4 + k_3r^6) + [p_1(r^2 + 2y_u^2) + 2p_2x_uy_u]
+\end{aligned}$$
+<strong>畸变校正流程</strong>：</p>
+<ol>
+<li>将像素坐标转换为归一化坐标：$(x_u, y_u) = ((u-c_x)/f_x, (v-c_y)/f_y)$</li>
+<li>计算径向距离：$r^2 = x_u^2 + y_u^2$</li>
+<li>应用畸变模型得到$(x_d, y_d)$</li>
+<li>转换回像素坐标：$(u_d, v_d) = (f_x x_d + c_x, f_y y_d + c_y)$</li>
+</ol>
+<p><strong>高级畸变模型</strong>：</p>
+<ul>
+<li>棱镜畸变（thin prism distortion）：考虑更高阶的切向畸变</li>
+<li>有理函数模型：使用有理函数更精确地建模畸变</li>
+<li>分段线性模型：对不同半径区域使用不同参数</li>
+</ul>
+<h2 id="102">10.2 光场理论</h2>
+<h3 id="1021">10.2.1 光场的数学表示</h3>
+<p>光场（Light Field）描述空间中所有位置、所有方向的光线分布。这个概念最早由Faraday在1846年提出，现代计算机图形学中广泛应用于渲染和摄影。</p>
+<p><strong>5D全光函数</strong>：
+$$L(x, y, z, \theta, \phi)$$
+表示空间位置 $(x, y, z)$ 处方向 $(\theta, \phi)$ 的光线辐射度。</p>
+<p><strong>其他表示方式</strong>：</p>
+<ul>
+<li>7D全光函数：$L(x, y, z, \theta, \phi, \lambda, t)$</li>
+<li>增加波长$\lambda$和时间$t$维度</li>
+<li>完整描述光的所有属性</li>
+</ul>
+<p><strong>4D光场参数化</strong>（双平面参数化）：
+在自由空间中（无遮挡），光线可以用两个平面上的交点表示：
+$$L(u, v, s, t)$$
+其中 $(u, v)$ 和 $(s, t)$ 分别是两个平行平面上的坐标。</p>
+<p><strong>光线方程</strong>：
+从$(u, v, 0)$到$(s, t, 1)$的光线可以参数化为：
+$$\mathbf{r}(\tau) = (1-\tau)(u, v, 0) + \tau(s, t, 1)$$
+<strong>其他参数化方式</strong>：</p>
+<ol>
+<li><strong>球面参数化</strong>：使用球面坐标表示光线方向</li>
+<li><strong>平面+半球参数化</strong>：适合表示表面光场</li>
+<li><strong>相机内参数化</strong>：使用相机参数表示多视点图像</li>
+</ol>
+<p><strong>光场的性质</strong>：</p>
+<ol>
+<li><strong>常数性</strong>：在自由空间中，沿光线辐射度不变</li>
+<li><strong>对称性</strong>：$L(u, v, s, t) = L(s, t, u, v)$</li>
+<li><strong>线性性</strong>：多个光源的光场可以叠加</li>
+</ol>
+<h3 id="1022">10.2.2 光场采样与重建</h3>
+<p><strong>奈奎斯特采样定理应用</strong>：
+为了完整重建光场，需要满足空间和角度的采样要求。</p>
+<ul>
+<li>角度采样率：$\Delta\theta \leq \frac{\lambda}{D}$</li>
+<li>空间采样率：$\Delta x \leq \frac{\lambda z}{D}$</li>
+</ul>
+<p>其中 $\lambda$ 是波长，$D$ 是孔径，$z$ 是深度。</p>
+<p><strong>采样密度分析</strong>：</p>
+<ul>
+<li>总采样数：$N = N_x \times N_y \times N_u \times N_v$</li>
+<li>空间-角度分辨率权衡：$N_x N_y \times N_u N_v = \text{const}$</li>
+<li>景深与角度分辨率关系：$\Delta z \propto \frac{1}{N_u}$</li>
+</ul>
+<p><strong>光场相机原理</strong>：</p>
+<p><strong>传统设计</strong>：</p>
+<ul>
+<li>主透镜后放置微透镜阵列</li>
+<li>每个微透镜对应多个传感器像素</li>
+<li>可以记录光线的位置和方向信息</li>
+</ul>
+<p><strong>光场采集的数学模型</strong>：
+微透镜下的像素$(p, q)$记录的光场值：
+$$I(i, j, p, q) = \int\int L(i\Delta_u, j\Delta_v, p\Delta_s, q\Delta_t) \cdot A(p, q) \, ds \, dt$$
+其中$(i, j)$是微透镜索引，$A(p, q)$是像素响应函数。</p>
+<p><strong>其他采集方法</strong>：</p>
+<ol>
+<li><strong>相机阵列</strong>：使用多个相机从不同视点拍摄</li>
+<li><strong>移动相机</strong>：单相机在不同位置拍摄</li>
+<li><strong>编码孔径</strong>：使用特殊图案的孔径掩模</li>
+<li><strong>时间复用</strong>：使用可编程孔径或快门</li>
+</ol>
+<p><strong>光场重建算法</strong>：</p>
+<ol>
+<li>
+<p><strong>插值方法</strong>：
+   - 最近邻插值
+   - 双线性插值
+   - 高阶样条插值</p>
+</li>
+<li>
+<p><strong>基于深度的重建</strong>：
+   - 估计场景深度
+   - 根据深度投影光线
+   - 处理遮挡和边界</p>
+</li>
+<li>
+<p><strong>压缩感知重建</strong>：
+   - 利用光场的稀疏性
+   - 使用字典学习或深度学习</p>
+</li>
+</ol>
+<h3 id="1023">10.2.3 光场渲染与应用</h3>
+<p><strong>数字重聚焦</strong>：
+光场最重要的应用之一是后期重聚焦。通过对光场进行剪切和积分操作：
+$$I_\alpha(x', y') = \iint L\left(\frac{x'}{\alpha}, \frac{y'}{\alpha}, x' - u\frac{1-\alpha}{\alpha}, y' - v\frac{1-\alpha}{\alpha}\right) du dv$$
+其中 $\alpha$ 是重聚焦参数：</p>
+<ul>
+<li>$\alpha = 1$：聚焦在主透镜平面</li>
+<li>$\alpha &gt; 1$：聚焦在更远处</li>
+<li>$\alpha &lt; 1$：聚焦在更近处</li>
+</ul>
+<p><strong>剪切变换的几何解释</strong>：
+重聚焦操作对应于光场的剪切变换：
+$$\begin{bmatrix} u' \ v' \ s' \ t' \end{bmatrix} = \begin{bmatrix} 1 &amp; 0 &amp; \alpha &amp; 0 \ 0 &amp; 1 &amp; 0 &amp; \alpha \ 0 &amp; 0 &amp; 1 &amp; 0 \ 0 &amp; 0 &amp; 0 &amp; 1 \end{bmatrix} \begin{bmatrix} u \ v \ s \ t \end{bmatrix}$$
+<strong>合成孔径</strong>：
+通过组合不同视角的子图像，可以：</p>
+<ul>
+<li>改变景深：选择不同的$(u, v)$范围</li>
+<li>透视遮挡物：利用视差信息</li>
+<li>产生立体视差：选择左右视点</li>
+</ul>
+<p><strong>孔径函数设计</strong>：</p>
+<ul>
+<li>圆形孔径：传统模糊效果</li>
+<li>心形孔径：艺术效果</li>
+<li>编码孔径：深度估计</li>
+</ul>
+<p><strong>傅里叶切片定理</strong>：
+光场的傅里叶变换中，不同深度的重聚焦图像对应于4D频域中的2D切片。</p>
+<p><strong>定理陈述</strong>：
+重聚焦图像的频谱是光场频谱的一个2D切片：
+$$\hat{I}_\alpha(\Omega_x, \Omega_y) = \hat{L}(\Omega_x, \Omega_y, -\alpha\Omega_x, -\alpha\Omega_y)$$
+<strong>应用意义</strong>：</p>
+<ol>
+<li>频域滤波可以实现特定深度的增强</li>
+<li>快速重聚焦算法设计</li>
+<li>深度估计的频域方法</li>
+</ol>
+<p><strong>其他光场应用</strong>：</p>
+<ol>
+<li><strong>视点合成</strong>：生成新的视角图像</li>
+<li><strong>超分辨率</strong>：利用多视角信息提高分辨率</li>
+<li><strong>材质识别</strong>：利用BRDF信息</li>
+<li><strong>三维重建</strong>：从光场恢复几何</li>
+</ol>
+<h3 id="1024">10.2.4 光场压缩与传输</h3>
+<p>光场数据量巨大，高效的压缩和传输方法至关重要。</p>
+<p><strong>数据量分析</strong>：</p>
+<ul>
+<li>典型光场：$1000 \times 1000 \times 10 \times 10 = 10^8$个样本</li>
+<li>每个样本3个颜色通道，16位精度</li>
+<li>总数据量：~600MB（未压缩）</li>
+</ul>
+<p><strong>维度降低策略</strong>：</p>
+<ol>
+<li>
+<p><strong>基于深度的分层表示</strong>：
+   - 将场景分解为多个深度层
+   - 每层使用纹理+透明度表示
+   - 层数远小于角度样本数</p>
+</li>
+<li>
+<p><strong>稀疏采样与插值</strong>：
+   - 利用光场的平滑性
+   - 自适应采样：边缘密集，平滑区域稀疏
+   - 使用高质量插值算法重建</p>
+</li>
+<li>
+<p><strong>基于字典的压缩</strong>：
+   - 学习光场块的字典表示
+   - 稀疏编码：$\mathbf{l} = \mathbf{D}\mathbf{\alpha}$
+   - 字典学习：K-SVD、MOD算法</p>
+</li>
+</ol>
+<p><strong>光场编码技术</strong>：</p>
+<p><strong>利用相关性</strong>：</p>
+<ul>
+<li>空间相关性：相邻像素相似</li>
+<li>角度相关性：相邻视点相似</li>
+<li>空间-角度相关性：由几何约束决定</li>
+</ul>
+<p><strong>视差补偿预测</strong>：
+$$L(u+\Delta u, v+\Delta v, s, t) \approx L(u, v, s-d\Delta u, t-d\Delta v)$$
+其中$d$是视差，与深度成反比。</p>
+<p><strong>多尺度表示</strong>：</p>
+<ol>
+<li>
+<p><strong>小波变换</strong>：
+   - 4D小波分解
+   - 保留重要系数
+   - 量化和编码</p>
+</li>
+<li>
+<p><strong>分层表示</strong>：
+   - 基础层：低分辨率全光场
+   - 增强层：高频细节
+   - 渐进式传输</p>
+</li>
+</ol>
+<p><strong>实时传输优化</strong>：</p>
+<ul>
+<li>视点预测：只传输可能用到的数据</li>
+<li>流式传输：按需加载数据块</li>
+<li>GPU加速解码：并行处理光场块</li>
+</ul>
+<p><strong>新兴压缩方法</strong>：</p>
+<ol>
+<li>
+<p><strong>深度学习方法</strong>：
+   - 自编码器网络
+   - 生成对抗网络(GAN)
+   - 神经辐射场(NeRF)</p>
+</li>
+<li>
+<p><strong>隐式表示</strong>：
+   - 将光场表示为神经网络
+   - 极高的压缩率
+   - 连续表示，可任意分辨率采样</p>
+</li>
+</ol>
+<h2 id="103">10.3 颜色科学与感知</h2>
+<h3 id="1031">10.3.1 人类视觉系统</h3>
+<p><strong>光感受器</strong>：</p>
+<ul>
+<li>视杆细胞（Rods）：约1.2亿个，对光敏感，无色觉</li>
+<li>视锥细胞（Cones）：约600万个，分为L、M、S三种</li>
+<li>L型：峰值约564nm（红）</li>
+<li>M型：峰值约534nm（绿）</li>
+<li>S型：峰值约420nm（蓝）</li>
+</ul>
+<p><strong>光谱响应函数</strong>：
+$$\bar{x}(\lambda), \bar{y}(\lambda), \bar{z}(\lambda)$$
+CIE 1931标准观察者匹配函数。</p>
+<h3 id="1032">10.3.2 色彩空间与变换</h3>
+<p><strong>CIE XYZ色彩空间</strong>：
+$$\begin{aligned}
+X &amp;= \int_{380}^{780} S(\lambda)\bar{x}(\lambda)d\lambda \
+Y &amp;= \int_{380}^{780} S(\lambda)\bar{y}(\lambda)d\lambda \
+Z &amp;= \int_{380}^{780} S(\lambda)\bar{z}(\lambda)d\lambda
+\end{aligned}$$
+<strong>色度坐标</strong>：
+$$x = \frac{X}{X+Y+Z}, \quad y = \frac{Y}{X+Y+Z}$$
+<strong>RGB到XYZ变换</strong>（sRGB）：
+$$\begin{bmatrix} X \ Y \ Z \end{bmatrix} = \begin{bmatrix}
+0.4124 &amp; 0.3576 &amp; 0.1805 \
+0.2126 &amp; 0.7152 &amp; 0.0722 \
+0.0193 &amp; 0.1192 &amp; 0.9505
+\end{bmatrix} \begin{bmatrix} R \ G \ B \end{bmatrix}$$</p>
+<h3 id="1033">10.3.3 感知均匀色彩空间</h3>
+<p><strong>CIELAB（L<em>a</em>b*）</strong>：
+$$\begin{aligned}
+L^<em> &amp;= 116f(Y/Y_n) - 16 \
+a^</em> &amp;= 500[f(X/X_n) - f(Y/Y_n)] \
+b^* &amp;= 200[f(Y/Y_n) - f(Z/Z_n)]
+\end{aligned}$$
+其中：
+$$f(t) = \begin{cases}
+t^{1/3} &amp; \text{if } t &gt; \delta^3 \
+\frac{t}{3\delta^2} + \frac{4}{29} &amp; \text{otherwise}
+\end{cases}$$
+$\delta = 6/29$</p>
+<p><strong>色差计算</strong>：
+$$\Delta E_{ab}^<em> = \sqrt{(\Delta L^</em>)^2 + (\Delta a^<em>)^2 + (\Delta b^</em>)^2}$$</p>
+<h3 id="1034">10.3.4 色彩管理与校准</h3>
+<p><strong>ICC色彩配置文件</strong>：</p>
+<ul>
+<li>描述设备的色彩特性</li>
+<li>包含色彩空间变换矩阵</li>
+<li>支持多种渲染意图</li>
+</ul>
+<p><strong>色域映射</strong>：</p>
+<ol>
+<li>感知渲染（Perceptual）</li>
+<li>相对色度（Relative Colorimetric）</li>
+<li>绝对色度（Absolute Colorimetric）</li>
+<li>饱和度（Saturation）</li>
+</ol>
+<p><strong>显示器校准</strong>：</p>
+<ul>
+<li>白点设置（通常D65）</li>
+<li>伽马校正（通常2.2）</li>
+<li>色域覆盖率测量</li>
+</ul>
+<h3 id="1035">10.3.5 高动态范围与色调映射</h3>
+<p><strong>对数感知模型</strong>：
+人眼对亮度的感知近似对数关系：
+$$L_{\text{perceived}} = k \log(L_{\text{physical}} + \epsilon)$$
+<strong>色调映射算子</strong>：</p>
+<p><strong>Reinhard算子</strong>：
+$$L_d = \frac{L_w(1 + L_w/L_{white}^2)}{1 + L_w}$$
+其中 $L_w$ 是世界亮度，$L_{white}$ 是映射到白色的亮度值。</p>
+<p><strong>基于梯度域的方法</strong>：
+通过压缩亮度梯度来保持局部对比度：
+$$\nabla L_d = \Phi(\nabla L_w)$$
+其中 $\Phi$ 是梯度衰减函数。</p>
+<h2 id="_1">本章小结</h2>
+<p>本章系统地介绍了计算机图形学中的成像系统，涵盖了从物理相机模型到人类视觉感知的完整知识体系。</p>
+<h3 id="_2">关键概念回顾</h3>
+<p><strong>相机模型</strong>：</p>
+<ul>
+<li>针孔相机：$\mathbf{P} = \mathbf{K}[\mathbf{R}|\mathbf{t}]$</li>
+<li>薄透镜方程：$\frac{1}{f} = \frac{1}{d_o} + \frac{1}{d_i}$</li>
+<li>景深与光圈的关系：$\text{DOF} \propto N$</li>
+<li>畸变模型：径向畸变 + 切向畸变</li>
+</ul>
+<p><strong>光场理论</strong>：</p>
+<ul>
+<li>5D全光函数：$L(x, y, z, \theta, \phi)$</li>
+<li>4D光场参数化：$L(u, v, s, t)$</li>
+<li>数字重聚焦原理</li>
+<li>傅里叶切片定理的应用</li>
+</ul>
+<p><strong>颜色科学</strong>：</p>
+<ul>
+<li>CIE XYZ色彩空间定义</li>
+<li>感知均匀空间：CIELAB</li>
+<li>色差度量：$\Delta E_{ab}^*$</li>
+<li>HDR与色调映射</li>
+</ul>
+<h3 id="_3">重要公式汇总</h3>
+<ol>
+<li><strong>超焦距</strong>：$H = \frac{f^2}{Nc} + f$</li>
+<li><strong>组合透镜焦距</strong>：$\frac{1}{f} = \frac{1}{f_1} + \frac{1}{f_2} - \frac{d}{f_1 f_2}$</li>
+<li><strong>色度坐标</strong>：$x = \frac{X}{X+Y+Z}$, $y = \frac{Y}{X+Y+Z}$</li>
+<li><strong>Reinhard色调映射</strong>：$L_d = \frac{L_w(1 + L_w/L_{white}^2)}{1 + L_w}$</li>
+</ol>
+<h3 id="_4">实际应用要点</h3>
+<ol>
+<li>相机标定时需要考虑内参和畸变参数</li>
+<li>光场相机可实现后期重聚焦和视角调整</li>
+<li>色彩管理需要完整的ICC工作流程</li>
+<li>HDR成像需要适当的色调映射算法</li>
+</ol>
+<h2 id="_5">练习题</h2>
+<h3 id="_6">基础题</h3>
+<p><strong>习题10.1</strong>：给定一个焦距为50mm的薄透镜，物距为2m，求像距和放大率。</p>
+<details>
+<summary>提示</summary>
+<p>使用薄透镜方程 $\frac{1}{f} = \frac{1}{d_o} + \frac{1}{d_i}$</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>由薄透镜方程：
+$$\frac{1}{50} = \frac{1}{2000} + \frac{1}{d_i}$$
+$$\frac{1}{d_i} = \frac{1}{50} - \frac{1}{2000} = \frac{40-1}{2000} = \frac{39}{2000}$$
+$$d_i = \frac{2000}{39} \approx 51.28 \text{mm}$$
+放大率：$M = -\frac{d_i}{d_o} = -\frac{51.28}{2000} \approx -0.0256$</p>
+<p>负号表示像是倒立的，放大率约为1:39。</p>
+</details>
+<p><strong>习题10.2</strong>：已知相机的光圈为f/2.8，焦距为85mm，对焦在5m处，弥散圆直径为0.03mm。计算景深范围。</p>
+<details>
+<summary>提示</summary>
+<p>先计算超焦距 $H = \frac{f^2}{Nc} + f$，然后计算近景深和远景深界限。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>超焦距：
+$$H = \frac{85^2}{2.8 \times 0.03} + 85 = \frac{7225}{0.084} + 85 \approx 86012 + 85 \approx 86.1 \text{m}$$
+近景深界限：
+$$D_n = \frac{Hd}{H + d - f} = \frac{86100 \times 5000}{86100 + 5000 - 85} \approx 4.74 \text{m}$$
+远景深界限：
+$$D_f = \frac{Hd}{H - d + f} = \frac{86100 \times 5000}{86100 - 5000 + 85} \approx 5.30 \text{m}$$
+景深范围：4.74m - 5.30m，总景深约0.56m。</p>
+</details>
+<p><strong>习题10.3</strong>：将RGB颜色(0.8, 0.6, 0.2)转换为CIE XYZ色彩空间（假设sRGB）。</p>
+<details>
+<summary>提示</summary>
+<p>使用sRGB到XYZ的转换矩阵。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>使用转换矩阵：
+$$\begin{bmatrix} X \ Y \ Z \end{bmatrix} = \begin{bmatrix}
+0.4124 &amp; 0.3576 &amp; 0.1805 \
+0.2126 &amp; 0.7152 &amp; 0.0722 \
+0.0193 &amp; 0.1192 &amp; 0.9505
+\end{bmatrix} \begin{bmatrix} 0.8 \ 0.6 \ 0.2 \end{bmatrix}$$
+计算得：</p>
+<ul>
+<li>$X = 0.4124 \times 0.8 + 0.3576 \times 0.6 + 0.1805 \times 0.2 = 0.5801$</li>
+<li>$Y = 0.2126 \times 0.8 + 0.7152 \times 0.6 + 0.0722 \times 0.2 = 0.6136$</li>
+<li>$Z = 0.0193 \times 0.8 + 0.1192 \times 0.6 + 0.9505 \times 0.2 = 0.2769$</li>
+</ul>
+</details>
+<p><strong>习题10.4</strong>：光场相机的微透镜阵列有100×100个微透镜，每个微透镜下有10×10个像素。计算光场的空间和角度分辨率。</p>
+<details>
+<summary>提示</summary>
+<p>空间分辨率对应微透镜数量，角度分辨率对应每个微透镜下的像素数。</p>
+</details>
+<details>
+<summary>答案</summary>
+<ul>
+<li>空间分辨率：100×100 = 10,000个空间样本</li>
+<li>角度分辨率：10×10 = 100个角度样本</li>
+<li>总的光场分辨率：10,000 × 100 = 1,000,000个光线样本</li>
+<li>如果用于2D成像，最大图像分辨率为100×100像素</li>
+</ul>
+</details>
+<h3 id="_7">挑战题</h3>
+<p><strong>习题10.5</strong>：推导径向畸变的逆变换公式。已知畸变模型为 $r_d = r_u(1 + k_1r_u^2)$（仅考虑一阶项），求从畸变坐标到未畸变坐标的变换。</p>
+<details>
+<summary>提示</summary>
+<p>这是一个三次方程，可以使用牛顿迭代法或解析解。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>给定 $r_d = r_u(1 + k_1r_u^2)$，需要从 $r_d$ 求 $r_u$。</p>
+<p>令 $f(r_u) = r_u(1 + k_1r_u^2) - r_d = 0$</p>
+<p>牛顿迭代法：
+$$r_{u,n+1} = r_{u,n} - \frac{f(r_{u,n})}{f'(r_{u,n})}$$
+其中 $f'(r_u) = 1 + 3k_1r_u^2$</p>
+<p>迭代公式：
+$$r_{u,n+1} = r_{u,n} - \frac{r_{u,n}(1 + k_1r_{u,n}^2) - r_d}{1 + 3k_1r_{u,n}^2}$$
+初始值可选 $r_{u,0} = r_d$。</p>
+<p>对于小畸变（$|k_1r_u^2| \ll 1$），可以使用近似：
+$$r_u \approx r_d(1 - k_1r_d^2)$$</p>
+</details>
+<p><strong>习题10.6</strong>：设计一个算法，从一组不同焦距的图像中恢复场景的深度图。假设相机内参已知，图像已配准。</p>
+<details>
+<summary>提示</summary>
+<p>利用散焦模糊与深度的关系，可以通过分析不同焦距下的模糊程度来估计深度。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p>深度从散焦（Depth from Defocus）算法：</p>
+<ol>
+<li>
+<p><strong>模糊圆直径与深度关系</strong>：
+$$b = \frac{|d - d_f|}{d} \cdot \frac{f}{N} \cdot \frac{1}{d_f}$$
+其中 $d$ 是深度，$d_f$ 是对焦深度，$f$ 是焦距，$N$ 是光圈数。</p>
+</li>
+<li>
+<p><strong>算法步骤</strong>：
+   - 对每个像素位置，测量不同焦距图像中的局部模糊程度
+   - 使用拉普拉斯算子或梯度幅值作为清晰度度量
+   - 找到最清晰的焦距设置，对应该点的深度
+   - 使用模糊程度变化率细化深度估计</p>
+</li>
+<li>
+<p><strong>优化目标</strong>：
+$$d^* = \arg\min_d \sum_{i} |I_i - B(I_{\text{sharp}}, b_i(d))|^2$$
+其中 $B$ 是模糊算子，$b_i(d)$ 是第 $i$ 张图像在深度 $d$ 处的模糊核大小。</p>
+</li>
+<li>
+<p><strong>实际考虑</strong>：
+   - 使用多尺度方法提高鲁棒性
+   - 考虑边缘处的遮挡问题
+   - 使用正则化保持深度图平滑</p>
+</li>
+</ol>
+</details>
+<p><strong>习题10.7</strong>：推导4D光场的傅里叶切片定理，并解释其在光场处理中的应用。</p>
+<details>
+<summary>提示</summary>
+<p>考虑光场的傅里叶变换和重聚焦操作在频域的表现。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p><strong>傅里叶切片定理</strong>：</p>
+<ol>
+<li>
+<p><strong>4D光场的傅里叶变换</strong>：
+$$\hat{L}(\Omega_x, \Omega_y, \Omega_u, \Omega_v) = \mathcal{F}{L(x, y, u, v)}$$</p>
+</li>
+<li>
+<p><strong>重聚焦操作</strong>（剪切变换）：
+$$L_\alpha(x, y, u, v) = L(x + \alpha u, y + \alpha v, u, v)$$</p>
+</li>
+<li>
+<p><strong>频域表示</strong>：
+   重聚焦在频域对应于：
+$$\hat{L}_\alpha(\Omega_x, \Omega_y, \Omega_u, \Omega_v) = \hat{L}(\Omega_x, \Omega_y, \Omega_u - \alpha\Omega_x, \Omega_v - \alpha\Omega_y)$$</p>
+</li>
+<li>
+<p><strong>2D切片</strong>：
+   重聚焦图像的频谱是4D频谱的2D切片：
+$$\hat{I}_\alpha(\Omega_x, \Omega_y) = \hat{L}(\Omega_x, \Omega_y, -\alpha\Omega_x, -\alpha\Omega_y)$$
+<strong>应用</strong>：</p>
+</li>
+</ol>
+<ul>
+<li>快速重聚焦：在频域进行切片比空域积分更高效</li>
+<li>深度估计：不同深度对应不同的频域切片角度</li>
+<li>光场压缩：利用频域稀疏性进行压缩</li>
+<li>光场滤波：在4D频域设计滤波器</li>
+</ul>
+</details>
+<p><strong>习题10.8</strong>：设计一个感知均匀的HDR色调映射算法，要求保持局部对比度并避免光晕效应。</p>
+<details>
+<summary>提示</summary>
+<p>结合人眼感知模型、多尺度分解和梯度域处理。</p>
+</details>
+<details>
+<summary>答案</summary>
+<p><strong>多尺度感知色调映射算法</strong>：</p>
+<ol>
+<li>
+<p><strong>对数域转换</strong>：
+$$L_{\log} = \log(L_w + \epsilon)$$</p>
+</li>
+<li>
+<p><strong>多尺度分解</strong>（使用高斯金字塔）：
+$$L_{\log} = B_0 + \sum_{i=1}^{N} D_i$$
+其中 $B_0$ 是基础层，$D_i$ 是细节层。</p>
+</li>
+<li>
+<p><strong>基础层压缩</strong>：
+$$B_0' = \frac{B_0 - B_{\min}}{B_{\max} - B_{\min}} \cdot (L_{\max} - L_{\min}) + L_{\min}$$</p>
+</li>
+<li>
+<p><strong>细节层增强</strong>（保持局部对比度）：
+$$D_i' = \sigma(|D_i|) \cdot \text{sign}(D_i) \cdot |D_i|^{\gamma_i}$$
+其中 $\sigma$ 是sigmoid函数，$\gamma_i$ 随尺度变化。</p>
+</li>
+<li>
+<p><strong>重建</strong>：
+$$L_{\log}' = B_0' + \sum_{i=1}^{N} w_i D_i'$$
+权重 $w_i$ 基于局部对比度自适应调整。</p>
+</li>
+<li>
+<p><strong>避免光晕</strong>：
+   - 使用边缘停止函数限制跨边缘的平滑
+   - 梯度域约束：$|\nabla L_{\log}' - \Phi(\nabla L_{\log})| &lt; \tau$</p>
+</li>
+<li>
+<p><strong>线性域转换</strong>：
+$$L_d = \exp(L_{\log}') - \epsilon$$</p>
+</li>
+</ol>
+<p>该算法通过多尺度处理分离全局亮度和局部细节，保持感知均匀性的同时避免光晕效应。</p>
+</details>
+<h2 id="_8">常见陷阱与错误</h2>
+<h3 id="_9">相机模型相关</h3>
+<p><strong>陷阱1：混淆物理焦距和等效焦距</strong></p>
+<ul>
+<li>错误：直接使用传感器尺寸不同的相机焦距进行比较</li>
+<li>正确：转换为35mm等效焦距或使用视场角</li>
+<li>调试：检查传感器尺寸和裁剪因子</li>
+</ul>
+<p><strong>陷阱2：径向畸变校正顺序错误</strong></p>
+<ul>
+<li>错误：先进行其他几何变换，再校正畸变</li>
+<li>正确：畸变校正应在其他变换之前进行</li>
+<li>调试：可视化校正前后的网格图案</li>
+</ul>
+<p><strong>陷阱3：忽略主点偏移</strong></p>
+<ul>
+<li>错误：假设主点在图像中心</li>
+<li>正确：使用标定得到的准确主点位置</li>
+<li>调试：检查相机标定结果的主点参数</li>
+</ul>
+<h3 id="_10">光场处理相关</h3>
+<p><strong>陷阱4：光场采样不足</strong></p>
+<ul>
+<li>错误：角度采样率过低导致混叠</li>
+<li>正确：满足奈奎斯特采样定理</li>
+<li>调试：检查重聚焦图像是否有重影</li>
+</ul>
+<p><strong>陷阱5：光场数据维度混淆</strong></p>
+<ul>
+<li>错误：混淆空间坐标和角度坐标</li>
+<li>正确：明确区分(u,v)和(s,t)的物理意义</li>
+<li>调试：可视化子孔径图像排列</li>
+</ul>
+<p><strong>陷阱6：傅里叶域处理边界效应</strong></p>
+<ul>
+<li>错误：直接进行FFT而不考虑边界</li>
+<li>正确：使用适当的窗函数或填充</li>
+<li>调试：检查频谱是否有不连续</li>
+</ul>
+<h3 id="_11">颜色处理相关</h3>
+<p><strong>陷阱7：忽略gamma校正</strong></p>
+<ul>
+<li>错误：在sRGB空间直接进行线性运算</li>
+<li>正确：先转换到线性空间，运算后再转回</li>
+<li>调试：检查中间色调是否正确</li>
+</ul>
+<p><strong>陷阱8：色彩空间转换精度损失</strong></p>
+<ul>
+<li>错误：使用8位整数进行中间计算</li>
+<li>正确：使用浮点数保持精度</li>
+<li>调试：往返转换检查误差累积</li>
+</ul>
+<p><strong>陷阱9：白平衡与色彩空间不匹配</strong></p>
+<ul>
+<li>错误：在错误的色彩空间应用白平衡</li>
+<li>正确：在线性RGB空间进行白平衡</li>
+<li>调试：使用灰卡验证白平衡效果</li>
+</ul>
+<h3 id="hdr">HDR相关</h3>
+<p><strong>陷阱10：HDR合成中的运动伪影</strong></p>
+<ul>
+<li>错误：直接合成未对齐的多曝光图像</li>
+<li>正确：先进行图像配准或使用鬼影消除</li>
+<li>调试：检查运动区域的合成效果</li>
+</ul>
+<p><strong>陷阱11：色调映射参数选择不当</strong></p>
+<ul>
+<li>错误：使用固定参数处理所有图像</li>
+<li>正确：根据场景动态范围自适应调整</li>
+<li>调试：检查高光和阴影细节保留</li>
+</ul>
+<p><strong>陷阱12：忽略显示设备限制</strong></p>
+<ul>
+<li>错误：假设显示器可以准确显示所有颜色</li>
+<li>正确：考虑显示器色域和亮度范围</li>
+<li>调试：使用色彩管理的显示器验证</li>
+</ul>
+<h2 id="_12">最佳实践检查清单</h2>
+<h3 id="_13">相机系统设计</h3>
+<ul>
+<li>[ ] <strong>相机标定</strong></li>
+<li>使用高质量标定板（棋盘格或圆点阵列）</li>
+<li>采集不同角度和距离的标定图像（至少20张）</li>
+<li>验证重投影误差在亚像素级别</li>
+<li>
+<p>定期重新标定以应对机械形变</p>
+</li>
+<li>
+<p>[ ] <strong>镜头选择</strong></p>
+</li>
+<li>根据应用场景选择合适焦距</li>
+<li>考虑光圈范围和景深需求</li>
+<li>评估镜头畸变和色差特性</li>
+<li>
+<p>平衡成像质量和成本</p>
+</li>
+<li>
+<p>[ ] <strong>图像采集</strong></p>
+</li>
+<li>设置合适的曝光参数（避免过曝和欠曝）</li>
+<li>使用RAW格式保留最大动态范围</li>
+<li>考虑环境光照条件</li>
+<li>实施运动模糊补偿（如需要）</li>
+</ul>
+<h3 id="_14">光场系统实现</h3>
+<ul>
+<li>[ ] <strong>硬件配置</strong></li>
+<li>微透镜阵列与传感器精确对准</li>
+<li>选择合适的空间-角度分辨率权衡</li>
+<li>确保均匀照明和标定</li>
+<li>
+<p>考虑计算和存储需求</p>
+</li>
+<li>
+<p>[ ] <strong>数据处理</strong></p>
+</li>
+<li>实现高效的4D数据结构</li>
+<li>使用GPU加速光场渲染</li>
+<li>优化内存访问模式</li>
+<li>
+<p>实施渐进式处理策略</p>
+</li>
+<li>
+<p>[ ] <strong>应用开发</strong></p>
+</li>
+<li>提供直观的重聚焦界面</li>
+<li>实现实时预览功能</li>
+<li>支持多种输出格式</li>
+<li>考虑向后兼容性</li>
+</ul>
+<h3 id="_15">色彩管理流程</h3>
+<ul>
+<li>[ ] <strong>输入校准</strong></li>
+<li>建立设备色彩配置文件</li>
+<li>使用标准色卡进行验证</li>
+<li>记录照明条件和白点</li>
+<li>
+<p>实施一致的工作流程</p>
+</li>
+<li>
+<p>[ ] <strong>处理管线</strong></p>
+</li>
+<li>在线性色彩空间进行计算</li>
+<li>正确处理gamma变换</li>
+<li>保持足够的位深度（至少16位）</li>
+<li>
+<p>避免不必要的色彩空间转换</p>
+</li>
+<li>
+<p>[ ] <strong>输出优化</strong></p>
+</li>
+<li>针对目标设备进行色彩映射</li>
+<li>实施软打样流程</li>
+<li>验证色彩准确性</li>
+<li>处理超色域颜色</li>
+</ul>
+<h3 id="hdr_1">HDR工作流程</h3>
+<ul>
+<li>[ ] <strong>图像采集</strong></li>
+<li>使用包围曝光拍摄多张图像</li>
+<li>确保场景静止或进行运动补偿</li>
+<li>选择合适的曝光间隔（通常2EV）</li>
+<li>
+<p>避免镜头光晕和反射</p>
+</li>
+<li>
+<p>[ ] <strong>HDR合成</strong></p>
+</li>
+<li>估计相机响应曲线</li>
+<li>使用加权平均合成HDR图像</li>
+<li>处理饱和像素和噪声</li>
+<li>
+<p>验证动态范围覆盖</p>
+</li>
+<li>
+<p>[ ] <strong>色调映射</strong></p>
+</li>
+<li>选择适合场景的映射算法</li>
+<li>保留局部对比度和细节</li>
+<li>避免过度处理和伪影</li>
+<li>考虑艺术意图和观看条件</li>
+</ul>
+<h3 id="_16">性能优化</h3>
+<ul>
+<li>[ ] <strong>算法优化</strong></li>
+<li>使用查找表(LUT)加速色彩变换</li>
+<li>实施多线程并行处理</li>
+<li>利用SIMD指令集</li>
+<li>
+<p>缓存频繁访问的数据</p>
+</li>
+<li>
+<p>[ ] <strong>内存管理</strong></p>
+</li>
+<li>使用分块处理大图像</li>
+<li>实施内存池减少分配开销</li>
+<li>优化数据布局提高缓存命中率</li>
+<li>
+<p>及时释放不需要的资源</p>
+</li>
+<li>
+<p>[ ] <strong>质量控制</strong></p>
+</li>
+<li>建立客观质量评价指标</li>
+<li>进行主观视觉评估</li>
+<li>记录处理参数和元数据</li>
+<li>实施版本控制和回溯机制</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="./chapter9.html" class="nav-link prev">← 第9章：材质与外观</a><a href="./chapter11.html" class="nav-link next">第11章：动画与物理模拟 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>第1章：计算机图形学概述与数学基础</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class=""><a href="./index.html">计算机图形学高级教程</a></li><li class="active"><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class=""><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class=""><a href="./chapter6.html">第6章：几何表示</a></li><li class=""><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class=""><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class=""><a href="./chapter12.html">第12章：物质点法</a></li><li class=""><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="1">第1章：计算机图形学概述与数学基础</h1>
+<p>计算机图形学是研究如何通过计算生成、操作和显示视觉内容的学科。本章将从宏观视角介绍图形学的核心概念，并建立必要的数学基础。我们将深入探讨向量空间、线性变换以及四元数等高级数学工具，这些内容构成了后续章节的理论基石。通过本章学习，读者将掌握图形学中的基本数学语言，并理解各种数学工具在实际应用中的优势与局限。</p>
+<h2 id="11">1.1 计算机图形学概述</h2>
+<h3 id="111">1.1.1 图形学的本质与应用领域</h3>
+<p>计算机图形学的核心任务是将三维世界的几何信息转换为二维图像。这个过程涉及几何建模、光照计算、投影变换和图像合成等多个环节。在现代应用中，图形学已经渗透到游戏开发、电影特效、科学可视化、虚拟现实、计算机辅助设计等众多领域。</p>
+<p>从数学角度看，图形学本质上是一系列函数映射：
+$$f: \mathbb{R}^3 \times \mathcal{L} \times \mathcal{M} \rightarrow \mathbb{R}^2 \times \mathcal{C}$$
+其中$\mathbb{R}^3$表示三维空间坐标，$\mathcal{L}$表示光照条件，$\mathcal{M}$表示材质属性，$\mathbb{R}^2$表示图像平面坐标，$\mathcal{C}$表示颜色空间。</p>
+<p><strong>核心应用领域的技术要求</strong></p>
+<p>不同应用领域对图形学技术有不同侧重：</p>
+<ol>
+<li>
+<p><strong>游戏引擎</strong>：
+   - 实时性要求：16.67ms/帧（60 FPS）
+   - 大规模场景管理：LOD、流式加载、遮挡剔除
+   - 物理模拟集成：碰撞检测、刚体动力学
+   - 特效系统：粒子系统、后处理管线</p>
+</li>
+<li>
+<p><strong>电影视觉特效</strong>：
+   - 物理准确性：光谱渲染、次表面散射
+   - 超高分辨率：4K-8K渲染，每帧可能需要数小时
+   - 复杂材质：毛发、皮肤、流体
+   - 合成技术：绿幕抠像、动作捕捉集成</p>
+</li>
+<li>
+<p><strong>科学可视化</strong>：
+   - 大数据处理：TB级数据的实时可视化
+   - 准确性要求：色彩映射的感知均匀性
+   - 交互式探索：切片、等值面、流线
+   - 不确定性可视化：误差传播、置信区间</p>
+</li>
+<li>
+<p><strong>计算机辅助设计（CAD）</strong>：
+   - 精确几何表示：NURBS、细分曲面
+   - 实时编辑：参数化建模、约束求解
+   - 制造集成：STL导出、切片算法
+   - 仿真验证：有限元分析可视化</p>
+</li>
+<li>
+<p><strong>虚拟/增强现实（VR/AR）</strong>：
+   - 超低延迟：&lt;20ms运动到光子延迟
+   - 立体渲染：双目视差、会聚调节冲突
+   - 注视点渲染：中心凹渲染优化
+   - 空间定位：SLAM、深度重建</p>
+</li>
+</ol>
+<p><strong>图形学的层次化视角</strong></p>
+<p>从不同抽象层次理解图形学：</p>
+<ol>
+<li>
+<p><strong>信号处理层</strong>：图像是二维信号，渲染是重建过程
+$$I(x,y) = \int\int h(x-x', y-y') S(x', y') dx' dy'$$
+其中$h$是重建核，$S$是理想信号</p>
+</li>
+<li>
+<p><strong>几何变换层</strong>：坐标系变换链
+$$\mathbf{p}_{screen} = \mathbf{M}_{viewport} \cdot \mathbf{M}_{proj} \cdot \mathbf{M}_{view} \cdot \mathbf{M}_{model} \cdot \mathbf{p}_{local}$$</p>
+</li>
+<li>
+<p><strong>光传输层</strong>：辐射度量学描述光能传播
+$$L(\mathbf{x}, \omega) = L_e(\mathbf{x}, \omega) + \int_\Omega f_r(\mathbf{x}, \omega', \omega) L(\mathbf{x}', -\omega') G(\mathbf{x}, \mathbf{x}') V(\mathbf{x}, \mathbf{x}') d\omega'$$
+<strong>渲染的信息论视角</strong></p>
+</li>
+</ol>
+<p>从信息论角度，渲染是信息压缩过程：</p>
+<ul>
+<li><strong>输入信息</strong>：3D场景描述，信息熵$H(S)$</li>
+<li><strong>输出信息</strong>：2D图像，信息熵$H(I)$</li>
+<li><strong>信息损失</strong>：$I(S;I) = H(S) - H(S|I)$</li>
+</ul>
+<p>理想渲染器最大化互信息$I(S;I)$，同时满足人类视觉系统的感知约束。</p>
+<p><strong>渲染方程的统一框架</strong></p>
+<p>更严格地说，渲染的本质是求解渲染方程（Kajiya, 1986）：
+$$L_o(\mathbf{x}, \omega_o) = L_e(\mathbf{x}, \omega_o) + \int_{\Omega} f_r(\mathbf{x}, \omega_i, \omega_o) L_i(\mathbf{x}, \omega_i) (\omega_i \cdot \mathbf{n}) d\omega_i$$
+其中：</p>
+<ul>
+<li>$L_o$：出射辐射度（radiance）</li>
+<li>$L_e$：自发光辐射度</li>
+<li>$f_r$：双向反射分布函数（BRDF）</li>
+<li>$L_i$：入射辐射度</li>
+<li>$\Omega$：半球积分域</li>
+</ul>
+<p>这个积分方程统一了局部光照和全局光照，是现代渲染算法的理论基础。</p>
+<p><strong>图形学的计算复杂度挑战</strong></p>
+<p>渲染的计算复杂度主要来自：</p>
+<ol>
+<li><strong>几何复杂度</strong>：$O(n)$个多边形，每个需要投影和裁剪</li>
+<li><strong>着色复杂度</strong>：$O(p)$个像素，每个需要光照计算</li>
+<li><strong>光照复杂度</strong>：$O(l)$个光源，可能需要阴影计算</li>
+<li><strong>全局光照</strong>：递归的光线传播，复杂度可达$O(n^2p)$</li>
+</ol>
+<p>因此，总复杂度在最坏情况下为$O(nlp)$，这解释了为什么需要各种加速算法。</p>
+<p><strong>深入理解复杂度来源</strong></p>
+<p>让我们分析一个典型场景的计算量：</p>
+<ul>
+<li>场景几何：$n = 10^6$ 个三角形</li>
+<li>屏幕分辨率：$p = 1920 \times 1080 \approx 2 \times 10^6$ 像素</li>
+<li>光源数量：$l = 100$ 个光源</li>
+<li>光线弹射次数：$d = 5$ 次（全局光照）</li>
+</ul>
+<p>基础光栅化：$O(n \log n + p)$ （深度排序 + Z-buffer）
+带阴影的光栅化：$O(nl + p \cdot l)$ （每个光源一个shadow map）
+路径追踪：$O(p \cdot d \cdot \log n)$ （每像素多条光线）</p>
+<p>实际计算量：</p>
+<ul>
+<li>光栅化：约$10^7$次操作</li>
+<li>带阴影：约$10^8$次操作  </li>
+<li>路径追踪：约$10^8$次光线求交</li>
+</ul>
+<p>这解释了为什么需要：</p>
+<ul>
+<li>硬件加速（GPU并行化）</li>
+<li>算法优化（空间数据结构）</li>
+<li>近似技术（屏幕空间效果）</li>
+</ul>
+<p><strong>复杂度优化策略</strong></p>
+<p>现代图形学通过多种策略降低复杂度：</p>
+<ol>
+<li>
+<p><strong>空间数据结构</strong>：
+   - BVH（包围体层次）：构建$O(n\log n)$，查询$O(\log n)$
+   - KD-Tree：空间划分，平均查询$O(\log n)$
+   - 八叉树：稀疏体素化，内存效率高</p>
+</li>
+<li>
+<p><strong>时间相干性</strong>：
+   - 帧间复用：$I_t = \alpha I_{t-1} + (1-\alpha)I_{new}$
+   - 运动向量：$\mathbf{p}_t = \mathbf{p}_{t-1} + \mathbf{v}\Delta t$
+   - 时序抗锯齿（TAA）：累积多帧样本</p>
+</li>
+<li>
+<p><strong>层次化加速</strong>：
+   - LOD（细节层次）：$L(d) = L_{max} \cdot \max(0, 1 - \frac{d}{d_{max}})$
+   - Mipmap：预过滤纹理，$O(1)$查询
+   - 视锥体裁剪：$\mathbf{n} \cdot (\mathbf{p} - \mathbf{p}_0) \geq 0$</p>
+</li>
+<li>
+<p><strong>近似算法</strong>：
+   - 屏幕空间技术：SSAO、SSR
+   - 预计算辐照度：球谐函数展开
+   - 神经网络降噪：$\tilde{I} = D_\theta(I_{noisy})$</p>
+</li>
+</ol>
+<h3 id="112">1.1.2 实时渲染与离线渲染</h3>
+<p>图形学应用可分为两大类：</p>
+<p><strong>实时渲染</strong>：追求在有限时间内（通常16-33毫秒）生成图像，常用于游戏和交互应用。主要技术包括：</p>
+<ul>
+<li>光栅化管线（Z-buffer、着色器）</li>
+<li>层次细节（LOD）优化</li>
+<li>时间相关性利用（时序抗锯齿、运动模糊）</li>
+</ul>
+<p><strong>离线渲染</strong>：追求物理准确性和视觉真实感，计算时间可达数小时。核心技术包括：</p>
+<ul>
+<li>光线追踪与路径追踪</li>
+<li>全局光照算法</li>
+<li>基于物理的渲染（PBR）</li>
+</ul>
+<p><strong>实时渲染的关键技术栈</strong></p>
+<ol>
+<li>
+<p><strong>可见性判断</strong>：
+   - 视锥体裁剪：平面方程 $\mathbf{n} \cdot \mathbf{p} + d = 0$
+   - 遮挡剔除：硬件遮挡查询、Hi-Z buffer
+   - 背面剔除：$(\mathbf{v}_2 - \mathbf{v}_0) \times (\mathbf{v}_1 - \mathbf{v}_0) \cdot \mathbf{view} &lt; 0$
+   - 早期深度测试：避免无用的片段着色</p>
+</li>
+<li>
+<p><strong>着色优化</strong>：
+   - 延迟渲染：几何pass + 光照pass分离
+   - 前向+渲染：tiled光照剔除
+   - 可变速率着色：根据内容动态调整采样率
+   - 着色器LOD：距离相关的着色复杂度</p>
+</li>
+<li>
+<p><strong>抗锯齿技术</strong>：
+   - MSAA：硬件多重采样，$4\times$或$8\times$
+   - FXAA/SMAA：后处理边缘检测
+   - TAA：时间累积 + 运动向量
+   - DLSS：AI驱动的超采样</p>
+</li>
+</ol>
+<p><strong>离线渲染的质量追求</strong></p>
+<ol>
+<li>
+<p><strong>光传输模拟</strong>：
+   - 双向路径追踪（BDPT）：从相机和光源同时追踪
+   - Metropolis光传输（MLT）：马尔可夫链采样
+   - 光子映射：因果光子 + 最终聚集
+   - 辐照度缓存：稀疏采样 + 插值</p>
+</li>
+<li>
+<p><strong>材质复杂度</strong>：
+   - 分层材质：清漆、基底多层混合
+   - 体积散射：次表面散射、云雾
+   - 光谱渲染：避免同色异谱问题
+   - 偏振光：晶体、水面真实感</p>
+</li>
+<li>
+<p><strong>几何细节</strong>：
+   - 置换贴图：真实几何细节
+   - 自适应细分：屏幕空间误差控制
+   - 毛发渲染：Marschner模型
+   - 流体模拟：SPH、FLIP求解器</p>
+</li>
+</ol>
+<p><strong>性能指标的数学分析</strong></p>
+<p>实时渲染的帧率要求可以表述为：
+$$t_{frame} = t_{CPU} + t_{GPU} \leq \frac{1}{FPS_{target}}$$
+其中：</p>
+<ul>
+<li>$t_{CPU}$：CPU计算时间（场景管理、物理模拟）</li>
+<li>$t_{GPU}$：GPU渲染时间（顶点处理、片段着色）</li>
+<li>$FPS_{target}$：目标帧率（如60 FPS → 16.67ms）</li>
+</ul>
+<p><strong>算法复杂度对比</strong></p>
+<p>| 渲染方法 | 几何复杂度 | 像素复杂度 | 内存需求 | 典型应用 |</p>
+<table>
+<thead>
+<tr>
+<th>渲染方法</th>
+<th>几何复杂度</th>
+<th>像素复杂度</th>
+<th>内存需求</th>
+<th>典型应用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>光栅化</td>
+<td>$O(n\log n)$</td>
+<td>$O(p)$</td>
+<td>$O(p)$ (Z-buffer)</td>
+<td>游戏引擎</td>
+</tr>
+<tr>
+<td>光线追踪</td>
+<td>$O(p\log n)$</td>
+<td>$O(pd)$</td>
+<td>$O(n)$ (BVH)</td>
+<td>电影特效</td>
+</tr>
+<tr>
+<td>辐射度</td>
+<td>$O(n^2)$</td>
+<td>$O(p)$</td>
+<td>$O(n^2)$</td>
+<td>建筑可视化</td>
+</tr>
+</tbody>
+</table>
+<p>这里$n$是场景中的图元数，$p$是像素数，$d$是递归深度。</p>
+<p><strong>实时与离线的界限模糊化</strong></p>
+<p>现代GPU的发展使得这两者的界限越来越模糊：</p>
+<ul>
+<li><strong>混合渲染</strong>：实时光线追踪用于反射和阴影，光栅化用于主要可见性</li>
+<li><strong>时间积累</strong>：利用多帧累积提高质量（如DLSS）</li>
+<li><strong>预计算技术</strong>：光照贴图、环境光遮蔽、辐照度探针</li>
+</ul>
+<h3 id="113">1.1.3 图形管线概述</h3>
+<p>现代图形管线可以抽象为以下阶段：</p>
+<ol>
+<li><strong>应用阶段</strong>：场景管理、碰撞检测、动画更新</li>
+<li><strong>几何处理</strong>：顶点变换、裁剪、图元装配</li>
+<li><strong>光栅化</strong>：将几何图元转换为像素片段</li>
+<li><strong>片段处理</strong>：着色计算、深度测试、混合</li>
+</ol>
+<p>每个阶段都涉及特定的数学变换和算法优化，我们将在后续章节详细探讨。</p>
+<p><strong>管线的演化历史</strong></p>
+<ol>
+<li>
+<p><strong>固定功能管线时代</strong>（1990s）：
+   - 硬编码的变换和光照模型
+   - Gouraud着色、Phong着色
+   - 有限的纹理单元和混合模式
+   - OpenGL 1.x、DirectX 7</p>
+</li>
+<li>
+<p><strong>可编程着色器时代</strong>（2000s）：
+   - 顶点着色器：自定义顶点变换
+   - 片段着色器：自定义像素着色
+   - 着色器模型演进：SM 2.0 → 5.0
+   - GLSL、HLSL、Cg语言</p>
+</li>
+<li>
+<p><strong>统一着色器架构</strong>（2010s）：
+   - 几何着色器：图元级操作
+   - 曲面细分着色器：动态细分
+   - 计算着色器：通用GPU计算
+   - Vulkan、DirectX 12低级API</p>
+</li>
+<li>
+<p><strong>现代GPU创新</strong>（2020s）：
+   - 光线追踪核心：硬件BVH遍历
+   - 张量核心：AI加速
+   - 网格着色器：GPU驱动的渲染
+   - 可变速率着色：自适应质量</p>
+</li>
+</ol>
+<p><strong>管线阶段的详细分析</strong></p>
+<p>各阶段的核心算法和数据流：</p>
+<ol>
+<li>
+<p><strong>应用阶段（CPU）</strong>：
+   - 场景图遍历：$O(n)$复杂度
+   - 视锥体裁剪：6个平面测试
+   - 物理模拟：$\mathbf{x}_{t+\Delta t} = \mathbf{x}_t + \mathbf{v}_t\Delta t + \frac{1}{2}\mathbf{a}_t\Delta t^2$
+   - 动画更新：骨骼矩阵插值</p>
+</li>
+<li>
+<p><strong>顶点处理（GPU）</strong>：
+   - 模型变换：$\mathbf{v}_{world} = \mathbf{M}_{model} \cdot \mathbf{v}_{local}$
+   - 视图变换：$\mathbf{v}_{view} = \mathbf{M}_{view} \cdot \mathbf{v}_{world}$
+   - 投影变换：$\mathbf{v}_{clip} = \mathbf{M}_{proj} \cdot \mathbf{v}_{view}$
+   - 透视除法：$\mathbf{v}_{ndc} = \mathbf{v}_{clip} / w_{clip}$</p>
+</li>
+<li>
+<p><strong>图元装配与裁剪</strong>：
+   - Sutherland-Hodgman算法
+   - 齐次裁剪空间：$-w \leq x,y,z \leq w$
+   - 背面剔除：$(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0) \cdot \mathbf{view} &lt; 0$</p>
+</li>
+<li>
+<p><strong>光栅化</strong>：
+   - 扫描线算法：增量式边缘计算
+   - 重心坐标：$\lambda_i = \frac{A_i}{A_{total}}$
+   - 深度插值：$z = \lambda_0 z_0 + \lambda_1 z_1 + \lambda_2 z_2$</p>
+</li>
+<li>
+<p><strong>片段处理</strong>：
+   - Early-Z测试：$z_{frag} &lt; z_{buffer}$
+   - 着色计算：BRDF评估
+   - Alpha混合：$\mathbf{c}_{out} = \alpha_{src}\mathbf{c}_{src} + (1-\alpha_{src})\mathbf{c}_{dst}$</p>
+</li>
+</ol>
+<p><strong>管线的数学表示</strong></p>
+<p>图形管线可以表示为一系列函数的复合：
+$$\mathcal{P} = \mathcal{F} \circ \mathcal{R} \circ \mathcal{G} \circ \mathcal{A}$$
+其中：</p>
+<ul>
+<li>$\mathcal{A}$：应用阶段，$\mathcal{A}: \mathcal{S} \rightarrow \mathcal{V}$（场景→顶点）</li>
+<li>$\mathcal{G}$：几何阶段，$\mathcal{G}: \mathcal{V} \rightarrow \mathcal{T}$（顶点→变换后的图元）</li>
+<li>$\mathcal{R}$：光栅化，$\mathcal{R}: \mathcal{T} \rightarrow \mathcal{F}$（图元→片段）</li>
+<li>$\mathcal{F}$：片段阶段，$\mathcal{F}: \mathcal{F} \rightarrow \mathcal{I}$（片段→图像）</li>
+</ul>
+<p><strong>可编程管线的革命</strong></p>
+<p>现代GPU提供了可编程阶段：</p>
+<ul>
+<li><strong>顶点着色器</strong>：$\mathbf{v}_{clip} = \mathbf{M}_{proj} \cdot \mathbf{M}_{view} \cdot \mathbf{M}_{model} \cdot \mathbf{v}_{local}$</li>
+<li><strong>几何着色器</strong>：可以创建或销毁图元</li>
+<li><strong>片段着色器</strong>：计算最终颜色 $\mathbf{c} = f_{shader}(\mathbf{n}, \mathbf{l}, \mathbf{v}, \mathbf{material})$</li>
+<li><strong>计算着色器</strong>：通用并行计算</li>
+</ul>
+<p><strong>并行化的数学基础</strong></p>
+<p>GPU的高效来自于大规模并行：</p>
+<ul>
+<li><strong>数据并行</strong>：$\forall i \in [0, N): y_i = f(x_i)$</li>
+<li><strong>SIMD执行</strong>：相同指令作用于多个数据</li>
+<li><strong>内存访问模式</strong>：合并访问、纹理缓存</li>
+</ul>
+<p>并行效率可以用Amdahl定律估算：
+$$S = \frac{1}{(1-p) + \frac{p}{n}}$$
+其中$p$是可并行化部分的比例，$n$是处理器数量。</p>
+<h3 id="114">1.1.4 现代图形学的挑战与机遇</h3>
+<p>随着AI技术的发展，图形学面临新的机遇：</p>
+<ul>
+<li><strong>神经渲染</strong>：使用深度学习加速或替代传统渲染算法</li>
+<li><strong>可微渲染</strong>：将渲染过程设计为可微函数，支持基于梯度的优化</li>
+<li><strong>实时光线追踪</strong>：硬件加速使得实时光线追踪成为可能</li>
+<li><strong>虚拟现实与增强现实</strong>：对延迟和分辨率提出更高要求</li>
+</ul>
+<p><strong>新兴技术的深度分析</strong></p>
+<ol>
+<li>
+<p><strong>神经场景表示</strong>：
+   - NeRF类方法：连续体素表示
+   - 3D Gaussian Splatting：离散高斯表示
+   - Hash编码：$\gamma(p) = [\sin(2^0\pi p), \cos(2^0\pi p), ..., \sin(2^L\pi p), \cos(2^L\pi p)]$
+   - 优势：压缩率高，新视角合成质量好</p>
+</li>
+<li>
+<p><strong>混合渲染管线</strong>：
+   - 光栅化主路径 + 光线追踪辅助
+   - 降噪器：$\mathcal{D}: I_{noisy} \rightarrow I_{clean}$
+   - 重要性采样：$p(\omega) \propto L_i(\omega)f_r(\omega)|\cos\theta|$
+   - 自适应采样：基于方差估计动态分配样本</p>
+</li>
+<li>
+<p><strong>实时全局光照近似</strong>：
+   - Voxel Cone Tracing：体素化场景锥形采样
+   - Radiance Probes：稀疏辐照度采样
+   - Screen Space GI：屏幕空间光线步进
+   - 混合方案：远场用探针，近场用屏幕空间</p>
+</li>
+<li>
+<p><strong>AI驱动的内容生成</strong>：
+   - 程序化纹理：$T = G_\theta(z, \mathbf{uv})$
+   - 风格迁移：$I_{styled} = \arg\min_I \mathcal{L}_{content}(I, I_c) + \alpha\mathcal{L}_{style}(I, I_s)$
+   - 超分辨率：端到端学习上采样
+   - 时序稳定性：循环一致性约束</p>
+</li>
+</ol>
+<p><strong>神经渲染的数学框架</strong></p>
+<p>神经渲染将传统渲染函数$f$替换为神经网络$f_\theta$：
+$$\mathbf{I} = f_\theta(\mathbf{G}, \mathbf{V}, \mathbf{L})$$
+其中$\theta$是网络参数，通过最小化损失函数学习：
+$$\mathcal{L} = \mathbb{E}_{(\mathbf{I}_{gt}, \mathbf{x})} \left[ |\mathbf{I}_{gt} - f_\theta(\mathbf{x})|^2 + \lambda R(\theta) \right]$$
+典型应用包括：</p>
+<ul>
+<li><strong>神经辐射场（NeRF）</strong>：$F_\theta: (\mathbf{x}, \mathbf{d}) \rightarrow (\mathbf{c}, \sigma)$</li>
+<li><strong>神经纹理</strong>：学习的特征图代替传统纹理</li>
+<li><strong>超分辨率</strong>：$\mathbf{I}_{high} = G_\theta(\mathbf{I}_{low})$</li>
+</ul>
+<p><strong>可微渲染的梯度计算</strong></p>
+<p>可微渲染需要计算$\frac{\partial \mathbf{I}}{\partial \mathbf{p}}$，其中$\mathbf{p}$可以是几何、材质或光照参数。主要挑战包括：</p>
+<ol>
+<li><strong>可见性的不连续性</strong>：使用边缘采样或软光栅化</li>
+<li>
+<p><strong>蒙特卡洛积分的梯度</strong>：
+$$\nabla_\theta \mathbb{E}_{p_\theta}[f(x)] = \mathbb{E}_{p_\theta}[f(x) \nabla_\theta \log p_\theta(x)]$$</p>
+</li>
+<li>
+<p><strong>反向模式自动微分</strong>：高效计算复杂管线的梯度</p>
+</li>
+</ol>
+<p><strong>硬件加速的新时代</strong></p>
+<p>现代GPU引入了专用硬件：</p>
+<ul>
+<li><strong>RT Core</strong>：加速光线-三角形相交测试</li>
+<li><strong>Tensor Core</strong>：加速矩阵运算和AI推理</li>
+<li><strong>可变速率着色（VRS）</strong>：根据内容自适应调整着色率</li>
+</ul>
+<p>性能模型：
+$$T_{total} = T_{traverse} + T_{intersect} + T_{shade}$$
+其中硬件加速主要优化$T_{intersect}$，可达10-100倍加速。</p>
+<h2 id="12">1.2 向量与线性代数</h2>
+<h3 id="121">1.2.1 向量空间与基本运算</h3>
+<p>向量是图形学中最基本的数学对象。在$n$维欧几里得空间$\mathbb{R}^n$中，向量$\mathbf{v} = (v_1, v_2, ..., v_n)^T$表示一个有向线段。</p>
+<p><strong>向量加法与标量乘法</strong>：
+$$\mathbf{u} + \mathbf{v} = (u_1 + v_1, u_2 + v_2, ..., u_n + v_n)^T$$
+$$k\mathbf{v} = (kv_1, kv_2, ..., kv_n)^T$$
+这些运算满足向量空间的八条公理，使$\mathbb{R}^n$成为一个线性空间。</p>
+<p><strong>向量的几何解释</strong></p>
+<p>向量可以有多种解释，在图形学中常见的包括：</p>
+<ol>
+<li>
+<p><strong>位移向量</strong>：表示从一点到另一点的移动
+   - 平移变换：$\mathbf{p}' = \mathbf{p} + \mathbf{t}$
+   - 相对位置：$\mathbf{v}_{AB} = \mathbf{p}_B - \mathbf{p}_A$</p>
+</li>
+<li>
+<p><strong>方向向量</strong>：表示朝向，通常归一化
+   - 表面法线：$\mathbf{n} = \frac{(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)}{|(\mathbf{v}_1 - \mathbf{v}_0) \times (\mathbf{v}_2 - \mathbf{v}_0)|}$
+   - 光线方向：$\mathbf{d} = \frac{\mathbf{p}_{target} - \mathbf{p}_{origin}}{|\mathbf{p}_{target} - \mathbf{p}_{origin}|}$</p>
+</li>
+<li>
+<p><strong>速度向量</strong>：表示运动状态
+   - 线速度：$\mathbf{v} = \frac{d\mathbf{p}}{dt}$
+   - 角速度：$\boldsymbol{\omega} \times \mathbf{r}$（叉积给出切向速度）</p>
+</li>
+<li>
+<p><strong>力向量</strong>：物理模拟中的作用力
+   - 重力：$\mathbf{F}_g = m\mathbf{g}$
+   - 弹簧力：$\mathbf{F}_s = -k(\mathbf{x} - \mathbf{x}_0)$</p>
+</li>
+</ol>
+<p><strong>向量空间的公理系统</strong></p>
+<p>向量空间$(V, +, \cdot)$必须满足：</p>
+<ol>
+<li><strong>加法封闭性</strong>：$\forall \mathbf{u}, \mathbf{v} \in V: \mathbf{u} + \mathbf{v} \in V$</li>
+<li><strong>加法交换律</strong>：$\mathbf{u} + \mathbf{v} = \mathbf{v} + \mathbf{u}$</li>
+<li><strong>加法结合律</strong>：$(\mathbf{u} + \mathbf{v}) + \mathbf{w} = \mathbf{u} + (\mathbf{v} + \mathbf{w})$</li>
+<li><strong>零向量存在</strong>：$\exists \mathbf{0} \in V: \mathbf{v} + \mathbf{0} = \mathbf{v}$</li>
+<li><strong>加法逆元</strong>：$\forall \mathbf{v} \in V, \exists -\mathbf{v}: \mathbf{v} + (-\mathbf{v}) = \mathbf{0}$</li>
+<li><strong>标量乘法封闭</strong>：$\forall k \in \mathbb{R}, \mathbf{v} \in V: k\mathbf{v} \in V$</li>
+<li><strong>标量分配律</strong>：$k(\mathbf{u} + \mathbf{v}) = k\mathbf{u} + k\mathbf{v}$</li>
+<li><strong>向量分配律</strong>：$(k + l)\mathbf{v} = k\mathbf{v} + l\mathbf{v}$</li>
+</ol>
+<p><strong>仿射空间与向量空间的区别</strong></p>
+<p>图形学中常混淆点和向量：</p>
+<ul>
+<li><strong>点</strong>：位置，属于仿射空间$\mathcal{A}$</li>
+<li><strong>向量</strong>：位移，属于向量空间$V$</li>
+<li><strong>关系</strong>：$\mathbf{p} - \mathbf{q} = \mathbf{v}$（两点之差是向量）</li>
+<li><strong>仿射组合</strong>：$\mathbf{p} = \sum_i \lambda_i \mathbf{p}_i$，其中$\sum_i \lambda_i = 1$</li>
+</ul>
+<p><strong>内积（点积）</strong>：
+$$\mathbf{u} \cdot \mathbf{v} = \sum_{i=1}^{n} u_i v_i = |\mathbf{u}||\mathbf{v}|\cos\theta$$
+内积的几何意义：</p>
+<ul>
+<li>计算投影长度：$\text{proj}_{\mathbf{v}}\mathbf{u} = \frac{\mathbf{u} \cdot \mathbf{v}}{|\mathbf{v}|^2}\mathbf{v}$</li>
+<li>判断方向关系：$\mathbf{u} \cdot \mathbf{v} &gt; 0$表示夹角小于90°</li>
+<li>计算功和能量：在物理模拟中广泛应用</li>
+</ul>
+<p><strong>内积的推广形式</strong></p>
+<p>更一般地，内积可以定义为：
+$$\langle \mathbf{u}, \mathbf{v} \rangle_{\mathbf{M}} = \mathbf{u}^T \mathbf{M} \mathbf{v}$$
+其中$\mathbf{M}$是正定矩阵。这在各向异性材质和椭球体距离计算中很有用。</p>
+<p><strong>外积（叉积）</strong>：仅在三维空间定义
+$$\mathbf{u} \times \mathbf{v} = \begin{pmatrix}
+u_2v_3 - u_3v_2 \
+u_3v_1 - u_1v_3 \
+u_1v_2 - u_2v_1
+\end{pmatrix}$$
+外积的性质：</p>
+<ul>
+<li>$|\mathbf{u} \times \mathbf{v}| = |\mathbf{u}||\mathbf{v}|\sin\theta$</li>
+<li>方向遵循右手定则</li>
+<li>反交换律：$\mathbf{u} \times \mathbf{v} = -\mathbf{v} \times \mathbf{u}$</li>
+</ul>
+<p><strong>叉积的矩阵形式</strong></p>
+<p>叉积可以表示为反对称矩阵乘法：
+$$\mathbf{u} \times \mathbf{v} = [\mathbf{u}]_\times \mathbf{v}$$
+其中：
+$$[\mathbf{u}]_\times = \begin{pmatrix}
+0 &amp; -u_3 &amp; u_2 \
+u_3 &amp; 0 &amp; -u_1 \
+-u_2 &amp; u_1 &amp; 0
+\end{pmatrix}$$
+这个表示在刚体动力学和相机标定中非常有用。</p>
+<p><strong>三重积公式</strong></p>
+<p>标量三重积：
+$$(\mathbf{a} \times \mathbf{b}) \cdot \mathbf{c} = \det[\mathbf{a} | \mathbf{b} | \mathbf{c}]$$
+几何意义：三个向量张成的平行六面体的有向体积。</p>
+<p>向量三重积（BAC-CAB规则）：
+$$\mathbf{a} \times (\mathbf{b} \times \mathbf{c}) = \mathbf{b}(\mathbf{a} \cdot \mathbf{c}) - \mathbf{c}(\mathbf{a} \cdot \mathbf{b})$$</p>
+<h3 id="122">1.2.2 矩阵与线性变换</h3>
+<p>线性变换$T: \mathbb{R}^n \rightarrow \mathbb{R}^m$可以用$m \times n$矩阵$\mathbf{A}$表示：
+$$T(\mathbf{v}) = \mathbf{A}\mathbf{v}$$
+线性变换必须满足：</p>
+<ul>
+<li>可加性：$T(\mathbf{u} + \mathbf{v}) = T(\mathbf{u}) + T(\mathbf{v})$</li>
+<li>齐次性：$T(k\mathbf{v}) = kT(\mathbf{v})$</li>
+</ul>
+<p><strong>基本变换矩阵</strong>：</p>
+<p>缩放矩阵：
+$$\mathbf{S} = \begin{pmatrix}
+s_x &amp; 0 &amp; 0 \
+0 &amp; s_y &amp; 0 \
+0 &amp; 0 &amp; s_z
+\end{pmatrix}$$
+绕$z$轴旋转$\theta$角：
+$$\mathbf{R}_z(\theta) = \begin{pmatrix}
+\cos\theta &amp; -\sin\theta &amp; 0 \
+\sin\theta &amp; \cos\theta &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{pmatrix}$$
+<strong>任意轴旋转（Rodrigues公式）</strong></p>
+<p>绕单位轴$\mathbf{k}$旋转$\theta$角的旋转矩阵：
+$$\mathbf{R}(\mathbf{k}, \theta) = \mathbf{I} + \sin\theta[\mathbf{k}]_\times + (1-\cos\theta)[\mathbf{k}]_\times^2$$
+展开形式：
+$$\mathbf{R} = \cos\theta\mathbf{I} + (1-\cos\theta)\mathbf{k}\mathbf{k}^T + \sin\theta[\mathbf{k}]_\times$$
+这个公式在骨骼动画和物理模拟中广泛使用。</p>
+<p><strong>矩阵运算的几何意义</strong>：</p>
+<ul>
+<li>矩阵乘法对应变换的复合</li>
+<li>逆矩阵对应逆变换</li>
+<li>行列式表示体积缩放因子</li>
+<li>特征值和特征向量揭示变换的不变方向</li>
+</ul>
+<p><strong>奇异值分解（SVD）的几何解释</strong></p>
+<p>任意矩阵$\mathbf{A}$可分解为：
+$$\mathbf{A} = \mathbf{U}\mathbf{\Sigma}\mathbf{V}^T$$
+几何意义：</p>
+<ol>
+<li>$\mathbf{V}^T$：第一次旋转（输入空间）</li>
+<li>$\mathbf{\Sigma}$：沿主轴缩放</li>
+<li>$\mathbf{U}$：第二次旋转（输出空间）</li>
+</ol>
+<p>在图形学中的应用：</p>
+<ul>
+<li>提取旋转和缩放分量</li>
+<li>矩阵近似和压缩</li>
+<li>最小二乘问题求解</li>
+<li>主成分分析（PCA）</li>
+</ul>
+<h3 id="123">1.2.3 齐次坐标与仿射变换</h3>
+<p>为了统一表示线性变换和平移，引入齐次坐标。三维点$(x, y, z)$的齐次坐标为$(x, y, z, 1)$，向量的齐次坐标为$(x, y, z, 0)$。</p>
+<p>仿射变换的一般形式：
+$$\mathbf{T} = \begin{pmatrix}
+\mathbf{A}_{3×3} &amp; \mathbf{t}_{3×1} \
+\mathbf{0}_{1×3} &amp; 1
+\end{pmatrix}$$
+其中$\mathbf{A}$是线性变换部分，$\mathbf{t}$是平移向量。</p>
+<p><strong>变换的组合与分解</strong>：</p>
+<ul>
+<li>任意刚体变换可分解为旋转和平移</li>
+<li>任意仿射变换可通过SVD分解为旋转、缩放和剪切</li>
+<li>变换顺序很重要：$\mathbf{T}_1\mathbf{T}_2 \neq \mathbf{T}_2\mathbf{T}_1$</li>
+</ul>
+<h3 id="124">1.2.4 正交性与投影</h3>
+<p><strong>正交矩阵</strong>满足$\mathbf{Q}^T\mathbf{Q} = \mathbf{I}$，具有以下性质：</p>
+<ul>
+<li>保持长度和角度</li>
+<li>行列式为±1</li>
+<li>逆矩阵等于转置矩阵</li>
+</ul>
+<p><strong>投影矩阵</strong>：
+正交投影到子空间$\text{span}(\mathbf{v}_1, ..., \mathbf{v}_k)$：
+$$\mathbf{P} = \mathbf{V}(\mathbf{V}^T\mathbf{V})^{-1}\mathbf{V}^T$$
+其中$\mathbf{V} = [\mathbf{v}_1 | ... | \mathbf{v}_k]$。</p>
+<p>透视投影矩阵（后续章节详述）将三维点映射到规范化设备坐标。</p>
+<h2 id="13">1.3 四元数与复数在图形学中的应用</h2>
+<h3 id="131">1.3.1 复数与二维旋转</h3>
+<p>复数提供了优雅的二维旋转表示。复数$z = a + bi$可以写成极坐标形式：
+$$z = r(\cos\theta + i\sin\theta) = re^{i\theta}$$
+二维点$(x, y)$对应复数$x + yi$，绕原点旋转$\phi$角等价于乘以$e^{i\phi}$：
+$$(x + yi)e^{i\phi} = (x + yi)(\cos\phi + i\sin\phi)$$
+$$= (x\cos\phi - y\sin\phi) + i(x\sin\phi + y\cos\phi)$$
+这恰好对应旋转矩阵的作用结果。复数乘法的几何意义：</p>
+<ul>
+<li>模相乘：$|z_1z_2| = |z_1||z_2|$</li>
+<li>幅角相加：$\arg(z_1z_2) = \arg(z_1) + \arg(z_2)$</li>
+</ul>
+<h3 id="132">1.3.2 四元数基础</h3>
+<p>四元数是复数的推广，形式为：
+$$q = w + xi + yj + zk$$
+其中$i^2 = j^2 = k^2 = ijk = -1$，且：</p>
+<ul>
+<li>$ij = k, jk = i, ki = j$</li>
+<li>$ji = -k, kj = -i, ik = -j$</li>
+</ul>
+<p>四元数可以写成标量-向量形式：
+$$q = (s, \mathbf{v}) = s + v_xi + v_yj + v_zk$$
+<strong>四元数运算</strong>：</p>
+<p>加法：$(s_1, \mathbf{v}_1) + (s_2, \mathbf{v}_2) = (s_1 + s_2, \mathbf{v}_1 + \mathbf{v}_2)$</p>
+<p>乘法（Hamilton积）：
+$$q_1q_2 = (s_1s_2 - \mathbf{v}_1 \cdot \mathbf{v}_2, s_1\mathbf{v}_2 + s_2\mathbf{v}_1 + \mathbf{v}_1 \times \mathbf{v}_2)$$
+共轭：$q^* = (s, -\mathbf{v})$</p>
+<p>模：$|q| = \sqrt{qq^*} = \sqrt{s^2 + |\mathbf{v}|^2}$</p>
+<h3 id="133">1.3.3 四元数与三维旋转</h3>
+<p>单位四元数可以表示三维旋转。绕单位轴$\mathbf{n}$旋转$\theta$角对应的四元数为：
+$$q = \cos\frac{\theta}{2} + \sin\frac{\theta}{2}(n_xi + n_yj + n_zk)$$
+<strong>旋转公式</strong>：点$\mathbf{p}$经四元数$q$旋转后得到：
+$$\mathbf{p}' = q\mathbf{p}q^*$$
+其中$\mathbf{p}$被视为纯四元数$(0, \mathbf{p})$。</p>
+<p><strong>四元数转旋转矩阵</strong>：
+设$q = w + xi + yj + zk$，对应的旋转矩阵为：
+$$\mathbf{R} = \begin{pmatrix}
+1-2(y^2+z^2) &amp; 2(xy-wz) &amp; 2(xz+wy) \
+2(xy+wz) &amp; 1-2(x^2+z^2) &amp; 2(yz-wx) \
+2(xz-wy) &amp; 2(yz+wx) &amp; 1-2(x^2+y^2)
+\end{pmatrix}$$</p>
+<h3 id="134">1.3.4 四元数的优势与应用</h3>
+<p><strong>相比欧拉角的优势</strong>：</p>
+<ol>
+<li>无万向锁问题</li>
+<li>插值更平滑（球面线性插值SLERP）</li>
+<li>数值稳定性更好</li>
+<li>存储更紧凑（4个数vs9个数）</li>
+</ol>
+<p><strong>球面线性插值（SLERP）</strong>：
+$$\text{slerp}(q_1, q_2, t) = \frac{\sin((1-t)\Omega)}{\sin\Omega}q_1 + \frac{\sin(t\Omega)}{\sin\Omega}q_2$$
+其中$\cos\Omega = q_1 \cdot q_2$。</p>
+<p><strong>在图形学中的应用</strong>：</p>
+<ul>
+<li>骨骼动画的关节旋转</li>
+<li>相机控制（避免万向锁）</li>
+<li>物理模拟中的刚体方向</li>
+<li>法线贴图的切线空间变换</li>
+</ul>
+<h3 id="135">1.3.5 对偶四元数与刚体变换</h3>
+<p>对偶四元数将旋转和平移统一表示：
+$$\hat{q} = q_r + \epsilon q_d$$
+其中$\epsilon^2 = 0$（对偶单位），$q_r$表示旋转，$q_d = \frac{1}{2}tq_r$（$t$是平移四元数）。</p>
+<p>对偶四元数的优势：</p>
+<ul>
+<li>统一表示刚体变换</li>
+<li>支持平滑插值（包括旋转和平移）</li>
+<li>避免矩阵乘法的数值误差累积</li>
+</ul>
+<h2 id="_1">本章小结</h2>
+<p>本章建立了计算机图形学的数学基础：</p>
+<p><strong>核心概念</strong>：</p>
+<ol>
+<li>图形学管线：应用→几何→光栅化→片段处理</li>
+<li>向量运算：点积（投影、角度）、叉积（法向、面积）</li>
+<li>矩阵变换：线性变换、仿射变换、齐次坐标</li>
+<li>四元数：紧凑的旋转表示，避免万向锁</li>
+</ol>
+<p><strong>关键公式</strong>：</p>
+<ul>
+<li>点积：$\mathbf{u} \cdot \mathbf{v} = |\mathbf{u}||\mathbf{v}|\cos\theta$</li>
+<li>叉积：$|\mathbf{u} \times \mathbf{v}| = |\mathbf{u}||\mathbf{v}|\sin\theta$</li>
+<li>四元数旋转：$\mathbf{p}' = q\mathbf{p}q^*$</li>
+<li>SLERP：$\text{slerp}(q_1, q_2, t) = \frac{\sin((1-t)\Omega)}{\sin\Omega}q_1 + \frac{\sin(t\Omega)}{\sin\Omega}q_2$</li>
+</ul>
+<p><strong>重要性质</strong>：</p>
+<ul>
+<li>正交矩阵保持长度和角度</li>
+<li>单位四元数形成3-球面$S^3$</li>
+<li>旋转的复合对应四元数乘法</li>
+<li>仿射变换保持直线和平行关系</li>
+</ul>
+<h2 id="_2">练习题</h2>
+<h3 id="_3">基础题</h3>
+<p><strong>1.1 向量运算基础</strong>
+给定向量$\mathbf{a} = (1, 2, 3)$，$\mathbf{b} = (4, -1, 2)$，计算：</p>
+<ul>
+<li>(a) $\mathbf{a} \cdot \mathbf{b}$</li>
+<li>(b) $\mathbf{a} \times \mathbf{b}$</li>
+<li>(c) $\mathbf{a}$在$\mathbf{b}$上的投影向量</li>
+</ul>
+<p><em>Hint</em>: 投影公式为$\text{proj}_{\mathbf{b}}\mathbf{a} = \frac{\mathbf{a} \cdot \mathbf{b}}{|\mathbf{b}|^2}\mathbf{b}$</p>
+<details>
+<summary>答案</summary>
+<p>(a) $\mathbf{a} \cdot \mathbf{b} = 1×4 + 2×(-1) + 3×2 = 8$</p>
+<p>(b) $\mathbf{a} \times \mathbf{b} = \begin{pmatrix} 2×2-3×(-1) \ 3×4-1×2 \ 1×(-1)-2×4 \end{pmatrix} = \begin{pmatrix} 7 \ 10 \ -9 \end{pmatrix}$</p>
+<p>(c) $|\mathbf{b}|^2 = 16 + 1 + 4 = 21$，所以投影向量为$\frac{8}{21}(4, -1, 2) = (\frac{32}{21}, -\frac{8}{21}, \frac{16}{21})$</p>
+</details>
+<p><strong>1.2 矩阵变换组合</strong>
+一个物体先绕$z$轴旋转45°，再沿$x$轴方向缩放2倍，最后平移$(3, 1, 0)$。写出复合变换矩阵。</p>
+<p><em>Hint</em>: 注意变换顺序，使用齐次坐标</p>
+<details>
+<summary>答案</summary>
+<p>变换顺序（从右到左）：旋转→缩放→平移
+$$\mathbf{T} = \begin{pmatrix}
+1 &amp; 0 &amp; 0 &amp; 3 \
+0 &amp; 1 &amp; 0 &amp; 1 \
+0 &amp; 0 &amp; 1 &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{pmatrix}
+\begin{pmatrix}
+2 &amp; 0 &amp; 0 &amp; 0 \
+0 &amp; 1 &amp; 0 &amp; 0 \
+0 &amp; 0 &amp; 1 &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{pmatrix}
+\begin{pmatrix}
+\cos45° &amp; -\sin45° &amp; 0 &amp; 0 \
+\sin45° &amp; \cos45° &amp; 0 &amp; 0 \
+0 &amp; 0 &amp; 1 &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{pmatrix}$$</p>
+<p>$$= \begin{pmatrix}
+\sqrt{2} &amp; -\frac{\sqrt{2}}{2} &amp; 0 &amp; 3 \
+\frac{\sqrt{2}}{2} &amp; \frac{\sqrt{2}}{2} &amp; 0 &amp; 1 \
+0 &amp; 0 &amp; 1 &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{pmatrix}$$</p>
+</details>
+<p><strong>1.3 四元数旋转</strong>
+将四元数$q = \frac{1}{2} + \frac{1}{2}i + \frac{1}{2}j + \frac{1}{2}k$转换为旋转矩阵。</p>
+<p><em>Hint</em>: 首先验证这是单位四元数</p>
+<details>
+<summary>答案</summary>
+<p>验证：$|q| = \sqrt{(\frac{1}{2})^2 + (\frac{1}{2})^2 + (\frac{1}{2})^2 + (\frac{1}{2})^2} = 1$ ✓</p>
+<p>设$w = \frac{1}{2}, x = y = z = \frac{1}{2}$，代入公式：
+$$\mathbf{R} = \begin{pmatrix}
+1-2(\frac{1}{4}+\frac{1}{4}) &amp; 2(\frac{1}{4}-\frac{1}{4}) &amp; 2(\frac{1}{4}+\frac{1}{4}) \
+2(\frac{1}{4}+\frac{1}{4}) &amp; 1-2(\frac{1}{4}+\frac{1}{4}) &amp; 2(\frac{1}{4}-\frac{1}{4}) \
+2(\frac{1}{4}-\frac{1}{4}) &amp; 2(\frac{1}{4}+\frac{1}{4}) &amp; 1-2(\frac{1}{4}+\frac{1}{4})
+\end{pmatrix}$$</p>
+<p>$$= \begin{pmatrix}
+0 &amp; 0 &amp; 1 \
+1 &amp; 0 &amp; 0 \
+0 &amp; 1 &amp; 0
+\end{pmatrix}$$
+这是一个120°旋转，轴为$(1,1,1)$方向。</p>
+</details>
+<h3 id="_4">挑战题</h3>
+<p><strong>1.4 最小二乘投影</strong>
+推导将向量$\mathbf{b}$投影到由列向量$\mathbf{a}_1, \mathbf{a}_2$张成的平面上的投影矩阵$\mathbf{P}$，并证明$\mathbf{P}^2 = \mathbf{P}$。</p>
+<p><em>Hint</em>: 使用正规方程$\mathbf{A}^T\mathbf{A}\mathbf{x} = \mathbf{A}^T\mathbf{b}$</p>
+<details>
+<summary>答案</summary>
+<p>设$\mathbf{A} = [\mathbf{a}_1 | \mathbf{a}_2]$，投影为$\mathbf{p} = \mathbf{A}\mathbf{x}$。</p>
+<p>最小化$|\mathbf{b} - \mathbf{A}\mathbf{x}|^2$，得正规方程：
+$$\mathbf{A}^T\mathbf{A}\mathbf{x} = \mathbf{A}^T\mathbf{b}$$
+解得：$\mathbf{x} = (\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T\mathbf{b}$</p>
+<p>投影：$\mathbf{p} = \mathbf{A}(\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T\mathbf{b}$</p>
+<p>因此投影矩阵：$\mathbf{P} = \mathbf{A}(\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T$</p>
+<p>证明幂等性：
+$$\mathbf{P}^2 = \mathbf{A}(\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T\mathbf{A}(\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T = \mathbf{A}(\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T = \mathbf{P}$$</p>
+</details>
+<p><strong>1.5 四元数插值优化</strong>
+给定两个单位四元数$q_1$和$q_2$，当$q_1 \cdot q_2 &lt; 0$时，SLERP会选择"长路径"。如何修正这个问题？证明你的方法保持插值的连续性。</p>
+<p><em>Hint</em>: 考虑四元数的双覆盖性质</p>
+<details>
+<summary>答案</summary>
+<p>四元数$q$和$-q$表示相同的旋转（双覆盖）。当$q_1 \cdot q_2 &lt; 0$时，$q_1$和$q_2$在4D球面上的夹角大于90°。</p>
+<p>修正方法：若$q_1 \cdot q_2 &lt; 0$，将$q_2$替换为$-q_2$。</p>
+<p>证明连续性：
+设原始插值路径为$\gamma(t) = \text{slerp}(q_1, q_2, t)$，修正后为$\gamma'(t) = \text{slerp}(q_1, -q_2, t)$。</p>
+<p>在$t=0$：$\gamma'(0) = q_1 = \gamma(0)$
+在$t=1$：$\gamma'(1) = -q_2$，但$-q_2$和$q_2$表示相同旋转</p>
+<p>修正后的夹角$\Omega' = \arccos(-q_1 \cdot q_2) = \pi - \Omega &lt; \pi/2$，确保选择短路径。</p>
+</details>
+<p><strong>1.6 仿射变换的不动点</strong>
+证明：任意二维仿射变换$T(\mathbf{x}) = \mathbf{A}\mathbf{x} + \mathbf{b}$（其中$\det(\mathbf{A}-\mathbf{I}) \neq 0$）有唯一不动点。找出该不动点的表达式。</p>
+<p><em>Hint</em>: 不动点满足$T(\mathbf{x}) = \mathbf{x}$</p>
+<details>
+<summary>答案</summary>
+<p>设不动点为$\mathbf{x}_0$，则：
+$$\mathbf{A}\mathbf{x}_0 + \mathbf{b} = \mathbf{x}_0$$
+$$(\mathbf{A} - \mathbf{I})\mathbf{x}_0 = -\mathbf{b}$$
+由于$\det(\mathbf{A}-\mathbf{I}) \neq 0$，矩阵$\mathbf{A}-\mathbf{I}$可逆，因此：
+$$\mathbf{x}_0 = -(\mathbf{A} - \mathbf{I})^{-1}\mathbf{b}$$
+这是唯一解。</p>
+<p>几何意义：不动点是变换的"中心"，所有点围绕它进行变换。</p>
+</details>
+<p><strong>1.7 复数与四元数的联系</strong>
+将二维旋转的复数表示推广到三维。具体地，如何用两个复数表示一个三维旋转？这与四元数有什么关系？</p>
+<p><em>Hint</em>: 考虑Cayley-Dickson构造</p>
+<details>
+<summary>答案</summary>
+<p>四元数可以看作"复数对"：$q = z_1 + z_2j$，其中$z_1 = a + bi$，$z_2 = c + di$。</p>
+<p>这给出：$q = a + bi + cj + dk$</p>
+<p>关系：</p>
+<ul>
+<li>当$c = d = 0$时，退化为复数（二维旋转）</li>
+<li>四元数乘法规则可从复数乘法推广得出</li>
+</ul>
+<p>另一种表示：使用两个复数$(z_1, z_2)$表示三维旋转，满足$|z_1|^2 + |z_2|^2 = 1$。这实际上是$SU(2)$群的表示，与单位四元数同构。</p>
+<p>对应关系：
+$$\begin{pmatrix} z_1 &amp; -\bar{z}_2 \ z_2 &amp; \bar{z}_1 \end{pmatrix} \leftrightarrow a + bi + cj + dk$$
+其中$z_1 = a + bi$，$z_2 = c + di$。</p>
+</details>
+<p><strong>1.8 图形管线的能量守恒</strong>
+在物理真实的渲染中，为什么需要确保BRDF满足能量守恒？给出数学表述并解释其在实时渲染中的简化方法。</p>
+<p><em>Hint</em>: 考虑反射率的积分</p>
+<details>
+<summary>答案</summary>
+<p>能量守恒要求出射能量不超过入射能量。对于BRDF $f_r(\omega_i, \omega_o)$：
+$$\int_{\Omega} f_r(\omega_i, \omega_o) \cos\theta_i \, d\omega_i \leq 1$$
+对所有出射方向$\omega_o$成立。</p>
+<p>物理意义：反射的总能量不能超过入射能量。</p>
+<p>实时渲染简化：</p>
+<ol>
+<li>预计算积分表（如UE4的环境BRDF查找表）</li>
+<li>使用归一化的解析BRDF（如归一化Phong）</li>
+<li>分离漫反射和镜面反射，分别确保守恒</li>
+</ol>
+<p>例如，对于简化的BRDF：
+$$f_r = \frac{k_d}{\pi} + k_s \cdot f_{specular}$$</p>
+<p>确保$k_d + k_s \leq 1$（菲涅尔项会进一步调整）。</p>
+</details>
+<h2 id="_5">常见陷阱与错误</h2>
+<h3 id="_6">向量与点的混淆</h3>
+<ul>
+<li><strong>错误</strong>：将向量当作点进行平移变换</li>
+<li><strong>正确</strong>：向量的齐次坐标第四分量为0，不受平移影响</li>
+<li><strong>调试技巧</strong>：检查齐次坐标的w分量</li>
+</ul>
+<h3 id="_7">矩阵乘法顺序</h3>
+<ul>
+<li><strong>错误</strong>：<code>translate * rotate * scale</code>（错误顺序）</li>
+<li><strong>正确</strong>：<code>translate * rotate * scale * vertex</code>（从右向左）</li>
+<li><strong>记忆方法</strong>：变换从右向左应用，最右边的先执行</li>
+</ul>
+<h3 id="_8">四元数归一化</h3>
+<ul>
+<li><strong>错误</strong>：忘记归一化导致缩放</li>
+<li><strong>正确</strong>：每次运算后重新归一化</li>
+<li><strong>优化</strong>：使用平方根的快速近似算法</li>
+</ul>
+<h3 id="_9">叉积的手性</h3>
+<ul>
+<li><strong>错误</strong>：混淆左手系和右手系</li>
+<li><strong>正确</strong>：OpenGL用右手系，DirectX传统上用左手系</li>
+<li><strong>验证</strong>：$\mathbf{x} \times \mathbf{y} = \mathbf{z}$（右手系）</li>
+</ul>
+<h3 id="_10">浮点精度问题</h3>
+<ul>
+<li><strong>错误</strong>：直接比较浮点数相等</li>
+<li><strong>正确</strong>：使用epsilon容差：<code>abs(a - b) &lt; epsilon</code></li>
+<li><strong>选择epsilon</strong>：通常用<code>1e-6</code>，但需根据场景调整</li>
+</ul>
+<h3 id="gimbal-lock">Gimbal Lock（万向锁）</h3>
+<ul>
+<li><strong>症状</strong>：欧拉角在某些角度失去一个自由度</li>
+<li><strong>解决</strong>：使用四元数或轴角表示</li>
+<li><strong>转换时机</strong>：仅在最终输出时转换为欧拉角</li>
+</ul>
+<h2 id="_11">最佳实践检查清单</h2>
+<h3 id="_12">数学库设计</h3>
+<ul>
+<li>[ ] 向量和点使用不同的类型或明确区分</li>
+<li>[ ] 提供行主序和列主序的明确说明</li>
+<li>[ ] 实现SIMD优化的向量运算</li>
+<li>[ ] 包含数值稳定的归一化函数</li>
+<li>[ ] 提供便捷的调试输出功能</li>
+</ul>
+<h3 id="_13">变换系统</h3>
+<ul>
+<li>[ ] 使用齐次坐标统一处理变换</li>
+<li>[ ] 缓存常用的变换矩阵</li>
+<li>[ ] 提供矩阵分解功能（提取旋转、缩放等）</li>
+<li>[ ] 实现视锥体裁剪的快速路径</li>
+<li>[ ] 支持不同坐标系之间的转换</li>
+</ul>
+<h3 id="_14">四元数使用</h3>
+<ul>
+<li>[ ] 始终保持四元数归一化</li>
+<li>[ ] 实现SLERP和NLERP两种插值</li>
+<li>[ ] 处理四元数点积为负的情况</li>
+<li>[ ] 提供与欧拉角、轴角的转换函数</li>
+<li>[ ] 考虑使用对偶四元数处理刚体变换</li>
+</ul>
+<h3 id="_15">性能优化</h3>
+<ul>
+<li>[ ] 避免不必要的矩阵求逆</li>
+<li>[ ] 使用快速平方根倒数近似</li>
+<li>[ ] 预计算能复用的中间结果</li>
+<li>[ ] 考虑内存对齐和缓存友好性</li>
+<li>[ ] 使用查表法加速三角函数</li>
+</ul>
+<h3 id="_16">数值稳定性</h3>
+<ul>
+<li>[ ] 使用稳定的正交化算法（如改进的Gram-Schmidt）</li>
+<li>[ ] 避免在接近奇异的情况下求逆</li>
+<li>[ ] 使用适当的epsilon进行浮点比较</li>
+<li>[ ] 定期重新正交化旋转矩阵</li>
+<li>[ ] 考虑使用双精度进行关键计算</li>
+</ul>
+            </article>
+            
+            <nav class="page-nav"><a href="./index.html" class="nav-link prev">← 计算机图形学高级教程</a><a href="./chapter2.html" class="nav-link next">第2章：几何变换 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>

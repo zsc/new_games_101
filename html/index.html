@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>计算机图形学高级教程</title>
+    <link rel="stylesheet" href="./assets/style.css">
+    <link rel="stylesheet" href="./assets/highlight.css">
+    <script src="./assets/script.js" defer></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                processEscapes: false,
+                packages: {'[+]': ['noerrors']}
+            },
+            options: {
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            loader: {
+                load: ['[tex]/noerrors']
+            }
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3>目录</h3>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+            </div>
+            <ul class="nav-list"><li class="active"><a href="./index.html">计算机图形学高级教程</a></li><li class=""><a href="./chapter1.html">第1章：计算机图形学概述与数学基础</a></li><li class=""><a href="./chapter2.html">第2章：几何变换</a></li><li class=""><a href="./chapter3.html">第3章：光栅化</a></li><li class=""><a href="./chapter4.html">第4章：着色基础</a></li><li class=""><a href="./chapter5.html">第5章：高级着色技术</a></li><li class=""><a href="./chapter6.html">第6章：几何表示</a></li><li class=""><a href="./chapter7.html">第7章：光线追踪基础</a></li><li class=""><a href="./chapter8.html">第8章：全局光照</a></li><li class=""><a href="./chapter9.html">第9章：材质与外观</a></li><li class=""><a href="./chapter10.html">第10章：成像系统</a></li><li class=""><a href="./chapter11.html">第11章：动画与物理模拟</a></li><li class=""><a href="./chapter12.html">第12章：物质点法</a></li><li class=""><a href="./CLAUDE.html">Untitled</a></li><li class=""><a href="./old.html">Untitled</a></li></ul>
+        </nav>
+        
+        <main class="content">
+            <article>
+                <h1 id="_1">计算机图形学高级教程</h1>
+<h2 id="_2">目标读者</h2>
+<p>本教程面向资深程序员和AI科学家，提供计算机图形学的深入理解和实践指导。</p>
+<h2 id="_3">教程特色</h2>
+<ul>
+<li>深入的数学推导和理论分析</li>
+<li>大量练习题（含基础题和挑战题）</li>
+<li>常见陷阱与调试技巧</li>
+<li>最佳实践检查清单</li>
+</ul>
+<h2 id="_4">章节目录</h2>
+<h3 id="1"><a href="chapter1.html">第1章：计算机图形学概述与数学基础</a></h3>
+<p>1.1 计算机图形学概述
+1.2 向量与线性代数
+1.3 四元数与复数在图形学中的应用</p>
+<h3 id="2"><a href="chapter2.html">第2章：几何变换</a></h3>
+<p>2.1 二维与三维变换
+2.2 模型、视图、投影变换
+2.3 变换矩阵的组合与优化</p>
+<h3 id="3"><a href="chapter3.html">第3章：光栅化</a></h3>
+<p>3.1 三角形的离散化
+3.2 深度测试与抗锯齿
+3.3 现代GPU光栅化管线</p>
+<h3 id="4"><a href="chapter4.html">第4章：着色基础</a></h3>
+<p>4.1 光照与基本着色模型
+4.2 着色频率与图形管线
+4.3 纹理映射基础</p>
+<h3 id="5"><a href="chapter5.html">第5章：高级着色技术</a></h3>
+<p>5.1 插值技术详解
+5.2 高级纹理映射
+5.3 程序化纹理与着色器优化</p>
+<h3 id="6"><a href="chapter6.html">第6章：几何表示</a></h3>
+<p>6.1 基本几何表示方法
+6.2 曲线与曲面
+6.3 网格处理与阴影图</p>
+<h3 id="7"><a href="chapter7.html">第7章：光线追踪基础</a></h3>
+<p>7.1 光线追踪基本原理
+7.2 加速结构（BVH、KD-Tree）
+7.3 光线-物体相交算法优化</p>
+<h3 id="8"><a href="chapter8.html">第8章：全局光照</a></h3>
+<p>8.1 辐射度量学
+8.2 渲染方程
+8.3 蒙特卡洛积分与路径追踪</p>
+<h3 id="9"><a href="chapter9.html">第9章：材质与外观</a></h3>
+<p>9.1 BRDF/BSDF理论
+9.2 高级材质模型
+9.3 复杂外观建模</p>
+<h3 id="10"><a href="chapter10.html">第10章：成像系统</a></h3>
+<p>10.1 相机与透镜模型
+10.2 光场理论
+10.3 颜色科学与感知</p>
+<h3 id="11"><a href="chapter11.html">第11章：动画与物理模拟</a></h3>
+<p>11.1 动画基本概念
+11.2 质点弹簧系统与运动学
+11.3 常微分方程求解
+11.4 刚体与流体模拟</p>
+<h3 id="12"><a href="chapter12.html">第12章：物质点法</a></h3>
+<p>12.1 物质点法基础理论
+12.2 MLS-MPM（移动最小二乘物质点法）
+12.3 高级MPM技术与应用</p>
+<h2 id="_5">使用说明</h2>
+<p>每章包含以下部分：</p>
+<ol>
+<li><strong>开篇段落</strong>：章节概述和学习目标</li>
+<li><strong>核心内容</strong>：理论讲解和数学推导</li>
+<li><strong>本章小结</strong>：关键概念和公式总结</li>
+<li><strong>练习题</strong>：6-8道题目，包含基础题和挑战题</li>
+<li><strong>常见陷阱与错误</strong>：调试技巧和注意事项</li>
+<li><strong>最佳实践检查清单</strong>：设计审查要点</li>
+</ol>
+<h2 id="_6">数学符号约定</h2>
+<ul>
+<li>向量：粗体小写字母 $\mathbf{v}$</li>
+<li>矩阵：粗体大写字母 $\mathbf{M}$</li>
+<li>标量：斜体 $s$</li>
+<li>函数：正体 $f(\cdot)$</li>
+<li>集合：花体大写 $\mathcal{S}$</li>
+</ul>
+<h2 id="_7">推荐阅读顺序</h2>
+<ul>
+<li><strong>基础路径</strong>：第1-3章 → 第4-5章 → 第6章 → 第7-8章</li>
+<li><strong>实时渲染路径</strong>：第1-5章 → 第11章</li>
+<li><strong>离线渲染路径</strong>：第1-2章 → 第6-10章</li>
+</ul>
+<h2 id="_8">致谢</h2>
+<p>本教程内容组织参考了经典的计算机图形学课程，并针对AI时代的需求进行了更新和扩展。</p>
+            </article>
+            
+            <nav class="page-nav"><a href="./chapter1.html" class="nav-link next">第1章：计算机图形学概述与数学基础 →</a></nav>
+        </main>
+    </div>
+</body>
+</html>
