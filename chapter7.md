@@ -121,6 +121,18 @@ $$L_o = L_e + k_d L_{\text{direct}} + k_s L_{\text{reflect}} + k_t L_{\text{refr
 - $L_{\text{refract}}$：折射贡献
 - $k_d, k_s, k_t$：材质参数，满足能量守恒 $k_d + k_s + k_t \leq 1$
 
+**直接光照计算的细节**：
+
+对于点光源：
+$$L_{\text{direct}} = \sum_{i} \frac{I_i}{r_i^2} \cdot V_i \cdot \max(0, \mathbf{n} \cdot \mathbf{l}_i) \cdot \left(\frac{k_d}{\pi} + k_s \frac{(\mathbf{h}_i \cdot \mathbf{n})^n}{(\mathbf{n} \cdot \mathbf{l}_i)}\right)$$
+
+其中：
+- $I_i$：光源强度
+- $r_i$：到光源距离
+- $V_i$：可见性函数（0或1）
+- $\mathbf{h}_i = \text{normalize}(\mathbf{l}_i + \mathbf{v})$：半向量
+- $n$：Phong指数
+
 **反射方向计算**：
 $$\mathbf{r}_{\text{reflect}} = \mathbf{d} - 2(\mathbf{d} \cdot \mathbf{n})\mathbf{n}$$
 
@@ -129,12 +141,27 @@ $$\mathbf{r}_{\text{reflect}} = \mathbf{d} - 2(\mathbf{d} \cdot \mathbf{n})\math
 $$\mathbf{r}'_{\text{reflect}} = \text{normalize}(\mathbf{r}_{\text{reflect}} + \alpha \mathbf{\xi})$$
 其中 $\mathbf{\xi}$ 是随机扰动向量，$\alpha$ 是粗糙度参数。
 
+**扰动向量的生成**：
+使用切线空间：
+1. 构建正交基：$\{\mathbf{n}, \mathbf{t}, \mathbf{b}\}$
+2. 在半球内采样：$\mathbf{\xi} = \sqrt{1-u^2}\cos(2\pi v)\mathbf{t} + \sqrt{1-u^2}\sin(2\pi v)\mathbf{b} + u\mathbf{n}$
+3. 其中 $u, v \in [0,1]$ 是随机数
+
 **折射方向计算**（Snell定律）：
 $$\mathbf{r}_{\text{refract}} = \frac{\eta_i}{\eta_t}\mathbf{d} + \left(\frac{\eta_i}{\eta_t}(\mathbf{n} \cdot \mathbf{d}) - \sqrt{1 - \sin^2\theta_t}\right)\mathbf{n}$$
 
 其中 $\sin^2\theta_t = \left(\frac{\eta_i}{\eta_t}\right)^2(1 - (\mathbf{n} \cdot \mathbf{d})^2)$
 
+**稳定的折射计算**：
+```
+令 k = 1 - η²(1 - (n·d)²)
+if k < 0: 全内反射
+else: t = η*d + (η*(n·d) - √k)*n
+```
+
 **全内反射判断**：当 $\sin^2\theta_t > 1$ 时发生全内反射。
+
+临界角：$\theta_c = \arcsin(\eta_t/\eta_i)$（当 $\eta_i > \eta_t$）
 
 **Fresnel方程**：
 计算反射和折射的能量分配：
@@ -144,9 +171,36 @@ Schlick近似（计算效率更高）：
 $$F_r \approx F_0 + (1 - F_0)(1 - \cos\theta_i)^5$$
 其中 $F_0 = \left(\frac{\eta_i - \eta_t}{\eta_i + \eta_t}\right)^2$
 
+**金属材质的Fresnel**：
+复数折射率 $\tilde{\eta} = \eta + i\kappa$
+$$F_r = \frac{(\eta - 1)^2 + \kappa^2}{(\eta + 1)^2 + \kappa^2}$$
+
 **色散效果**：
 不同波长具有不同折射率：
 $$\eta(\lambda) = A + \frac{B}{\lambda^2} + \frac{C}{\lambda^4}$$ （Cauchy方程）
+
+典型值（玻璃）：
+- 红光（700nm）：$\eta_r \approx 1.513$
+- 绿光（550nm）：$\eta_g \approx 1.517$
+- 蓝光（450nm）：$\eta_b \approx 1.522$
+
+**实现色散**：
+1. 将白光分解为RGB分量
+2. 对每个分量使用不同折射率
+3. 分别追踪三条折射光线
+4. 合成最终颜色
+
+**递归深度控制**：
+
+简单深度限制：
+```
+if (depth > MAX_DEPTH) return background_color;
+```
+
+基于贡献的终止：
+```
+if (throughput < THRESHOLD) return black;
+```
 
 **俄罗斯轮盘赌**终止策略：
 ```
@@ -158,6 +212,29 @@ return color / p;  // 能量补偿
 **改进的终止策略**：
 考虑路径贡献和计算成本的平衡：
 $$p_{\text{continue}} = \min\left(1, \frac{\text{throughput} \cdot \text{max\_radiance}}{\text{current\_radiance}}\right)$$
+
+**自适应深度策略**：
+- 镜面反射：允许更深递归
+- 漫反射：较早终止
+- 基于材质重要性调整深度限制
+
+**光线树优化**：
+记录光线贡献路径，避免重复计算：
+```
+struct RayNode {
+    Ray ray;
+    float contribution;
+    Material* mat;
+    RayNode* children[2];  // reflect, refract
+}
+```
+
+**多次反射间的相互作用**：
+- **焦散（Caustics）**：光线经过折射/反射聚焦
+- **间接光照**：多次漫反射
+- **色彩渗透**：相邻表面的颜色互相影响
+
+这些效果在Whitted模型中是近似的，更准确的模拟需要路径追踪或光子映射。
 
 ### 7.1.4 相机模型与光线生成
 
@@ -269,6 +346,25 @@ $$T_{\text{trace}} = T_{\text{traverse}} + N_{\text{leaf}} \cdot T_{\text{inters
 
 ### 7.2.2 层次包围盒（BVH）
 
+BVH是一种物体层次结构，每个节点包含其所有子节点的轴对齐包围盒（AABB）。
+
+**BVH节点结构**：
+```
+struct BVHNode {
+    AABB bounds;          // 包围盒
+    union {
+        struct {          // 内部节点
+            BVHNode* left;
+            BVHNode* right;
+        };
+        struct {          // 叶节点
+            int primOffset;   // 图元起始索引
+            int primCount;    // 图元数量
+        };
+    };
+}
+```
+
 **BVH构建算法**：
 
 1. **自顶向下构建**
@@ -300,8 +396,49 @@ $$T_{\text{trace}} = T_{\text{traverse}} + N_{\text{leaf}} \cdot T_{\text{inters
    $$C_{\text{split}} = C_{\text{trav}} + P_L \cdot C_L + P_R \cdot C_R$$
    
    其中概率 $P_L = \frac{A_L}{A}$，$P_R = \frac{A_R}{A}$
+   
+   **表面积计算**（AABB）：
+   $$A = 2(dx \cdot dy + dy \cdot dz + dz \cdot dx)$$
+   其中 $dx = \text{max}_x - \text{min}_x$ 等。
 
-3. **BVH遍历**
+3. **分割策略比较**：
+   
+   **中点分割（Middle Split）**：
+   - 简单快速：$p = (\text{min} + \text{max}) / 2$
+   - 可能产生不平衡的树
+   
+   **等数分割（Equal Count）**：
+   - 保证平衡：每边 $N/2$ 个图元
+   - 可能产生重叠严重的包围盒
+   
+   **SAH分割**：
+   - 最小化期望遍历代价
+   - 计算开销大，但质量最高
+   
+   **混合策略**：
+   ```
+   if (图元数 < 阈值) 使用中点分割
+   else 使用SAH分割
+   ```
+
+4. **高效SAH实现**：
+   
+   **桶排序方法（Binned SAH）**：
+   ```
+   将包围盒范围分为K个桶（典型K=32）
+   for each 图元:
+       计算质心
+       分配到对应桶
+   
+   for each 可能的分割位置（K-1个）:
+       计算左右两边的图元数和包围盒
+       评估SAH代价
+   选择最小代价的分割
+   ```
+   
+   复杂度：$O(KN)$ 而非 $O(N^2)$
+
+5. **BVH遍历**
    
    **递归遍历**：
    ```
@@ -335,18 +472,97 @@ $$T_{\text{trace}} = T_{\text{traverse}} + N_{\text{leaf}} \cdot T_{\text{inters
                stack.push(node.farChild)
                stack.push(node.nearChild)
    ```
+   
+   **优化的遍历顺序**：
+   基于光线方向符号预计算子节点访问顺序：
+   ```
+   dirIsNeg[3] = {ray.dir.x < 0, ray.dir.y < 0, ray.dir.z < 0}
+   // 使用dirIsNeg[node.axis]决定先访问哪个子节点
+   ```
 
-4. **高级BVH技术**：
+6. **BVH质量评估**：
+   
+   **SAH代价**：
+   $$\text{SAH}(T) = \sum_{\text{leaves}} P(\text{leaf}) \cdot N(\text{leaf})$$
+   
+   **EPO（Expected Primary Operations）**：
+   平均每条光线的期望操作数
+   
+   **树平衡度**：
+   $$\text{Balance} = \frac{\text{avg\_depth}}{\log_2 N}$$
+
+7. **高级BVH技术**：
    
    **SBVH（Spatial Split BVH）**：
    - 允许空间分割，不仅是物体分割
    - 可以减少包围盒重叠
    - 代价：可能增加图元引用数
    
+   **实现策略**：
+   ```
+   if (SAH代价 > 阈值 && 重叠率 > 阈值):
+       尝试空间分割
+       选择最优的物体或空间分割
+   ```
+   
    **压缩BVH**：
    - 量化包围盒坐标（16位或8位）
    - 节点合并（将多个节点打包）
    - 典型压缩率：50-75%
+   
+   **量化公式**：
+   $$\text{quantized} = \text{round}\left(\frac{\text{value} - \text{parent\_min}}{\text{parent\_max} - \text{parent\_min}} \cdot (2^{bits} - 1)\right)$$
+   
+   **Wide BVH**：
+   - 每个节点有4个或8个子节点
+   - 更好的SIMD利用率
+   - 减少内存访问次数
+
+8. **动态场景的BVH更新**：
+   
+   **重拟合（Refit）**：
+   自底向上更新包围盒
+   ```
+   function Refit(node):
+       if (IsLeaf(node)):
+           node.bounds = ComputeBounds(node.primitives)
+       else:
+           Refit(node.left)
+           Refit(node.right)
+           node.bounds = Union(node.left.bounds, node.right.bounds)
+   ```
+   
+   **局部重建**：
+   - 标记"脏"节点
+   - 只重建变化较大的子树
+   - 使用启发式判断是否需要重建
+   
+   **双缓冲策略**：
+   - 维护两个BVH
+   - 异步更新非活动BVH
+   - 快速切换
+
+9. **内存布局优化**：
+   
+   **深度优先布局**：
+   - 改善缓存局部性
+   - 适合递归遍历
+   
+   **van Emde Boas布局**：
+   - 优化缓存性能
+   - 适合任意遍历模式
+   
+   **节点压缩布局**：
+   ```
+   struct CompactBVHNode {
+       float bounds_min[3];
+       float bounds_max[3];
+       uint32_t offset;      // 子节点偏移或图元偏移
+       uint8_t nPrims;       // 0表示内部节点
+       uint8_t axis;         // 分割轴
+       uint16_t pad;         // 对齐
+   }  // 32字节，正好两个缓存行
+   ```
 
 ### 7.2.3 KD-Tree
 
@@ -451,6 +667,8 @@ $$T_{\text{trace}} = T_{\text{traverse}} + N_{\text{leaf}} \cdot T_{\text{inters
 
 ### 7.3.1 光线-三角形相交
 
+光线-三角形相交是光线追踪中最频繁的操作，其性能直接影响渲染速度。
+
 **Möller-Trumbore算法**：
 
 给定三角形顶点 $\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2$，光线 $\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$：
@@ -481,6 +699,63 @@ v &= f(\mathbf{d} \cdot \mathbf{q})
 
 $$t = f(\mathbf{e}_2 \cdot \mathbf{q})$$
 
+**算法复杂度分析**：
+- 1次除法，27次乘法，17次加减法
+- 2次叉积，3次点积
+- 分支预测友好（早期退出）
+
+**Baldwin-Weber算法**（避免除法）：
+使用齐次坐标避免除法：
+$$\begin{aligned}
+\mathbf{o}' &= \mathbf{o} - \mathbf{v}_0 \\
+\mathbf{q}_1 &= \mathbf{d} \times \mathbf{e}_2 \\
+\mathbf{q}_2 &= \mathbf{o}' \times \mathbf{e}_1 \\
+\text{det} &= \mathbf{q}_1 \cdot \mathbf{e}_1 \\
+u &= \mathbf{q}_1 \cdot \mathbf{o}' \\
+v &= \mathbf{q}_2 \cdot \mathbf{d} \\
+t &= \mathbf{q}_2 \cdot \mathbf{e}_2
+\end{aligned}$$
+
+相交条件（避免除法）：
+```
+if (det > 0):
+    return (u >= 0) && (v >= 0) && (u + v <= det) && (t >= 0)
+else:
+    return (u <= 0) && (v <= 0) && (u + v >= det) && (t <= 0)
+```
+
+**Woop算法**（预计算优化）：
+预计算变换矩阵，将三角形变换到单位三角形：
+$$\mathbf{M} = \begin{bmatrix}
+\mathbf{v}_0 - \mathbf{v}_2 & \mathbf{v}_1 - \mathbf{v}_2 & \mathbf{v}_2
+\end{bmatrix}^{-1}$$
+
+光线变换：
+$$\begin{aligned}
+\mathbf{o}' &= \mathbf{M} \cdot \mathbf{o} \\
+\mathbf{d}' &= \mathbf{M} \cdot \mathbf{d}
+\end{aligned}$$
+
+相交测试简化为：
+$$t = -\frac{o'_z}{d'_z}, \quad u = o'_x + t \cdot d'_x, \quad v = o'_y + t \cdot d'_y$$
+
+相交条件：$u \geq 0, v \geq 0, u + v \leq 1$
+
+**SIMD优化**：
+同时测试4个三角形：
+```
+__m128 e1x = _mm_sub_ps(v1x, v0x);
+__m128 e1y = _mm_sub_ps(v1y, v0y);
+__m128 e1z = _mm_sub_ps(v1z, v0z);
+// ... 继续向量化计算
+```
+
+**精度改进**：
+使用Shewchuk的精确谓词算法处理边界情况：
+- 精确的方向测试
+- 鲁棒的重心坐标计算
+- 避免数值不一致
+
 ### 7.3.2 光线-包围盒相交
 
 **Slab方法**：
@@ -494,10 +769,48 @@ t_{\text{max}} &= \min(t_{x,\text{max}}, t_{y,\text{max}}, t_{z,\text{max}})
 
 相交条件：$t_{\text{min}} \leq t_{\text{max}}$ 且 $t_{\text{max}} \geq 0$
 
-**优化技巧**：
-- 预计算 $1/\mathbf{d}$ 避免除法
-- 使用 SSE/AVX 指令并行计算
-- 提前退出机制
+**优化实现**：
+```
+invD = 1.0 / ray.dir  // 预计算
+t0 = (box.min - ray.origin) * invD
+t1 = (box.max - ray.origin) * invD
+
+// 处理负方向
+tmin = min(t0, t1)
+tmax = max(t0, t1)
+
+// 计算最终区间
+tmin_final = max(tmin.x, tmin.y, tmin.z)
+tmax_final = min(tmax.x, tmax.y, tmax.z)
+
+return tmin_final <= tmax_final && tmax_final >= 0
+```
+
+**Williams等人的优化**：
+消除min/max中的分支：
+```
+sign[3] = {ray.dir.x < 0, ray.dir.y < 0, ray.dir.z < 0}
+tmin = (box[sign[0]].x - ray.origin.x) * invD.x
+tmax = (box[1-sign[0]].x - ray.origin.x) * invD.x
+```
+
+**SSE优化版本**：
+```
+__m128 tmin = _mm_mul_ps(_mm_sub_ps(box_min, origin), inv_dir);
+__m128 tmax = _mm_mul_ps(_mm_sub_ps(box_max, origin), inv_dir);
+__m128 t0 = _mm_min_ps(tmin, tmax);
+__m128 t1 = _mm_max_ps(tmin, tmax);
+```
+
+**鲁棒性改进**：
+处理光线方向分量为0的情况：
+```
+if (abs(ray.dir.x) < epsilon):
+    if (ray.origin.x < box.min.x || ray.origin.x > box.max.x):
+        return false
+    tx_min = -infinity
+    tx_max = +infinity
+```
 
 ### 7.3.3 光线-球体相交
 
@@ -516,23 +829,110 @@ c &= ||\mathbf{o} - \mathbf{c}||^2 - r^2
 判别式 $\Delta = b^2 - 4ac$，相交参数：
 $$t = \frac{-b \pm \sqrt{\Delta}}{2a}$$
 
-### 7.3.4 相交测试优化策略
+**几何优化方法**：
+```
+L = center - ray.origin
+tca = dot(L, ray.dir)
+if (tca < 0) return false  // 球在光线后方
+
+d2 = dot(L, L) - tca * tca
+if (d2 > radius2) return false  // 光线错过球体
+
+thc = sqrt(radius2 - d2)
+t0 = tca - thc
+t1 = tca + thc
+```
+
+**数值稳定性改进**：
+使用以下形式避免相减相消：
+$$t = \frac{-b - \text{sign}(b)\sqrt{\Delta}}{2a}$$
+
+**椭球体相交**：
+使用变换矩阵 $\mathbf{M}$ 将椭球变换为单位球：
+$$\begin{aligned}
+\mathbf{o}' &= \mathbf{M}(\mathbf{o} - \mathbf{c}) \\
+\mathbf{d}' &= \mathbf{M}\mathbf{d}
+\end{aligned}$$
+然后使用球体相交算法。
+
+### 7.3.4 其他几何体相交
+
+**光线-圆柱相交**：
+无限圆柱：$(x - c_x)^2 + (z - c_z)^2 = r^2$
+
+相交计算：
+$$a = d_x^2 + d_z^2$$
+$$b = 2(d_x(o_x - c_x) + d_z(o_z - c_z))$$
+$$c = (o_x - c_x)^2 + (o_z - c_z)^2 - r^2$$
+
+有限圆柱需要额外检查端盖。
+
+**光线-圆锥相交**：
+圆锥方程：$x^2 + z^2 = (r(y/h))^2$
+
+二次方程系数：
+$$a = d_x^2 + d_z^2 - (r/h)^2 d_y^2$$
+$$b = 2(o_x d_x + o_z d_z - (r/h)^2 o_y d_y)$$
+$$c = o_x^2 + o_z^2 - (r/h)^2 o_y^2$$
+
+**光线-环面（Torus）相交**：
+四次方程，使用数值方法求解：
+$$(x^2 + y^2 + z^2 + R^2 - r^2)^2 = 4R^2(x^2 + z^2)$$
+
+可以使用Sturm序列或Ferrari方法求解。
+
+### 7.3.5 相交测试优化策略
 
 1. **早期拒绝（Early Rejection）**
    - 使用简单包围体进行预测试
    - 利用空间连贯性
+   - 背面剔除（对闭合物体）
 
 2. **SIMD并行化**
-   - 同时测试多条光线
+   - 同时测试多条光线（Ray Packets）
    - 批量处理三角形
+   - 使用SOA（Structure of Arrays）布局
 
 3. **缓存优化**
-   - 数据结构对齐
-   - 热数据分离
+   - 数据结构对齐（避免false sharing）
+   - 热数据分离（将常用数据打包）
+   - 预取（prefetch）关键数据
 
 4. **精度考虑**
    - 使用稳定的数值算法
    - 处理自相交问题（shadow acne）
+   - 考虑舍入误差的传播
+
+5. **分支优化**
+   - 减少条件分支（使用位运算）
+   - 使用模板特化消除运行时分支
+   - Profile-guided optimization
+
+6. **间隔算术（Interval Arithmetic）**
+   用于保守估计和鲁棒性：
+   ```
+   struct Interval {
+       float min, max;
+       Interval operator*(const Interval& b) {
+           float products[4] = {min*b.min, min*b.max, 
+                               max*b.min, max*b.max};
+           return {min(products), max(products)};
+       }
+   }
+   ```
+
+7. **自适应精度**
+   - 远处物体使用低精度
+   - 重要区域使用高精度
+   - 基于误差估计动态调整
+
+8. **光线差分（Ray Differentials）**
+   追踪光线的微分信息用于：
+   - LOD选择
+   - 纹理过滤
+   - 自适应细分
+
+   $$\frac{\partial \mathbf{p}}{\partial u} = t \frac{\partial \mathbf{d}}{\partial u} + \frac{\partial t}{\partial u} \mathbf{d}$$
 
 ## 本章小结
 
