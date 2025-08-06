@@ -18,6 +18,56 @@ $$\mathbf{x}(t) = [x(t), y(t), z(t)]^T$$
 
 $$\mathbf{v}(t) = \frac{d\mathbf{x}}{dt}, \quad \mathbf{a}(t) = \frac{d^2\mathbf{x}}{dt^2}$$
 
+#### 参数化曲线与弧长参数化
+
+在实际应用中，我们经常需要控制物体沿曲线的运动速度。考虑参数曲线 $\mathbf{r}(u)$，其中 $u \in [0,1]$。弧长定义为：
+
+$$s(u) = \int_0^u \|\mathbf{r}'(\tau)\| d\tau$$
+
+理想的弧长参数化满足 $\|\mathbf{r}'(s)\| = 1$，这保证了匀速运动。然而，对于大多数曲线，弧长积分没有解析解。实践中使用数值方法：
+
+1. **查找表方法**：预计算 $(u_i, s_i)$ 对，使用插值
+2. **Newton-Raphson迭代**：求解 $s(u) - s_{target} = 0$
+
+#### 时间扭曲与缓动函数
+
+为了创建更自然的动画，我们使用时间扭曲函数 $\tau = w(t)$：
+
+$$\mathbf{p}(t) = \mathbf{q}(w(t))$$
+
+常用的缓动函数包括：
+
+**缓入（Ease-in）**：$w(t) = t^n$，$n > 1$
+
+**缓出（Ease-out）**：$w(t) = 1 - (1-t)^n$
+
+**缓入缓出（Ease-in-out）**：
+$$w(t) = \begin{cases}
+\frac{1}{2}(2t)^n & t < 0.5 \\
+1 - \frac{1}{2}(2(1-t))^n & t \geq 0.5
+\end{cases}$$
+
+**Hermite基缓动**：使用三次Hermite曲线，控制端点导数：
+$$w(t) = h_{00}(t) + h_{10}(t)v_0 + h_{01}(t) + h_{11}(t)v_1$$
+
+其中Hermite基函数：
+$$h_{00}(t) = 2t^3 - 3t^2 + 1, \quad h_{10}(t) = t^3 - 2t^2 + t$$
+$$h_{01}(t) = -2t^3 + 3t^2, \quad h_{11}(t) = t^3 - t^2$$
+
+#### 高阶运动分析
+
+除了位置、速度和加速度，高阶导数也有物理意义：
+
+**急动度（Jerk）**：$\mathbf{j}(t) = \frac{d^3\mathbf{x}}{dt^3}$
+
+**急动度变化率（Snap）**：$\mathbf{s}(t) = \frac{d^4\mathbf{x}}{dt^4}$
+
+在运动规划中，最小化急动度可以产生更平滑的轨迹：
+
+$$\min \int_0^T \|\mathbf{j}(t)\|^2 dt$$
+
+这导致七次多项式轨迹，满足位置、速度、加速度和急动度的边界条件。
+
 ### 11.1.2 关键帧动画与插值
 
 关键帧动画是最基础也是最常用的动画技术。给定一系列关键帧 $\{(\mathbf{p}_i, t_i)\}_{i=0}^n$，我们需要在这些关键帧之间进行插值。
@@ -25,12 +75,77 @@ $$\mathbf{v}(t) = \frac{d\mathbf{x}}{dt}, \quad \mathbf{a}(t) = \frac{d^2\mathbf
 **线性插值**：
 $$\mathbf{p}(t) = \mathbf{p}_i + \frac{t - t_i}{t_{i+1} - t_i}(\mathbf{p}_{i+1} - \mathbf{p}_i), \quad t \in [t_i, t_{i+1}]$$
 
-**球面线性插值（用于旋转）**：
+线性插值虽然简单，但会在关键帧处产生速度不连续。参数 $s = \frac{t - t_i}{t_{i+1} - t_i}$ 称为插值参数。
+
+#### 旋转插值的深入分析
+
+**球面线性插值（SLERP）**：
 对于四元数 $\mathbf{q}_i$ 和 $\mathbf{q}_{i+1}$：
 
 $$\text{slerp}(\mathbf{q}_i, \mathbf{q}_{i+1}, s) = \frac{\sin((1-s)\theta)}{\sin\theta}\mathbf{q}_i + \frac{\sin(s\theta)}{\sin\theta}\mathbf{q}_{i+1}$$
 
 其中 $\cos\theta = \mathbf{q}_i \cdot \mathbf{q}_{i+1}$，$s = \frac{t - t_i}{t_{i+1} - t_i}$。
+
+**数值稳定性考虑**：
+当 $\theta \approx 0$ 时，$\sin\theta \approx 0$，导致数值不稳定。此时使用线性插值近似：
+
+$$\text{slerp}(\mathbf{q}_i, \mathbf{q}_{i+1}, s) \approx (1-s)\mathbf{q}_i + s\mathbf{q}_{i+1}, \quad \text{当} \theta < \epsilon$$
+
+**最短路径问题**：
+四元数 $\mathbf{q}$ 和 $-\mathbf{q}$ 表示相同旋转。为确保最短路径插值：
+
+$$\text{如果} \quad \mathbf{q}_i \cdot \mathbf{q}_{i+1} < 0, \quad \text{则} \quad \mathbf{q}_{i+1} \leftarrow -\mathbf{q}_{i+1}$$
+
+#### 高阶插值方法
+
+**立方Hermite插值**：
+给定端点值和导数：
+$$\mathbf{p}(t) = h_{00}(s)\mathbf{p}_i + h_{10}(s)(t_{i+1}-t_i)\mathbf{m}_i + h_{01}(s)\mathbf{p}_{i+1} + h_{11}(s)(t_{i+1}-t_i)\mathbf{m}_{i+1}$$
+
+其中 $\mathbf{m}_i$ 是点 $i$ 处的切向量（速度）。
+
+**导数估计方法**：
+
+1. **有限差分**：
+   $$\mathbf{m}_i = \frac{\mathbf{p}_{i+1} - \mathbf{p}_{i-1}}{t_{i+1} - t_{i-1}}$$
+
+2. **Catmull-Rom切线**：
+   $$\mathbf{m}_i = \frac{1}{2}\left(\frac{\mathbf{p}_{i+1} - \mathbf{p}_i}{t_{i+1} - t_i} + \frac{\mathbf{p}_i - \mathbf{p}_{i-1}}{t_i - t_{i-1}}\right)$$
+
+3. **Cardinal样条切线**：
+   $$\mathbf{m}_i = (1-c)\frac{\mathbf{p}_{i+1} - \mathbf{p}_{i-1}}{t_{i+1} - t_{i-1}}$$
+   
+   其中 $c \in [0,1]$ 是张力参数。
+
+#### 四元数样条
+
+**Squad（球面四次插值）**：
+$$\text{squad}(\mathbf{q}_i, \mathbf{q}_{i+1}, \mathbf{s}_i, \mathbf{s}_{i+1}, t) = \text{slerp}(\text{slerp}(\mathbf{q}_i, \mathbf{q}_{i+1}, t), \text{slerp}(\mathbf{s}_i, \mathbf{s}_{i+1}, t), 2t(1-t))$$
+
+其中辅助四元数：
+$$\mathbf{s}_i = \mathbf{q}_i \exp\left(-\frac{\log(\mathbf{q}_i^{-1}\mathbf{q}_{i-1}) + \log(\mathbf{q}_i^{-1}\mathbf{q}_{i+1})}{4}\right)$$
+
+**Bezier四元数曲线**：
+$$\mathbf{q}(t) = \text{slerp}(\text{slerp}(\text{slerp}(\mathbf{q}_0, \mathbf{q}_1, t), \text{slerp}(\mathbf{q}_1, \mathbf{q}_2, t), t), \text{slerp}(\text{slerp}(\mathbf{q}_1, \mathbf{q}_2, t), \text{slerp}(\mathbf{q}_2, \mathbf{q}_3, t), t), t)$$
+
+#### 多维插值的耦合问题
+
+当同时插值位置和旋转时，需要考虑它们的耦合关系：
+
+**螺旋运动（Screw Motion）**：
+结合平移和旋转的最自然方式：
+$$\mathbf{T}(t) = \begin{bmatrix}
+\mathbf{R}(t) & \mathbf{d}(t) \\
+\mathbf{0} & 1
+\end{bmatrix}$$
+
+其中 $\mathbf{R}(t)$ 是旋转矩阵，$\mathbf{d}(t)$ 是位移向量。
+
+**对偶四元数插值**：
+使用对偶四元数 $\hat{\mathbf{q}} = \mathbf{q}_r + \epsilon\mathbf{q}_d$ 统一表示旋转和平移：
+$$\hat{\mathbf{q}}(t) = \text{DLB}(\hat{\mathbf{q}}_0, \hat{\mathbf{q}}_1, t)$$
+
+其中DLB是对偶四元数线性混合。
 
 ### 11.1.3 样条曲线在动画中的应用
 
@@ -50,9 +165,100 @@ $$\mathbf{M}_{CR} = \frac{1}{2}\begin{bmatrix}
 
 $$\mathbf{G} = [\mathbf{p}_{i-1}, \mathbf{p}_i, \mathbf{p}_{i+1}, \mathbf{p}_{i+2}]^T$$
 
+#### 非均匀参数化
+
+标准Catmull-Rom假设均匀参数化，但实际关键帧时间可能不均匀。非均匀Catmull-Rom使用弦长或向心参数化：
+
+**弦长参数化**：
+$$t_{i+1} - t_i = \|\mathbf{p}_{i+1} - \mathbf{p}_i\|$$
+
+**向心参数化**：
+$$t_{i+1} - t_i = \|\mathbf{p}_{i+1} - \mathbf{p}_i\|^{0.5}$$
+
+向心参数化避免了尖点和自交，产生更自然的曲线。
+
+#### B样条在动画中的应用
+
+B样条提供局部控制和更高的连续性：
+
+**均匀三次B样条**：
+$$\mathbf{p}(t) = \sum_{i} N_{i,3}(t)\mathbf{p}_i$$
+
+基函数：
+$$N_{i,3}(t) = \frac{1}{6}\begin{cases}
+(1-t)^3 & t \in [0,1] \\
+3t^3 - 12t^2 + 12t - 3 & t \in [1,2] \\
+-3t^3 + 12t^2 - 12t + 1 & t \in [2,3] \\
+t^3 & t \in [3,4]
+\end{cases}$$
+
+**NURBS（非均匀有理B样条）**：
+$$\mathbf{p}(t) = \frac{\sum_{i} w_i N_{i,k}(t)\mathbf{p}_i}{\sum_{i} w_i N_{i,k}(t)}$$
+
+权重$w_i$提供额外的形状控制，特别适合表示圆锥曲线。
+
+#### 样条的连续性分析
+
+**参数连续性**：
+- $C^0$：位置连续
+- $C^1$：切向量连续
+- $C^2$：曲率连续
+
+**几何连续性**：
+- $G^0$：位置连续
+- $G^1$：切向连续（方向相同，大小可不同）
+- $G^2$：曲率连续
+
+对于动画，$G^1$连续通常足够，但相机路径可能需要$G^2$以避免视觉跳动。
+
+#### 张力-连续性-偏置（TCB）样条
+
+Kochanek-Bartels样条提供三个参数控制：
+
+$$\mathbf{m}_i^{in} = \frac{(1-t)(1+c)(1+b)}{2}(\mathbf{p}_i - \mathbf{p}_{i-1}) + \frac{(1-t)(1-c)(1-b)}{2}(\mathbf{p}_{i+1} - \mathbf{p}_i)$$
+
+$$\mathbf{m}_i^{out} = \frac{(1-t)(1-c)(1+b)}{2}(\mathbf{p}_i - \mathbf{p}_{i-1}) + \frac{(1-t)(1+c)(1-b)}{2}(\mathbf{p}_{i+1} - \mathbf{p}_i)$$
+
+其中：
+- $t$：张力（tension），控制曲线的"紧度"
+- $c$：连续性（continuity），控制拐角的尖锐度
+- $b$：偏置（bias），控制曲线偏向前后控制点的程度
+
+#### 样条曲线的实时评估优化
+
+**前向差分法**：
+对于均匀参数的三次曲线，使用前向差分避免重复计算：
+
+$$\Delta^0 \mathbf{p} = \mathbf{p}(0)$$
+$$\Delta^1 \mathbf{p} = a\mathbf{v}_0 + b\mathbf{v}_1 + c\mathbf{p}_0 + d\mathbf{p}_1$$
+$$\Delta^2 \mathbf{p} = 6ah^2\mathbf{v}_0 + 6bh^2\mathbf{v}_1$$
+$$\Delta^3 \mathbf{p} = 6h^3(\mathbf{v}_0 + \mathbf{v}_1)$$
+
+递推关系：
+$$\mathbf{p}_{i+1} = \mathbf{p}_i + \Delta^1\mathbf{p}_i$$
+$$\Delta^1\mathbf{p}_{i+1} = \Delta^1\mathbf{p}_i + \Delta^2\mathbf{p}_i$$
+$$\Delta^2\mathbf{p}_{i+1} = \Delta^2\mathbf{p}_i + \Delta^3\mathbf{p}_i$$
+
+**de Casteljau算法的并行化**：
+贝塞尔曲线的de Casteljau算法天然适合SIMD并行：
+$$\mathbf{b}_i^{(k)} = (1-t)\mathbf{b}_i^{(k-1)} + t\mathbf{b}_{i+1}^{(k-1)}$$
+
+可以同时计算多个$t$值或多条曲线。
+
 ### 11.1.4 动画压缩与优化
 
 实际应用中，动画数据可能非常庞大。考虑一个30fps的动画，每秒需要存储30帧数据，一分钟的动画就需要1800帧。对于复杂的角色动画，每帧可能包含数百个骨骼的变换矩阵。
+
+#### 存储需求分析
+
+考虑一个典型的人形角色：
+- 骨骼数量：$n = 60$
+- 每骨骼存储：位置(3) + 四元数(4) + 缩放(3) = 10个浮点数
+- 每帧数据：$60 \times 10 \times 4 = 2400$ 字节
+- 30fps动画每秒：$2400 \times 30 = 72$ KB
+- 一分钟动画：$72 \times 60 = 4.32$ MB
+
+这还不包括面部动画、手指细节等。
 
 #### 关键帧约简
 
@@ -64,6 +270,19 @@ $$\mathbf{G} = [\mathbf{p}_{i-1}, \mathbf{p}_i, \mathbf{p}_{i+1}, \mathbf{p}_{i+
 4. 否则移除所有中间帧
 
 时间复杂度：$O(n\log n)$（平均情况）
+
+**自适应误差度量**：
+不同属性使用不同阈值：
+- 位置：$\epsilon_{pos} = 0.001$ 单位
+- 旋转：$\epsilon_{rot} = 0.5°$
+- 缩放：$\epsilon_{scale} = 0.01$
+
+**感知重要性加权**：
+$$d_{weighted} = w_{bone} \cdot w_{velocity} \cdot d_{geometric}$$
+
+其中：
+- $w_{bone}$：骨骼重要性（脊椎 > 四肢末端）
+- $w_{velocity}$：速度权重（快速运动允许更大误差）
 
 #### 曲线拟合压缩
 
@@ -77,6 +296,20 @@ $$\mathbf{A}^T\mathbf{A}\mathbf{x} = \mathbf{A}^T\mathbf{b}$$
 
 其中$\mathbf{A}_{ji} = t_j^i$。
 
+**分段拟合策略**：
+1. 自动检测断点（速度/加速度突变）
+2. 每段独立拟合
+3. 确保段间连续性
+
+**贝塞尔曲线压缩**：
+使用三次贝塞尔曲线，仅存储4个控制点：
+$$\mathbf{p}(t) = (1-t)^3\mathbf{P}_0 + 3(1-t)^2t\mathbf{P}_1 + 3(1-t)t^2\mathbf{P}_2 + t^3\mathbf{P}_3$$
+
+控制点优化：
+$$\min_{\{\mathbf{P}_i\}} \sum_{j} \|\mathbf{p}(t_j) - \mathbf{p}_{data}(t_j)\|^2$$
+
+受约束于：$\mathbf{P}_0 = \mathbf{p}_{data}(0)$，$\mathbf{P}_3 = \mathbf{p}_{data}(1)$
+
 #### 主成分分析（PCA）压缩
 
 对于$m$个相关的动画通道（如多个角色执行相似动作）：
@@ -88,6 +321,50 @@ $$\mathbf{A}^T\mathbf{A}\mathbf{x} = \mathbf{A}^T\mathbf{b}$$
 
 压缩率：$\frac{k(m+n)}{mn}$
 
+**增量PCA更新**：
+新增动画时无需重新计算整个PCA：
+$$\mathbf{C}_{new} = \frac{n-1}{n}\mathbf{C}_{old} + \frac{1}{n}\mathbf{x}_{new}\mathbf{x}_{new}^T$$
+
+**局部PCA分解**：
+1. 时间分段：将长动画分成短片段
+2. 空间分组：将骨骼按运动相关性分组
+3. 每组独立PCA
+
+#### 小波压缩
+
+使用多分辨率分析：
+$$\mathbf{x}(t) = \sum_{k} c_{j_0,k}\phi_{j_0,k}(t) + \sum_{j=j_0}^{J} \sum_{k} d_{j,k}\psi_{j,k}(t)$$
+
+其中：
+- $\phi$：尺度函数
+- $\psi$：小波函数
+- $c_{j,k}$：尺度系数
+- $d_{j,k}$：小波系数
+
+**阈值处理**：
+$$\tilde{d}_{j,k} = \begin{cases}
+d_{j,k} & |d_{j,k}| > \epsilon_j \\
+0 & \text{otherwise}
+\end{cases}$$
+
+自适应阈值：$\epsilon_j = \sigma\sqrt{2\log n}/2^j$
+
+#### 四元数压缩
+
+**最小三参数表示**：
+利用单位四元数约束$\|\mathbf{q}\| = 1$：
+1. 找到最大分量索引
+2. 存储其他三个分量
+3. 重建时：$q_{max} = \sqrt{1 - q_x^2 - q_y^2 - q_z^2}$
+
+**对数映射压缩**：
+$$\mathbf{v} = \log(\mathbf{q}) = \begin{cases}
+\mathbf{0} & \theta = 0 \\
+\frac{\theta}{\sin\theta}[q_x, q_y, q_z]^T & \text{otherwise}
+\end{cases}$$
+
+优势：线性空间，适合PCA
+
 #### 误差度量与质量控制
 
 除了简单的L2误差，还应考虑：
@@ -95,10 +372,31 @@ $$\mathbf{A}^T\mathbf{A}\mathbf{x} = \mathbf{A}^T\mathbf{b}$$
 **感知误差**：
 $$E_{perceptual} = \sum_t w(t)\|\mathbf{p}_{original}(t) - \mathbf{p}_{compressed}(t)\|^2$$
 
-其中$w(t)$是基于运动速度的权重函数。
+其中$w(t)$是基于运动速度的权重函数：
+$$w(t) = 1 + \alpha\|\mathbf{v}(t)\|$$
 
 **关节角度误差**（对于骨骼动画）：
 $$E_{angle} = \sum_{joint} \sum_t \|\boldsymbol{\theta}_{original}(t) - \boldsymbol{\theta}_{compressed}(t)\|^2$$
+
+**端点误差**（IK链）：
+$$E_{endpoint} = \sum_t \|FK(\boldsymbol{\theta}_{original}(t)) - FK(\boldsymbol{\theta}_{compressed}(t))\|^2$$
+
+#### 运行时解压优化
+
+**层次细节（LOD）**：
+- 远距离：仅主要骨骼
+- 中距离：添加次要骨骼
+- 近距离：完整骨骼+面部
+
+**预测解码**：
+$$\mathbf{x}(t) = \mathbf{x}_{base}(t) + \sum_{i=1}^{k} \alpha_i(t)\mathbf{e}_i$$
+
+其中$\mathbf{e}_i$是预计算的误差模式。
+
+**GPU友好格式**：
+- 纹理存储：动画数据作为纹理
+- 顶点纹理获取（VTF）
+- 计算着色器解压
 
 ### 11.1.5 程序化动画与噪声函数
 
@@ -111,6 +409,33 @@ $$noise(\mathbf{x}) = \sum_{i} fade(f_i) \cdot lerp(w_i, grad_i \cdot \mathbf{x}
 
 其中$fade(t) = 6t^5 - 15t^4 + 10t^3$保证C2连续性。
 
+**梯度生成**：
+使用伪随机数生成器，保证可重复性：
+$$grad(\mathbf{i}) = normalize(hash(\mathbf{i}) \mod \mathbf{g}[hash(\mathbf{i}) \mod |\mathbf{g}|])$$
+
+其中$\mathbf{g}$是预定义的梯度表。
+
+**改进Perlin噪声**：
+$$fade_{improved}(t) = t^3(t(t \cdot 6 - 15) + 10)$$
+
+这保证了$fade'(0) = fade'(1) = 0$和$fade''(0) = fade''(1) = 0$。
+
+#### Simplex噪声
+
+Perlin的改进版本，计算效率更高：
+
+**2D Simplex**：
+$$F = \frac{\sqrt{3} - 1}{2}, \quad G = \frac{3 - \sqrt{3}}{6}$$
+
+坐标变换：
+$$s = (x + y) \cdot F$$
+$$i = \lfloor x + s \rfloor, \quad j = \lfloor y + s \rfloor$$
+
+**优势**：
+- 更少的计算量（$2^n$顶点 vs $n!$顶点）
+- 更好的各向同性
+- 无方向伪影
+
 #### 分形布朗运动（fBm）
 
 通过叠加不同频率的噪声：
@@ -118,12 +443,71 @@ $$fBm(\mathbf{x}) = \sum_{i=0}^{n} \frac{noise(2^i \mathbf{x})}{2^{iH}}$$
 
 其中$H$是Hurst指数，控制粗糙度。
 
+**变体**：
+- **Turbulence**：$turbulence(\mathbf{x}) = \sum_{i=0}^{n} \frac{|noise(2^i \mathbf{x})|}{2^i}$
+- **Ridged noise**：$ridge(\mathbf{x}) = \sum_{i=0}^{n} \frac{(1-|noise(2^i \mathbf{x})|)^2}{2^i}$
+
 #### 谐波叠加
 
 用于周期性运动（如呼吸、摆动）：
 $$\mathbf{p}(t) = \mathbf{p}_0 + \sum_{i=1}^n A_i \sin(\omega_i t + \phi_i)\mathbf{d}_i$$
 
 通过调整振幅$A_i$、频率$\omega_i$和相位$\phi_i$可以创建复杂的周期运动。
+
+**从参考运动提取参数**：
+使用FFT分析：
+$$A_k = \frac{2}{N}\left|\sum_{n=0}^{N-1} \mathbf{p}(t_n)e^{-2\pi ikn/N}\right|$$
+$$\phi_k = \arg\left(\sum_{n=0}^{N-1} \mathbf{p}(t_n)e^{-2\pi ikn/N}\right)$$
+
+#### Gabor噪声
+
+结合频域和空域特性：
+$$gabor(\mathbf{x}) = \sum_{i=1}^{n} w_i \cdot g(\mathbf{x} - \mathbf{x}_i) \cdot \cos(2\pi\mathbf{k}_i \cdot (\mathbf{x} - \mathbf{x}_i) + \phi_i)$$
+
+其中$g$是高斯核：
+$$g(\mathbf{x}) = K \exp\left(-\pi\|\mathbf{x}\|^2/a^2\right)$$
+
+**参数控制**：
+- $\mathbf{k}_i$：频率向量
+- $a$：带宽
+- $\phi_i$：相位
+
+#### 流体噪声
+
+时间相关的噪声，保持时间连续性：
+$$flow(\mathbf{x}, t) = \sum_{i} \alpha_i(t) \cdot noise(\mathbf{x} + \mathbf{v}_i t)$$
+
+其中：
+$$\alpha_i(t) = \max(0, 1 - |t - t_i|/T)$$
+
+这确保了平滑的时间过渡。
+
+#### 向量场动画
+
+使用向量场驱动粒子运动：
+$$\frac{d\mathbf{x}}{dt} = \mathbf{v}(\mathbf{x}, t)$$
+
+**无散度向量场**：
+$$\mathbf{v} = \nabla \times \boldsymbol{\psi}$$
+
+其中$\boldsymbol{\psi}$是流函数。
+
+**流场的程序化生成**：
+- 温流：$\mathbf{v} = \nabla \times (noise(\mathbf{x})\hat{\mathbf{z}})$
+- 漩流：$\mathbf{v} = \omega \times (\mathbf{x} - \mathbf{c})$
+- 汇/源：$\mathbf{v} = \pm\frac{\mathbf{x} - \mathbf{c}}{\|\mathbf{x} - \mathbf{c}\|^2}$
+
+#### 群体行为模拟
+
+**Boids模型**：
+1. **分离**：$\mathbf{f}_{sep} = -\sum_{j \in neighbors} \frac{\mathbf{x}_j - \mathbf{x}_i}{\|\mathbf{x}_j - \mathbf{x}_i\|^2}$
+2. **对齐**：$\mathbf{f}_{align} = \frac{1}{|neighbors|}\sum_{j \in neighbors} \mathbf{v}_j - \mathbf{v}_i$
+3. **聚集**：$\mathbf{f}_{cohesion} = \frac{1}{|neighbors|}\sum_{j \in neighbors} \mathbf{x}_j - \mathbf{x}_i$
+
+**势场方法**：
+$$\mathbf{a}_i = -\nabla U(\mathbf{x}_i) + \sum_j \mathbf{f}_{interaction}(\mathbf{x}_i, \mathbf{x}_j)$$
+
+其中$U$是环境势场。
 
 ## 11.2 质点弹簧系统与运动学
 
