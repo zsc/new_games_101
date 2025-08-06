@@ -536,7 +536,7 @@ h_{zx} & h_{zy} & 1 & 0 \\
 
 ### 2.1.4 任意轴旋转（Rodrigues' Rotation Formula）
 
-绕任意单位向量 $\mathbf{n} = (n_x, n_y, n_z)$ 旋转 $\theta$ 角度：
+绕任意单位向量 $\mathbf{n} = (n_x, n_y, n_z)$ 旋转 $\theta$ 角度是三维图形学的核心操作。Rodrigues公式提供了优雅的解决方案：
 
 $$\mathbf{R}(\mathbf{n}, \theta) = \cos\theta \mathbf{I} + (1-\cos\theta)\mathbf{n}\mathbf{n}^T + \sin\theta \mathbf{N}$$
 
@@ -548,16 +548,33 @@ n_z & 0 & -n_x \\
 -n_y & n_x & 0
 \end{bmatrix}$$
 
-**几何推导**：
-对于向量 $\mathbf{v}$，将其分解为平行和垂直于旋转轴的分量：
-- $\mathbf{v}_\parallel = (\mathbf{n} \cdot \mathbf{v})\mathbf{n}$（投影）
-- $\mathbf{v}_\perp = \mathbf{v} - \mathbf{v}_\parallel$
+#### 几何推导与直觉
 
-旋转后：
-- $\mathbf{v}'_\parallel = \mathbf{v}_\parallel$（不变）
-- $\mathbf{v}'_\perp = \cos\theta \mathbf{v}_\perp + \sin\theta (\mathbf{n} \times \mathbf{v}_\perp)$
+**核心思想**：将任意向量分解为平行和垂直于旋转轴的分量，分别处理。
 
-**矩阵形式展开**：
+对于向量 $\mathbf{v}$：
+1. **平行分量**：$\mathbf{v}_\parallel = (\mathbf{n} \cdot \mathbf{v})\mathbf{n}$
+   - 沿旋转轴的投影
+   - 旋转时保持不变
+
+2. **垂直分量**：$\mathbf{v}_\perp = \mathbf{v} - \mathbf{v}_\parallel$
+   - 在垂直于轴的平面内
+   - 进行二维旋转
+
+3. **正交基构建**：
+   - $\mathbf{e}_1 = \mathbf{v}_\perp / ||\mathbf{v}_\perp||$
+   - $\mathbf{e}_2 = \mathbf{n} \times \mathbf{e}_1$
+   - 在 $(\mathbf{e}_1, \mathbf{e}_2)$ 平面内旋转
+
+旋转后的向量：
+$$\mathbf{v}' = \mathbf{v}_\parallel + \cos\theta \mathbf{v}_\perp + \sin\theta (\mathbf{n} \times \mathbf{v}_\perp)$$
+
+注意：$\mathbf{n} \times \mathbf{v}_\perp = \mathbf{n} \times \mathbf{v}$（因为 $\mathbf{n} \times \mathbf{v}_\parallel = \mathbf{0}$）
+
+#### 矩阵形式展开
+
+将向量形式转换为矩阵形式，我们得到：
+
 $$\mathbf{R}(\mathbf{n}, \theta) = \begin{bmatrix}
 c + n_x^2(1-c) & n_xn_y(1-c) - n_zs & n_xn_z(1-c) + n_ys \\
 n_yn_x(1-c) + n_zs & c + n_y^2(1-c) & n_yn_z(1-c) - n_xs \\
@@ -566,46 +583,249 @@ n_zn_x(1-c) - n_ys & n_zn_y(1-c) + n_xs & c + n_z^2(1-c)
 
 其中 $c = \cos\theta$，$s = \sin\theta$。
 
-**与四元数的联系**：
-四元数 $q = \cos(\theta/2) + \sin(\theta/2)(n_xi + n_yj + n_zk)$ 对应同样的旋转。
+**验证矩阵性质**：
+1. **正交性**：$\mathbf{R}^T\mathbf{R} = \mathbf{I}$
+2. **行列式**：$\det(\mathbf{R}) = 1$（保持右手系）
+3. **特征值**：$\lambda_1 = 1$（对应旋转轴），$\lambda_{2,3} = e^{\pm i\theta}$
+4. **迹**：$\text{tr}(\mathbf{R}) = 1 + 2\cos\theta$（用于提取旋转角）
 
-**计算优化**：
-- 预计算 $\cos\theta$、$\sin\theta$、$(1-\cos\theta)$
-- 利用对称性减少乘法次数
-- 小角度近似：$\cos\theta \approx 1$，$\sin\theta \approx \theta$
+#### 特殊角度的简化
+
+1. **$\theta = 0$**：$\mathbf{R} = \mathbf{I}$（恒等变换）
+
+2. **$\theta = 90°$**：
+   $$\mathbf{R}(\mathbf{n}, 90°) = \mathbf{n}\mathbf{n}^T + \mathbf{N}$$
+   纯叉积形式，计算简化
+
+3. **$\theta = 180°$**：
+   $$\mathbf{R}(\mathbf{n}, 180°) = 2\mathbf{n}\mathbf{n}^T - \mathbf{I}$$
+   关于轴的反射组合
+
+4. **小角度近似**（$\theta \ll 1$）：
+   $$\mathbf{R}(\mathbf{n}, \theta) \approx \mathbf{I} + \theta\mathbf{N}$$
+   线性化旋转，用于微分运动
+
+#### 与其他表示的转换
+
+**1. 轴角到旋转矩阵**：
+使用 Rodrigues 公式直接计算。
+
+**2. 旋转矩阵到轴角**：
+- 旋转角：$\theta = \arccos\left(\frac{\text{tr}(\mathbf{R}) - 1}{2}\right)$
+- 旋转轴：从 $\mathbf{R} - \mathbf{R}^T$ 提取（反对称部分）
+- 特殊情况：$\theta = 0$ 或 $\theta = 180°$ 需要特殊处理
+
+**3. 四元数表示**：
+$$q = \left[\cos\frac{\theta}{2}, \sin\frac{\theta}{2}\mathbf{n}\right]$$
+
+四元数到旋转矩阵：
+$$\mathbf{R} = \mathbf{I} + 2s\mathbf{Q} + 2\mathbf{Q}^2$$
+其中 $q = [s, \mathbf{v}]$，$\mathbf{Q}$ 是 $\mathbf{v}$ 的叉积矩阵。
+
+**4. 指数映射**：
+$$\mathbf{R} = \exp(\theta\mathbf{N}) = \sum_{k=0}^{\infty} \frac{(\theta\mathbf{N})^k}{k!}$$
+
+利用 $\mathbf{N}^3 = -\mathbf{N}$ 的性质，可得到 Rodrigues 公式。
+
+#### 数值稳定性考虑
+
+**1. 接近 0° 的情况**：
+```
+if (theta < epsilon):
+    return I + theta * N  // 线性近似
+```
+
+**2. 接近 180° 的情况**：
+```
+if (theta > pi - epsilon):
+    // 使用对称矩阵形式
+    // 从最大对角元素提取轴
+```
+
+**3. 归一化保证**：
+- 输入轴必须是单位向量
+- 定期重新归一化以消除数值误差
+
+#### 计算优化技巧
+
+**1. 减少三角函数调用**：
+```
+c = cos(theta)
+s = sin(theta)
+t = 1 - c
+```
+
+**2. 利用对称性**：
+```
+// 只计算上三角，然后复制
+R[0][1] = t*n.x*n.y - s*n.z
+R[1][0] = t*n.x*n.y + s*n.z
+```
+
+**3. SIMD 向量化**：
+- 同时计算多个向量的旋转
+- 使用向量指令集（SSE/AVX）
+
+**4. 预计算常用旋转**：
+- 90°、180° 等特殊角度
+- 常用轴（坐标轴）的旋转
+
+#### 应用场景
+
+1. **相机控制**：
+   - Arcball 旋转：鼠标拖动映射到球面旋转
+   - FPS相机：偏航和俯仰的组合
+
+2. **物体定向**：
+   - Look-at 约束：计算使物体朝向目标的旋转
+   - 对齐到表面：法向量定义旋转轴
+
+3. **动画插值**：
+   - 轴角表示便于线性插值（注意归一化）
+   - 与四元数 SLERP 的转换
+
+4. **物理模拟**：
+   - 角速度积分：$\mathbf{R}(t+dt) = \mathbf{R}(\boldsymbol{\omega}, ||\boldsymbol{\omega}||dt) \cdot \mathbf{R}(t)$
+   - 约束求解：旋转轴often作为约束条件
+
+#### 几何意义的深入理解
+
+**旋转的李群结构**：
+- SO(3) 是特殊正交群
+- 旋转的组合仍是旋转
+- 指数映射连接李代数 so(3) 和李群 SO(3)
+
+**旋转的不变量**：
+- 保持向量长度
+- 保持向量夹角
+- 保持三重积（体积和手性）
+- 保持点到旋转轴的距离
+
+**螺旋运动**：
+结合旋转和沿轴平移：
+$$\mathbf{T} = \begin{bmatrix}
+\mathbf{R}(\mathbf{n}, \theta) & \mathbf{t}\mathbf{n} \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
+
+形成螺旋线轨迹，广泛应用于：
+- 螺丝运动
+- DNA双螺旋建模
+- 粒子轨迹
 
 ### 2.1.5 变换的分解与组合
 
-**仿射变换的一般形式**：
+理解如何分解和组合变换是掌握计算机图形学的关键。每个复杂变换都可以分解为基本变换的组合，而正确的组合顺序决定了最终效果。
+
+#### 仿射变换的一般形式
+
+任意仿射变换可表示为：
 $$\mathbf{A} = \begin{bmatrix}
 \mathbf{M}_{3\times3} & \mathbf{t} \\
 \mathbf{0}^T & 1
 \end{bmatrix}$$
 
-其中 $\mathbf{M}_{3\times3}$ 可分解为：
-$$\mathbf{M} = \mathbf{R} \cdot \mathbf{S} \cdot \mathbf{H}$$
+其中：
+- $\mathbf{M}_{3\times3}$：线性变换部分（旋转、缩放、错切）
+- $\mathbf{t}$：平移向量
+- 最后一行保证矩阵可逆性
 
-**变换的分类**：
-1. **刚体变换（Rigid Transform）**：保持距离和角度
-   - 组成：旋转 + 平移
-   - 性质：$\mathbf{M} = \mathbf{T} \cdot \mathbf{R}$
-   - 自由度：6（3个平移 + 3个旋转）
+#### 变换分解理论
 
-2. **相似变换（Similarity Transform）**：保持角度和形状比例
-   - 组成：均匀缩放 + 旋转 + 平移
-   - 性质：$\mathbf{M} = \mathbf{T} \cdot \mathbf{R} \cdot \mathbf{S}(s)$
-   - 自由度：7
+**1. 极分解（Polar Decomposition）**：
+$$\mathbf{M} = \mathbf{R} \cdot \mathbf{S}$$
 
-3. **仿射变换（Affine Transform）**：保持平行性
-   - 组成：缩放 + 错切 + 旋转 + 平移
-   - 性质：直线映射为直线，平行线保持平行
-   - 自由度：12
+其中：
+- $\mathbf{R}$：正交矩阵（旋转）
+- $\mathbf{S}$：对称正定矩阵（缩放和错切）
 
-4. **投影变换（Projective Transform）**：保持直线性
-   - 最一般的线性变换
-   - 自由度：15（$4\times4$ 矩阵减去齐次缩放）
+计算方法：
+$$\mathbf{S} = \sqrt{\mathbf{M}^T\mathbf{M}}, \quad \mathbf{R} = \mathbf{M}\mathbf{S}^{-1}$$
 
-**变换顺序的重要性**：
+**2. 奇异值分解（SVD）**：
+$$\mathbf{M} = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^T$$
+
+几何意义：
+- $\mathbf{V}^T$：第一次旋转（对齐到主轴）
+- $\boldsymbol{\Sigma}$：沿主轴缩放
+- $\mathbf{U}$：第二次旋转（到最终方向）
+
+**3. QR 分解**：
+$$\mathbf{M} = \mathbf{Q} \cdot \mathbf{R}$$
+
+其中：
+- $\mathbf{Q}$：正交矩阵（旋转）
+- $\mathbf{R}$：上三角矩阵（缩放和错切）
+
+使用 Gram-Schmidt 正交化计算。
+
+#### 变换的分类与层次
+
+变换按照保持的几何性质形成严格的层次结构：
+
+**1. 刚体变换（Rigid/Euclidean Transform）**
+
+定义：保持距离和角度的变换
+- 组成：旋转 + 平移
+- 标准形式：$\mathbf{M} = \begin{bmatrix} \mathbf{R} & \mathbf{t} \\ \mathbf{0}^T & 1 \end{bmatrix}$
+- 自由度：6（3个平移 + 3个旋转）
+- 不变量：
+  - 点间距离：$||\mathbf{p}_1' - \mathbf{p}_2'|| = ||\mathbf{p}_1 - \mathbf{p}_2||$
+  - 向量夹角：$\mathbf{v}_1' \cdot \mathbf{v}_2' = \mathbf{v}_1 \cdot \mathbf{v}_2$
+  - 体积和手性
+
+应用：物体姿态、相机运动、刚体动力学
+
+**2. 相似变换（Similarity Transform）**
+
+定义：保持角度和形状比例的变换
+- 组成：均匀缩放 + 旋转 + 平移
+- 标准形式：$\mathbf{M} = \begin{bmatrix} s\mathbf{R} & \mathbf{t} \\ \mathbf{0}^T & 1 \end{bmatrix}$
+- 自由度：7（1个缩放因子）
+- 不变量：
+  - 角度：$\angle(\mathbf{v}_1', \mathbf{v}_2') = \angle(\mathbf{v}_1, \mathbf{v}_2)$
+  - 距离比：$\frac{||\mathbf{p}_1' - \mathbf{p}_2'||}{||\mathbf{p}_3' - \mathbf{p}_4'||} = \frac{||\mathbf{p}_1 - \mathbf{p}_2||}{||\mathbf{p}_3 - \mathbf{p}_4||}$
+
+应用：LOD系统、UI缩放、地图投影
+
+**3. 仿射变换（Affine Transform）**
+
+定义：保持平行性和直线性的变换
+- 组成：缩放 + 错切 + 旋转 + 平移
+- 一般形式：$\mathbf{M} = \begin{bmatrix} \mathbf{A} & \mathbf{t} \\ \mathbf{0}^T & 1 \end{bmatrix}$，$\det(\mathbf{A}) \neq 0$
+- 自由度：12
+- 不变量：
+  - 平行线保持平行
+  - 中点保持中点
+  - 面积比：$\frac{\text{Area}(\triangle A'B'C')}{\text{Area}(\triangle ABC)} = |\det(\mathbf{A})|$
+  - 重心坐标
+
+应用：纹理映射、图像校正、形变动画
+
+**4. 投影变换（Projective Transform）**
+
+定义：最一般的线性变换
+- 一般形式：$\mathbf{P} = \begin{bmatrix} \mathbf{A} & \mathbf{t} \\ \mathbf{v}^T & s \end{bmatrix}$
+- 自由度：15（$4\times4$ 矩阵减去齐次缩放）
+- 不变量：
+  - 直线映射为直线
+  - 交比（Cross-ratio）：$\frac{AC \cdot BD}{AD \cdot BC}$
+  - 共线性和共点性
+
+应用：透视投影、图像纠正、增强现实
+
+**变换群的包含关系**：
+```
+刚体 ⊂ 相似 ⊂ 仿射 ⊂ 投影
+```
+
+每一级都是上一级的特殊情况。
+
+#### 变换顺序的深刻影响
+
+变换的不交换性是图形学中最容易犯错的地方之一。让我们通过具体例子深入理解：
+
+**示例1：平移与旋转的顺序**
 
 先平移后旋转：
 $$\mathbf{M}_1 = \mathbf{R} \cdot \mathbf{T} = \begin{bmatrix}
@@ -619,21 +839,144 @@ $$\mathbf{M}_2 = \mathbf{T} \cdot \mathbf{R} = \begin{bmatrix}
 \mathbf{0}^T & 1
 \end{bmatrix}$$
 
-两者结果完全不同！
+**几何解释**：
+- $\mathbf{M}_1$：物体先移到新位置，然后绕原点旋转（公转）
+- $\mathbf{M}_2$：物体先绕自身中心旋转，然后平移（自转）
 
-**绕任意点旋转**：
+**示例2：缩放与旋转的顺序**
+
+考虑非均匀缩放 $\mathbf{S}(2, 1, 1)$ 和旋转 $\mathbf{R}_z(45°)$：
+- $\mathbf{R} \cdot \mathbf{S}$：先缩放（变成椭圆），后旋转（椭圆旋转）
+- $\mathbf{S} \cdot \mathbf{R}$：先旋转（正圆旋转），后缩放（沿新轴缩放）
+
+结果完全不同！
+
+**交换条件**：
+两个变换 $\mathbf{A}$ 和 $\mathbf{B}$ 可交换当且仅当：
+1. 都是平移：$\mathbf{T}_1 \mathbf{T}_2 = \mathbf{T}_2 \mathbf{T}_1$
+2. 都是绕同一轴的旋转
+3. 都是均匀缩放
+4. 一个是恒等变换
+
+**实用指南**：
+```
+局部到世界：Scale → Rotate → Translate
+世界到局部：Translate^(-1) → Rotate^(-1) → Scale^(-1)
+```
+
+#### 复合变换的构造技巧
+
+**1. 绕任意点旋转**
+
 绕点 $\mathbf{c}$ 旋转 $\theta$ 角度：
 $$\mathbf{M} = \mathbf{T}(\mathbf{c}) \cdot \mathbf{R}(\theta) \cdot \mathbf{T}(-\mathbf{c})$$
 
-这是变换组合的经典应用：先平移到原点，旋转，再平移回去。
+展开后：
+$$\mathbf{M} = \begin{bmatrix}
+\mathbf{R} & \mathbf{c} - \mathbf{R}\mathbf{c} \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
 
-**变换的插值**：
-线性插值两个变换时，不能直接插值矩阵元素：
-- 平移：可以线性插值
-- 旋转：使用四元数球面插值（SLERP）
-- 缩放：使用对数空间插值
+这揭示了“移动到原点-变换-移回”模式的普遍性。
+
+**2. 绕任意轴缩放**
+
+给定轴方向 $\mathbf{u}$ 和缩放因子 $s$：
+1. 构造旋转矩阵 $\mathbf{R}$ 使 $\mathbf{u}$ 对齐到某坐标轴
+2. 沿该轴缩放：$\mathbf{S} = \text{diag}(s, 1, 1)$
+3. 旋转回去：$\mathbf{M} = \mathbf{R}^T \mathbf{S} \mathbf{R}$
+
+直接公式：
+$$\mathbf{M} = \mathbf{I} + (s-1)\mathbf{u}\mathbf{u}^T$$
+
+**3. 镜像与旋转的组合**
+
+滑移反射（Glide Reflection）：
+$$\mathbf{G} = \mathbf{T}(\mathbf{d}) \cdot \mathbf{F}$$
+
+其中 $\mathbf{d}$ 平行于反射面。
+
+两个反射的复合产生旋转：
+$$\mathbf{F}_1 \cdot \mathbf{F}_2 = \mathbf{R}(2\theta)$$
+
+其中 $\theta$ 是两个反射面的夹角。
+
+**4. 螺旋变换**
+
+绕轴 $\mathbf{n}$ 旋转 $\theta$ 同时沿轴平移 $d$：
+$$\mathbf{H} = \begin{bmatrix}
+\mathbf{R}(\mathbf{n}, \theta) & d\mathbf{n} \\
+\mathbf{0}^T & 1
+\end{bmatrix}$$
+
+应用：DNA双螺旋、螺丝运动、弹簧形变。
+
+#### 变换的插值技术
+
+在动画和过渡效果中，我们经常需要在两个变换之间平滑插值。直接插值矩阵元素通常会产生错误结果。
+
+**1. 平移插值**
+
+最简单的情况，直接线性插值：
+$$\mathbf{t}(\alpha) = (1-\alpha)\mathbf{t}_0 + \alpha\mathbf{t}_1$$
+
+对于曲线路径，可使用：
+- Bezier 曲线
+- Catmull-Rom 样条
+- Hermite 插值
+
+**2. 旋转插值**
+
+**错误方法**：直接插值旋转矩阵
+- 结果不再是旋转矩阵（不正交）
+- 产生缩放和错切效果
+
+**正确方法**：
+
+a) **四元数 SLERP**（球面线性插值）：
+$$q(t) = \frac{\sin((1-t)\theta)}{\sin\theta}q_0 + \frac{\sin(t\theta)}{\sin\theta}q_1$$
+其中 $\cos\theta = q_0 \cdot q_1$
+
+b) **指数映射插值**：
+$$\mathbf{R}(t) = \mathbf{R}_0 \exp(t \log(\mathbf{R}_0^{-1}\mathbf{R}_1))$$
+
+c) **轴角插值**：
+- 提取轴和角度
+- 分别插值（注意轴的归一化）
+
+**3. 缩放插值**
+
+为避免负值和保持平滑性：
+$$s(t) = s_0^{1-t} \cdot s_1^t = \exp((1-t)\log s_0 + t\log s_1)$$
+
+对于各向异性缩放，对每个分量独立处理。
+
+**4. 完整变换插值**
+
+对于一般的 TRS 变换：
+1. 分解两个变换为 T、R、S 分量
+2. 分别插值各分量
+3. 重新组合
+
+```
+M(t) = T(t) × R(t) × S(t)
+```
+
+**5. 高级插值技术**
+
+**双四元数（Dual Quaternion）**：
+- 同时表示旋转和平移
+- 实现螺旋插值
+- 避免“糖果纸效应”
+
+**矩阵对数插值**：
+$$\mathbf{M}(t) = \exp(t \log(\mathbf{M}_0^{-1}\mathbf{M}_1)) \mathbf{M}_0$$
+
+适用于任意可逆变换。
 
 ## 2.2 模型、视图、投影变换
+
+图形渲染管线的核心是将三维世界投影到二维屏幕。这个过程通过一系列精心设计的变换完成，每个变换都有其特定的目的和数学基础。
 
 ### 2.2.1 坐标系统与变换管线
 
@@ -716,35 +1059,198 @@ $$\mathbf{v}' = \sum_{i} w_i \mathbf{M}_{\text{bone},i} \mathbf{M}_{\text{bind},
 
 ### 2.2.3 视图变换（View Transform）
 
-视图变换将世界空间变换到视图空间。给定相机参数：
+视图变换将世界空间变换到相机空间，是实现“第一人称视角”的关键。它的本质是将相机放置在原点，朝向-Z轴，同时将整个世界做相应变换。
+
+#### Look-At 变换
+
+给定相机参数：
 - 位置：$\mathbf{e}$ (eye position)
-- 观察方向：$\mathbf{g}$ (gaze direction)
+- 观察目标：$\mathbf{c}$ (center/target)
 - 上方向：$\mathbf{t}$ (up direction)
 
-构建相机坐标系：
-$$\mathbf{w} = -\frac{\mathbf{g}}{||\mathbf{g}||}, \quad
-\mathbf{u} = \frac{\mathbf{t} \times \mathbf{w}}{||\mathbf{t} \times \mathbf{w}||}, \quad
-\mathbf{v} = \mathbf{w} \times \mathbf{u}$$
+**步骤1：构建相机坐标系**
 
-视图矩阵：
-$$\mathbf{V} = \begin{bmatrix}
+使用右手坐标系（OpenGL约定）：
+$$\begin{align}
+\mathbf{g} &= \mathbf{c} - \mathbf{e} \quad \text{(观察方向)} \\
+\mathbf{w} &= -\frac{\mathbf{g}}{||\mathbf{g}||} \quad \text{(相机-Z轴，指向后方)} \\
+\mathbf{u} &= \frac{\mathbf{t} \times \mathbf{w}}{||\mathbf{t} \times \mathbf{w}||} \quad \text{(相机X轴，指向右方)} \\
+\mathbf{v} &= \mathbf{w} \times \mathbf{u} \quad \text{(相机Y轴，指向上方)}
+\end{align}$$
+
+注意：$\mathbf{t}$ 不需要与 $\mathbf{g}$ 垂直，只需不平行。
+
+**步骤2：构造视图矩阵**
+
+视图变换分两步：
+1. 平移相机到原点：$\mathbf{T}(-\mathbf{e})$
+2. 旋转对齐坐标轴：$\mathbf{R}$
+
+旋转矩阵将相机坐标轴对齐到世界坐标轴：
+$$\mathbf{R} = \begin{bmatrix}
+\mathbf{u}^T \\
+\mathbf{v}^T \\
+\mathbf{w}^T
+\end{bmatrix}$$
+
+这是正交矩阵，因为 $(\mathbf{u}, \mathbf{v}, \mathbf{w})$ 是标准正交基。
+
+最终视图矩阵：
+$$\mathbf{V} = \mathbf{R} \cdot \mathbf{T}(-\mathbf{e}) = \begin{bmatrix}
 \mathbf{u}^T & -\mathbf{u} \cdot \mathbf{e} \\
 \mathbf{v}^T & -\mathbf{v} \cdot \mathbf{e} \\
 \mathbf{w}^T & -\mathbf{w} \cdot \mathbf{e} \\
 0 & 1
 \end{bmatrix}$$
 
+#### 相机控制模式
+
+**1. FPS（第一人称射击）相机**
+
+使用欧拉角（yaw, pitch, roll）：
+```
+yaw: 水平旋转（绕Y轴）
+pitch: 俯仰（绕X轴）
+roll: 滚转（绕Z轴，通常为0）
+```
+
+前向量计算：
+$$\mathbf{forward} = \begin{bmatrix}
+\sin(yaw) \cdot \cos(pitch) \\
+\sin(pitch) \\
+\cos(yaw) \cdot \cos(pitch)
+\end{bmatrix}$$
+
+**2. 轨道相机（Orbit Camera）**
+
+绕目标点旋转，使用球坐标：
+- 距离：$r$
+- 方位角：$\theta$ (azimuth)
+- 俯仰角：$\phi$ (elevation)
+
+相机位置：
+$$\mathbf{e} = \mathbf{c} + r\begin{bmatrix}
+\sin\theta \cos\phi \\
+\sin\phi \\
+\cos\theta \cos\phi
+\end{bmatrix}$$
+
+**3. Arcball 相机**
+
+将鼠标移动映射到球面旋转：
+1. 将屏幕坐标映射到虚拟球面
+2. 计算两点间的旋转
+3. 更新相机方向
+
+#### 视图矩阵的优化
+
+**1. 避免重复计算**
+```
+// 缓存视图矩阵
+if (camera.hasChanged()) {
+    viewMatrix = computeViewMatrix();
+    camera.clearChangeFlag();
+}
+```
+
+**2. 增量更新**
+
+对于小幅度移动：
+$$\mathbf{V}_{new} = \mathbf{T}(\Delta\mathbf{p}) \cdot \mathbf{V}_{old}$$
+
+对于小幅度旋转：
+$$\mathbf{V}_{new} = \mathbf{V}_{old} \cdot \mathbf{R}(\Delta\theta)$$
+
+**3. 双精度计算**
+
+对于大场景，相机远离原点时：
+```
+// 使用双精度计算视图矩阵
+// 单精度传递给GPU
+```
+
+#### 特殊情况处理
+
+**1. 垂直观察问题**
+
+当 $\mathbf{g}$ 与 $\mathbf{t}$ 平行时：
+```
+if (|g × t| < epsilon) {
+    // 使用备用up向量
+    t = (|g.y| < 0.9) ? vec3(0,1,0) : vec3(1,0,0);
+}
+```
+
+**2. 旋转奇异性**
+
+避免万向锁：
+```
+pitch = clamp(pitch, -89°, 89°);
+```
+
+#### 多视图渲染
+
+**1. 立体视觉（Stereoscopic）**
+
+左右眼分离：
+$$\mathbf{V}_{left} = \mathbf{T}(-IPD/2, 0, 0) \cdot \mathbf{V}$$
+$$\mathbf{V}_{right} = \mathbf{T}(IPD/2, 0, 0) \cdot \mathbf{V}$$
+
+其中 IPD 是瞳距（约 6.5cm）。
+
+**2. 立方体贴图（Cubemap）渲染**
+
+从中心点渲染6个方向：
+```
++X: (1,0,0), up=(0,1,0)
+-X: (-1,0,0), up=(0,1,0)
++Y: (0,1,0), up=(0,0,-1)
+-Y: (0,-1,0), up=(0,0,1)
++Z: (0,0,1), up=(0,1,0)
+-Z: (0,0,-1), up=(0,1,0)
+```
+
+#### 性能考虑
+
+1. **视锥体剔除**：在视图空间执行更高效
+2. **LOD 选择**：基于视图空间距离
+3. **遮挡剔除**：利用视图空间的Z序
+
 ### 2.2.4 投影变换（Projection Transform）
 
-**透视投影（Perspective Projection）**
+投影变换是图形管线中最关键的步骤之一，它决定了我们如何将三维世界“拍平”到二维平面。不同的投影方式产生不同的视觉效果和应用场景。
 
-给定视锥体参数：
-- 垂直视场角：$\text{fov}_y$
-- 宽高比：$\text{aspect}$
-- 近平面：$n$
-- 远平面：$f$
+#### 透视投影（Perspective Projection）
 
-透视投影矩阵：
+透视投影模拟人眼和相机的成像原理，产生“近大远小”的效果。
+
+**几何原理**
+
+基于小孔成像模型：
+- 点 $(x, y, z)$ 投影到近平面 $z = n$ 上
+- 使用相似三角形：$x' = \frac{nx}{z}$, $y' = \frac{ny}{z}$
+
+**视锥体参数**
+
+1. **基于视场角（常用）**：
+   - 垂直视场角：$\text{fov}_y$
+   - 宽高比：$\text{aspect} = \frac{w}{h}$
+   - 近/远平面：$n, f$
+
+2. **基于边界（灵活）**：
+   - 近平面边界：$[l, r] \times [b, t]$
+   - 近/远平面：$n, f$
+
+**透视投影矩阵推导**
+
+步骤1：将视锥体压缩成立方体
+- 保持近平面不变
+- 远平面中心不变
+- 边缘按透视关系缩放
+
+步骤2：应用正交投影
+
+最终矩阵（OpenGL约定）：
 $$\mathbf{P}_{\text{persp}} = \begin{bmatrix}
 \frac{1}{\text{aspect} \cdot \tan(\text{fov}_y/2)} & 0 & 0 & 0 \\
 0 & \frac{1}{\tan(\text{fov}_y/2)} & 0 & 0 \\
@@ -752,9 +1258,35 @@ $$\mathbf{P}_{\text{persp}} = \begin{bmatrix}
 0 & 0 & -1 & 0
 \end{bmatrix}$$
 
-**正交投影（Orthographic Projection）**
+**透视除法的意义**
 
-给定包围盒 $[l,r] \times [b,t] \times [n,f]$：
+投影后的齐次坐标：$(x', y', z', w')$
+- $w' = -z$（存储原始深度信息）
+- 透视除法：$(x'/w', y'/w', z'/w')$
+- 实现“除以z”的效果
+
+**非线性深度映射**
+
+NDC 深度值：
+$$z_{NDC} = \frac{f+n}{f-n} + \frac{2fn}{(f-n)z}$$
+
+特点：
+- 近平面附近精度高
+- 远平面附近精度低
+- 可能导致 Z-fighting
+
+#### 正交投影（Orthographic Projection）
+
+正交投影保持平行线平行，没有透视效果。
+
+**几何意义**
+- 平行投影线
+- 保持尺寸比例
+- 无“近大远小”
+
+**正交投影矩阵**
+
+给定视景体 $[l,r] \times [b,t] \times [n,f]$：
 
 $$\mathbf{P}_{\text{ortho}} = \begin{bmatrix}
 \frac{2}{r-l} & 0 & 0 & -\frac{r+l}{r-l} \\
@@ -763,16 +1295,254 @@ $$\mathbf{P}_{\text{ortho}} = \begin{bmatrix}
 0 & 0 & 0 & 1
 \end{bmatrix}$$
 
+这实际上是：
+1. 平移到原点：$\mathbf{T}(-\frac{r+l}{2}, -\frac{t+b}{2}, -\frac{n+f}{2})$
+2. 缩放到 $[-1,1]^3$：$\mathbf{S}(\frac{2}{r-l}, \frac{2}{t-b}, \frac{2}{n-f})$
+
+#### 深度精度优化
+
+**1. 反向 Z（Reverse-Z）**
+
+传统方法的问题：
+- 浮点数在 0 附近精度最高
+- 但 NDC 深度在近平面是 0（浪费精度）
+
+解决方案：
+```
+近平面映射到 1
+远平面映射到 0
+深度测试改为 GREATER
+```
+
+修改后的投影矩阵：
+$$P_{33} = \frac{n}{n-f}, \quad P_{34} = \frac{fn}{n-f}$$
+
+**2. 对数深度（Logarithmic Depth）**
+
+在片元着色器中：
+```glsl
+gl_FragDepth = log(C * w + 1) / log(C * f + 1);
+```
+
+其中 C 是调节参数（如 1.0）。
+
+**3. 级联阴影贴图（CSM）**
+
+将视锥体分割成多个区间：
+```
+近景：[0.1, 10] - 高精度
+中景：[10, 100] - 中精度
+远景：[100, 1000] - 低精度
+```
+
+#### 特殊投影技术
+
+**1. 斜投影（Oblique Projection）**
+
+用于水面反射等效果：
+$$\mathbf{P}_{oblique} = \mathbf{P} \cdot \begin{bmatrix}
+1 & 0 & 0 & 0 \\
+0 & 1 & 0 & 0 \\
+0 & 0 & 1 & 1 \\
+0 & 0 & 0 & 0
+\end{bmatrix} \cdot \begin{bmatrix}
+1 & 0 & a & 0 \\
+0 & 1 & b & 0 \\
+0 & 0 & 1 & 0 \\
+0 & 0 & c & 1
+\end{bmatrix}$$
+
+**2. 非对称投影**
+
+VR/AR 中的应用：
+```
+left = -0.5 * IPD - 0.5 * w
+right = 0.5 * IPD + 0.5 * w
+```
+
+**3. 无限远平面**
+
+设置 $f \to \infty$：
+$$P_{33} = -1, \quad P_{34} = -2n$$
+
+适用于开放世界场景。
+
+#### 投影矩阵的选择
+
+**透视投影适用于**：
+- 游戏和虚拟现实
+- 电影和动画
+- 任何需要真实感的场景
+
+**正交投影适用于**：
+- CAD 和工程制图
+- 建筑设计
+- 2D 游戏和 UI
+- 阴影贴图生成
+
+#### 投影后的处理
+
+**1. 齐次裁剪**
+
+在裁剪空间执行：
+```
+-w ≤ x ≤ w
+-w ≤ y ≤ w
+0 ≤ z ≤ w (D3D)
+-w ≤ z ≤ w (OpenGL)
+```
+
+**2. 透视正确插值**
+
+屏幕空间属性插值：
+$$attr = \frac{\frac{attr_0}{w_0}\lambda_0 + \frac{attr_1}{w_1}\lambda_1 + \frac{attr_2}{w_2}\lambda_2}{\frac{1}{w_0}\lambda_0 + \frac{1}{w_1}\lambda_1 + \frac{1}{w_2}\lambda_2}$$
+
+其中 $\lambda_i$ 是重心坐标。
+
 ### 2.2.5 视口变换（Viewport Transform）
 
-将NDC坐标 $[-1,1]^3$ 映射到屏幕坐标 $[0,w] \times [0,h]$：
+视口变换是渲染管线的最后一个几何变换，它将标准化设备坐标（NDC）映射到屏幕像素坐标。
+
+#### 基本视口变换
+
+将 NDC 坐标 $[-1,1]^3$ 映射到屏幕坐标 $[0,w] \times [0,h] \times [0,1]$：
 
 $$\mathbf{M}_{\text{viewport}} = \begin{bmatrix}
 \frac{w}{2} & 0 & 0 & \frac{w}{2} \\
 0 & \frac{h}{2} & 0 & \frac{h}{2} \\
-0 & 0 & 1 & 0 \\
+0 & 0 & \frac{1}{2} & \frac{1}{2} \\
 0 & 0 & 0 & 1
 \end{bmatrix}$$
+
+注意：
+- OpenGL 坐标原点在左下角
+- DirectX 坐标原点在左上角（需要翻转 Y 轴）
+- 深度范围：OpenGL $[-1,1] \to [0,1]$，DirectX $[0,1] \to [0,1]$
+
+#### 自定义视口
+
+对于部分屏幕渲染（如分屏、小地图）：
+
+$$\mathbf{M}_{\text{custom}} = \begin{bmatrix}
+\frac{w_{vp}}{2} & 0 & 0 & x_{vp} + \frac{w_{vp}}{2} \\
+0 & \frac{h_{vp}}{2} & 0 & y_{vp} + \frac{h_{vp}}{2} \\
+0 & 0 & \frac{f_{vp}-n_{vp}}{2} & \frac{f_{vp}+n_{vp}}{2} \\
+0 & 0 & 0 & 1
+\end{bmatrix}$$
+
+其中：
+- $(x_{vp}, y_{vp})$：视口左下角位置
+- $(w_{vp}, h_{vp})$：视口尺寸
+- $[n_{vp}, f_{vp}]$：深度范围（通常 $[0,1]$）
+
+#### 像素中心与采样
+
+**像素中心偏移**
+
+Direct3D 约定：像素中心在 $(0.5, 0.5)$
+```
+pixel_center = floor(ndc_coord * viewport_size) + 0.5
+```
+
+OpenGL 约定：可配置，默认也是 $(0.5, 0.5)$
+
+**多重采样考虑**
+
+MSAA 时的子像素位置：
+```
+2x2 pattern:
+(0.25, 0.25), (0.75, 0.25)
+(0.25, 0.75), (0.75, 0.75)
+```
+
+#### 高 DPI 显示器处理
+
+**设备像素比（Device Pixel Ratio）**
+```
+逻辑像素 vs 物理像素
+Retina: 2x或 3x
+```
+
+需要调整视口变换：
+```
+w_physical = w_logical * devicePixelRatio
+h_physical = h_logical * devicePixelRatio
+```
+
+#### 特殊视口技术
+
+**1. 裁剪视口（Scissor Test）**
+
+限制渲染区域：
+```
+glScissor(x, y, width, height);
+glEnable(GL_SCISSOR_TEST);
+```
+
+应用：分屏渲染、UI 裁剪、性能优化
+
+**2. 分屏渲染**
+
+左右分屏：
+```
+// 左半屏
+glViewport(0, 0, width/2, height);
+renderPlayer1();
+
+// 右半屏
+glViewport(width/2, 0, width/2, height);
+renderPlayer2();
+```
+
+**3. 画中画（Picture-in-Picture）**
+
+主视图 + 小地图：
+```
+// 主视图
+glViewport(0, 0, width, height);
+renderMainView();
+
+// 小地图
+glViewport(width-200, height-150, 200, 150);
+renderMinimap();
+```
+
+#### 分辨率独立渲染
+
+**动态分辨率调整**
+
+根据性能调整渲染分辨率：
+```
+render_width = screen_width * resolution_scale;
+render_height = screen_height * resolution_scale;
+
+// 渲染到较小的 framebuffer
+// 然后上采样到屏幕
+```
+
+**超采样与欠采样**
+- 超采样（SSAA）：`resolution_scale > 1.0`
+- 欠采样：`resolution_scale < 1.0`（提高性能）
+
+#### 坐标系统总结
+
+完整的变换链：
+```
+模型空间 → 世界空间 → 视图空间 → 裁剪空间 → NDC → 屏幕空间
+   (M)        (V)        (P)      (÷w)     (VP)
+```
+
+**逆变换**（屏幕到世界）：
+1. 屏幕到 NDC：$\mathbf{M}_{\text{viewport}}^{-1}$
+2. NDC 到裁剪空间：乘以 $w$
+3. 裁剪到视图：$\mathbf{P}^{-1}$
+4. 视图到世界：$\mathbf{V}^{-1}$
+5. 世界到模型：$\mathbf{M}^{-1}$
+
+常用于：
+- 鼠标拾取（Mouse Picking）
+- 射线投射
+- 屏幕空间特效
 
 ## 2.3 变换矩阵的组合与优化
 
