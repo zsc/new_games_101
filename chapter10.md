@@ -15,8 +15,23 @@
   - $d_i$：像距，$d_o$：物距
 - 成像特点：景深无限大，但光通量极小
 
+**几何光学基础**：
+针孔成像遵循直线传播原理。考虑一个位于原点的针孔，成像平面位于$z = -f$处：
+- 物点：$\mathbf{P} = (X, Y, Z)$，其中$Z > 0$
+- 像点：$\mathbf{p} = (x, y, -f)$
+- 相似三角形关系：$\frac{x}{-f} = \frac{X}{Z}$，$\frac{y}{-f} = \frac{Y}{Z}$
+
+解得像点坐标：
+$$x = -f\frac{X}{Z}, \quad y = -f\frac{Y}{Z}$$
+
+负号表示成像是倒立的。为了方便，通常将成像平面放在$z = f$前方，得到：
+$$x = f\frac{X}{Z}, \quad y = f\frac{Y}{Z}$$
+
 **透视投影的数学描述**：
-世界坐标系中的点 $\mathbf{X}_w = [X_w, Y_w, Z_w]^T$ 投影到图像平面：
+世界坐标系中的点 $\mathbf{X}_w = [X_w, Y_w, Z_w]^T$ 需要先变换到相机坐标系：
+$$\mathbf{X}_c = \mathbf{R}\mathbf{X}_w + \mathbf{t}$$
+
+然后投影到图像平面：
 $$\begin{aligned}
 x &= f\frac{X_c}{Z_c} \\
 y &= f\frac{Y_c}{Z_c}
@@ -24,14 +39,33 @@ y &= f\frac{Y_c}{Z_c}
 
 其中 $(X_c, Y_c, Z_c)$ 是相机坐标系中的坐标。
 
+**归一化图像平面**：
+定义归一化图像平面在$z = 1$处，归一化坐标为：
+$$x_n = \frac{X_c}{Z_c}, \quad y_n = \frac{Y_c}{Z_c}$$
+
+物理图像坐标与归一化坐标的关系：
+$$x = f \cdot x_n, \quad y = f \cdot y_n$$
+
+**像素坐标系**：
+实际数字图像使用离散的像素坐标$(u, v)$：
+$$\begin{aligned}
+u &= \frac{x}{p_x} + c_x = \frac{f}{p_x} \cdot \frac{X_c}{Z_c} + c_x \\
+v &= \frac{y}{p_y} + c_y = \frac{f}{p_y} \cdot \frac{Y_c}{Z_c} + c_y
+\end{aligned}$$
+
+其中：
+- $p_x, p_y$：像素的物理尺寸（mm/pixel）
+- $c_x, c_y$：主点的像素坐标
+- $f_x = f/p_x, f_y = f/p_y$：以像素为单位的焦距
+
 **齐次坐标表示**：
 使用齐次坐标，投影过程可以表示为线性变换：
 $$s\begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = \mathbf{K}[\mathbf{R}|\mathbf{t}]\begin{bmatrix} X_w \\ Y_w \\ Z_w \\ 1 \end{bmatrix}$$
 
-其中 $s$ 是尺度因子。
+其中 $s = Z_c$ 是尺度因子。
 
-**投影矩阵**：
-$$\mathbf{P} = \mathbf{K}[\mathbf{R}|\mathbf{t}]$$
+**投影矩阵分解**：
+$$\mathbf{P} = \mathbf{K}[\mathbf{R}|\mathbf{t}] = \mathbf{K}\mathbf{R}[\mathbf{I}|\mathbf{R}^T\mathbf{t}]$$
 
 其中内参矩阵：
 $$\mathbf{K} = \begin{bmatrix}
@@ -42,31 +76,78 @@ f_x & s & c_x \\
 
 - $f_x, f_y$：焦距（像素单位）
 - $c_x, c_y$：主点坐标
-- $s$：扭曲参数（通常为0）
+- $s$：扭曲参数（skew），表示像素坐标轴的非正交性，现代相机通常为0
 
 **外参矩阵**：
 - $\mathbf{R}$：3×3旋转矩阵（正交矩阵，$\det(\mathbf{R}) = 1$）
 - $\mathbf{t}$：3×1平移向量
+- 总共6个自由度：3个旋转+3个平移
 
 **投影矩阵的性质**：
-1. 秩为3的3×4矩阵
-2. 零空间维度为1（尺度不变性）
-3. 保持直线投影为直线
-4. 不保持平行性（除非平行于成像平面）
+1. **维度**：$\mathbf{P}$是3×4矩阵，秩为3
+2. **零空间**：维度为1，对应相机中心$\mathbf{C}$，满足$\mathbf{P}\mathbf{C} = \mathbf{0}$
+3. **相机中心**：$\mathbf{C} = -\mathbf{R}^T\mathbf{t}$（世界坐标系）
+4. **主轴方向**：相机的光轴方向为$\mathbf{R}^T[0, 0, 1]^T$
+5. **保持直线**：3D直线投影后仍为2D直线（或点）
+6. **不保持平行**：平行线投影后会相交于消失点（除非平行于成像平面）
+
+**逆投影（反投影）**：
+给定图像点$(u, v)$，对应的3D射线方向（相机坐标系）：
+$$\mathbf{d}_c = \mathbf{K}^{-1}\begin{bmatrix} u \\ v \\ 1 \end{bmatrix}$$
+
+世界坐标系中的射线：
+$$\mathbf{X}_w(\lambda) = \mathbf{C} + \lambda \mathbf{R}^T\mathbf{d}_c$$
+
+其中$\lambda > 0$是射线参数。
+
+**消失点与消失线**：
+- **消失点**：平行线在图像中的交点
+- 世界坐标系中方向为$\mathbf{d}$的平行线，其消失点为：
+  $$\mathbf{v} = \mathbf{K}\mathbf{R}\mathbf{d}$$
+- **消失线**：平行平面的像，由该平面所有方向的消失点组成
+- 地平线是所有水平方向消失点的集合
+
+**针孔相机的局限性**：
+1. **光通量**：孔径极小，进光量不足，需要长时间曝光
+2. **衍射效应**：孔径过小时衍射会降低图像质量
+3. **最优孔径**：约为$d_{opt} = \sqrt{2.44\lambda L}$，其中$\lambda$是波长，$L$是物距
+4. **实用性**：实际相机使用透镜系统增加进光量
 
 ### 10.1.2 薄透镜模型
 
 薄透镜模型更接近真实相机，引入了有限孔径和景深效果。
 
+**透镜制造者方程**：
+对于半径为$R_1$和$R_2$的两个球面，折射率为$n$的薄透镜：
+$$\frac{1}{f} = (n-1)\left(\frac{1}{R_1} - \frac{1}{R_2}\right)$$
+
+约定：凸面半径为正，凹面半径为负。
+
 **高斯透镜方程**：
 $$\frac{1}{f} = \frac{1}{d_o} + \frac{1}{d_i}$$
 
-这个方程描述了物距、像距和焦距之间的基本关系。对于无穷远处的物体，$d_o \to \infty$，因此 $d_i = f$。
+这个方程描述了物距、像距和焦距之间的基本关系。
+
+**特殊情况**：
+- 无穷远物体：$d_o \to \infty \Rightarrow d_i = f$
+- 物体在焦点：$d_o = f \Rightarrow d_i \to \infty$（平行光出射）
+- 物体在2倍焦距：$d_o = 2f \Rightarrow d_i = 2f$（等大成像）
+
+**牛顿形式**：
+以焦点为参考：
+$$x \cdot x' = f^2$$
+
+其中$x = d_o - f$，$x' = d_i - f$。
 
 **横向放大率**：
-$$M = -\frac{d_i}{d_o} = \frac{f}{f - d_o}$$
+$$M = -\frac{d_i}{d_o} = \frac{f}{f - d_o} = \frac{d_i - f}{f}$$
 
 负号表示像是倒立的。
+
+**角放大率**：
+$$\gamma = \frac{\tan\theta'}{\tan\theta} = \frac{d_o}{d_i} = -\frac{1}{M}$$
+
+其中$\theta$和$\theta'$是入射和出射光线与光轴的夹角。
 
 **光圈与f数**：
 - 光圈直径：$D = \frac{f}{N}$
@@ -74,55 +155,160 @@ $$M = -\frac{d_i}{d_o} = \frac{f}{f - d_o}$$
 - 常见f数序列：f/1.4, f/2, f/2.8, f/4, f/5.6, f/8, f/11, f/16
 - 每一级相差$\sqrt{2}$倍，光通量相差2倍
 
-**景深计算**：
+**有效f数**：
+当对焦在有限距离时：
+$$N_{eff} = N(1 + M) = N\left(1 + \frac{d_i - f}{f}\right)$$
+
+这在微距摄影中特别重要。
+
+**景深的精确计算**：
 景深是指在成像平面上产生可接受清晰图像的物体深度范围。
 
-- 近景深界限：$D_n = \frac{Hd}{H + d - f}$
-- 远景深界限：$D_f = \frac{Hd}{H - d + f}$
-- 景深范围：$\text{DOF} = D_f - D_n$
-- 超焦距：$H = \frac{f^2}{Nc} + f$
+**超焦距**：
+$$H = \frac{f^2}{Nc} + f \approx \frac{f^2}{Nc}$$
 
-其中：
-- $f$：焦距
-- $N$：光圈数（f-number）
-- $c$：弥散圆直径（通常取传感器对角线的1/1500）
-- $d$：对焦距离
+对于大多数情况，$f \ll \frac{f^2}{Nc}$，所以可以简化。
+
+**近景深界限**：
+$$D_n = \frac{d(H-f)}{H + d - 2f} \approx \frac{Hd}{H + d}$$
+
+**远景深界限**：
+$$D_f = \frac{d(H-f)}{H - d} \approx \frac{Hd}{H - d}$$
+
+**景深总量**：
+$$\text{DOF} = D_f - D_n = \frac{2Hd^2(H-f)}{H^2 - d^2} \approx \frac{2Hd^2}{H^2 - d^2}$$
+
+**特殊情况**：
+1. 当$d = H$时，$D_f \to \infty$，远景深无限远
+2. 当$d \ll H$时，$\text{DOF} \approx \frac{2d^2Nc}{f^2}$
+3. 当$d \gg H$时，$\text{DOF} \approx \frac{2HNc}{f}$
 
 **景深的实用规则**：
 1. 景深与光圈数成正比：$\text{DOF} \propto N$
-2. 景深与焦距平方成反比：$\text{DOF} \propto \frac{1}{f^2}$
-3. 景深与对焦距离平方成正比：$\text{DOF} \propto d^2$
+2. 景深与焦距平方成反比：$\text{DOF} \propto \frac{1}{f^2}$（远距离）
+3. 景深与对焦距离平方成正比：$\text{DOF} \propto d^2$（近距离）
 
 **弥散圆与模糊**：
-对于不在对焦平面上的点，其在成像平面上形成的弥散圆直径为：
-$$b = \frac{|d_i' - d_i|}{d_i'} \cdot D$$
+对于物距为$d_o'$的点，其在对焦平面上形成的弥散圆直径：
+$$b = \frac{D \cdot |d_i - d_i'|}{d_i'} = \frac{f}{N} \cdot \left|\frac{d_i}{d_i'} - 1\right|$$
 
-其中 $d_i'$ 是该点的实际像距。
+使用透镜方程：
+$$b = \frac{f^2}{N} \cdot \left|\frac{1}{d_o} - \frac{1}{d_o'}\right|$$
+
+**弥散圆的角度大小**：
+从物体看，弥散圆的角度大小为：
+$$\theta_b = \frac{b \cdot d_o}{d_i \cdot d_o'} = \frac{D}{d_o'} \cdot \left|1 - \frac{d_o'}{d_o}\right|$$
+
+**点扩散函数（PSF）**：
+理想薄透镜的PSF在焦外是均匀圆盘：
+$$\text{PSF}(x, y) = \begin{cases}
+\frac{1}{\pi (b/2)^2} & \text{if } x^2 + y^2 \leq (b/2)^2 \\
+0 & \text{otherwise}
+\end{cases}$$
+
+**实际应用考虑**：
+1. **弥散圆容许度**：通常取传感器对角线的$1/1500$到$1/1000$
+2. **像素尺寸限制**：弥散圆小于2倍像素尺寸时被认为清晰
+3. **衍射极限**：当$N > \frac{f}{1.22\lambda}$时，衍射效应超过弥散圆
 
 ### 10.1.3 厚透镜与透镜组
 
 实际相机镜头由多个透镜元件组成，需要考虑更复杂的光学系统。
 
-**主点和节点**：
-- 前主点 $H$、后主点 $H'$：光线的有效折射位置
-- 前节点 $N$、后节点 $N'$：角放大率为1的共轭点
-- 对于空气中的透镜，主点和节点重合
+**基主点系统**：
+厚透镜的完整描述需要六个基主点：
+- 前主点 $H$ 和后主点 $H'$
+- 前焦点 $F$ 和后焦点 $F'$
+- 前节点 $N$ 和后节点 $N'$
+
+**主点和节点的物理意义**：
+- **主点**：横向放大率为+1的共轭点
+  - 通过$H$的入射光线平行于通过$H'$的出射光线
+  - 满足：$h' = h$（物高等于像高）
+- **节点**：角放大率为+1的共轭点
+  - 通过$N$的入射光线与通过$N'$的出射光线平行
+  - 满足：$\tan\theta' = \tan\theta$
+
+**重要性质**：
+1. 当前后介质相同时（如空气），主点和节点重合
+2. 浸没透镜中，$HN = \frac{n_1 - n_3}{n_3}f$，$H'N' = \frac{n_3 - n_1}{n_1}f'$
 
 **厚透镜的基本参数**：
-- 前焦距：$f_F = \frac{n_2 R_1 R_2}{(n_2-n_1)[n_2(R_2-R_1) + (n_2-n_1)t]}$
-- 后焦距：$f_R = \frac{n_1 R_1 R_2}{(n_2-n_1)[n_1(R_2-R_1) + (n_2-n_1)t]}$
-- 主点位置由透镜厚度和曲率决定
+对于半径为$R_1$和$R_2$，厚度为$t$，折射率为$n$的厚透镜：
 
-**组合透镜系统**：
-两个薄透镜组合的有效焦距：
+**光焦度**：
+$$P = P_1 + P_2 - \frac{t}{n}P_1 P_2$$
+
+其中：
+- $P_1 = \frac{n-1}{R_1}$：第一面光焦度
+- $P_2 = \frac{1-n}{R_2}$：第二面光焦度
+
+**等效焦距**：
+$$f = \frac{1}{P} = \frac{nR_1R_2}{(n-1)[n(R_2-R_1) + t(n-1)]}$$
+
+**主点位置**：
+- 前主点到第一面：$\ell_H = -\frac{f \cdot t(n-1)}{nR_2}$
+- 后主点到第二面：$\ell_{H'} = \frac{f \cdot t(n-1)}{nR_1}$
+
+**组合透镜系统的矩阵方法**：
+使用ABCD矩阵（光线传输矩阵）：
+$$\begin{bmatrix} y_2 \\ \theta_2 \end{bmatrix} = \begin{bmatrix} A & B \\ C & D \end{bmatrix} \begin{bmatrix} y_1 \\ \theta_1 \end{bmatrix}$$
+
+**基本元件的ABCD矩阵**：
+1. **自由空间传播**：
+   $$\mathbf{M}_{\text{space}} = \begin{bmatrix} 1 & d \\ 0 & 1 \end{bmatrix}$$
+
+2. **薄透镜**：
+   $$\mathbf{M}_{\text{lens}} = \begin{bmatrix} 1 & 0 \\ -1/f & 1 \end{bmatrix}$$
+
+3. **球面折射**：
+   $$\mathbf{M}_{\text{refr}} = \begin{bmatrix} 1 & 0 \\ \frac{n_1-n_2}{R n_2} & \frac{n_1}{n_2} \end{bmatrix}$$
+
+**系统矩阵的级联**：
+$$\mathbf{M}_{\text{total}} = \mathbf{M}_n \cdot \mathbf{M}_{n-1} \cdot ... \cdot \mathbf{M}_2 \cdot \mathbf{M}_1$$
+
+**从系统矩阵提取参数**：
+- 等效焦距：$f = -\frac{1}{C}$
+- 前主点位置：$\ell_H = \frac{D-1}{C}$
+- 后主点位置：$\ell_{H'} = \frac{1-A}{C}$
+- 前焦距：$\text{FFL} = \frac{D}{C}$
+- 后焦距：$\text{BFL} = -\frac{A}{C}$
+
+**两透镜系统的详细分析**：
+两个焦距为$f_1$和$f_2$，间距为$d$的薄透镜：
+
+$$\mathbf{M} = \begin{bmatrix} 1 & 0 \\ -1/f_2 & 1 \end{bmatrix} \begin{bmatrix} 1 & d \\ 0 & 1 \end{bmatrix} \begin{bmatrix} 1 & 0 \\ -1/f_1 & 1 \end{bmatrix}$$
+
+$$= \begin{bmatrix} 1-d/f_1 & d \\ -1/f_1-1/f_2+d/(f_1f_2) & 1-d/f_2 \end{bmatrix}$$
+
+**有效焦距**：
 $$\frac{1}{f} = \frac{1}{f_1} + \frac{1}{f_2} - \frac{d}{f_1 f_2}$$
 
-其中 $d$ 是两透镜主点间距。
+**主点位置**：
+- 前主点到第一透镜：$\text{H}_1 = -\frac{fd}{f_2}$
+- 后主点到第二透镜：$\text{H}_2 = \frac{fd}{f_1}$
 
-**后焦距（Back Focal Length）**：
-$$\text{BFL} = f_2 \frac{f_1 - d}{f_1 + f_2 - d}$$
+**焦距位置**：
+- 前焦距（FFL）：$\text{FFL} = f_1 \frac{f_2 - d}{f_1 + f_2 - d}$
+- 后焦距（BFL）：$\text{BFL} = f_2 \frac{f_1 - d}{f_1 + f_2 - d}$
 
-这对相机设计很重要，决定了镜头到传感器的物理距离。
+**特殊配置**：
+1. **望远镜配置**：$d = f_1 + f_2$
+   - 系统焦距：$f \to \infty$（无焦系统）
+   - 角放大率：$\gamma = -\frac{f_2}{f_1}$
+
+2. **显微镜配置**：$d > f_1 + f_2$
+   - 虚像放大
+   - 总放大率：$M = M_1 \times M_2$
+
+3. **4f系统**：$d = 2(f_1 + f_2)$，且$f_1 = f_2 = f$
+   - 单位放大率（$M = -1$）
+   - 用于僅里叶变换和空间滤波
+
+**多元件系统的设计考虑**：
+1. **表面数量优化**：每个空气-玻璃界面都会引入反射损失
+2. **玻璃选择**：不同折射率和色散特性的组合
+3. **机械约束**：总长度、重量、成本的平衡
 
 **像差类型与特征**：
 
